@@ -1,0 +1,18 @@
+flutter-app-hdd-monitor/
+├── android/
+├── ios/
+├── lib/
+│   ├── screens/
+│   │   ├── login_screen.dart
+│   │   ├── home_screen.dart
+│   │   └── ...
+│   ├── services/
+│   │   ├── auth_service.dart
+│   │   ├── firebase_service.dart
+│   │   └── mqtt_service.dart
+│   ├── models/
+│   │   └── user.dart
+│   ├── main.dart
+│   └── ...
+├── pubspec.yaml
+└── ...

@@ -1,0 +1,66 @@
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader('UTF-8') { reader ->
+        localProperties.load(reader)
+    }
+}
+
+def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
+if (flutterVersionCode == null) {
+    flutterVersionCode = '1'
+}
+
+def flutterVersionName = localProperties.getProperty('flutter.versionName')
+if (flutterVersionName == null) {
+    flutterVersionName = '1.0'
+}
+
+apply plugin: 'com.android.application'
+apply plugin: 'com.google.gms.google-services'  // Aplicamos el plugin Google Services
+
+android {
+    compileSdkVersion 31
+    buildToolsVersion "31.0.0"
+
+    defaultConfig {
+        applicationId "com.pqsolutions.hdd_monitor"
+        minSdkVersion 21
+        targetSdkVersion 31
+        versionCode flutterVersionCode.toInteger()
+        versionName flutterVersionName
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+
+    // Habilitamos multidex si es necesario
+    defaultConfig {
+        multiDexEnabled true
+    }
+}
+
+dependencies {
+    implementation platform('com.google.firebase:firebase-bom:32.8.1')  // Importamos el Firebase BoM
+
+    // Agregamos las dependencias de Firebase que deseas usar
+    implementation 'com.google.firebase:firebase-analytics'
+    // Agregamos otras dependencias de Firebase según tus necesidades
+
+    implementation 'com.android.support:multidex:1.0.3'  // Si es necesario para habilitar multidex
+}
+
+// Añadimos el bloque googleServices para el plugin de Google Services
+apply plugin: 'com.google.gms.google-services'

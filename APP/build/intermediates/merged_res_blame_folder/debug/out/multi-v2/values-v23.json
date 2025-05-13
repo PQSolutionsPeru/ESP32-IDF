@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.pqsolutions.hdd_monitor.app-mergeDebugResources-86:/values-v23/values-v23.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\Pablo\\.gradle\\caches\\transforms-4\\003b60bc08d12064a04b154f11f8e407\\transformed\\work-runtime-2.9.1\\res\\values-v23\\values-v23.xml",
+                    "from": {
+                        "startLines": "2,3",
+                        "startColumns": "4,4",
+                        "startOffsets": "55,121",
+                        "endColumns": "65,62",
+                        "endOffsets": "116,179"
+                    }
+                }
+            ]
+        }
+    ]
+}

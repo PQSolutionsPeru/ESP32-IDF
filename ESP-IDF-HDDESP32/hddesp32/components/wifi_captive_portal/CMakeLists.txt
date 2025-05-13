@@ -1,0 +1,14 @@
+idf_component_register(
+    SRCS 
+        "wifi_captive_portal.c" 
+        "dns_server.c" 
+        "html_assets.c"
+        "simple_http_server.c"
+    INCLUDE_DIRS 
+        "include"
+    REQUIRES 
+        wifi_manager 
+        esp_http_server 
+        lwip 
+        json
+)

@@ -1,0 +1,580 @@
+�(39) boot.esp32�ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0030,len:6276
+load:0x40078000,len:15748
+load:0x40080400,len:4
+ho 8 tail 4 room 4
+load:0x40080404,len:3860
+entry 0x4008063c
+[0;32mI (31) boot: ESP-IDF v5.4.1 2nd stage bootloader[0m
+[0;32mI (31) boot: compile time May 12 2025 22:40:52[0m
+[0;32mI (31) boot: Multicore bootloader[0m
+[0;32mI (32) boot: chip revision: v3.1[0m
+[0;32mI (35) boot.esp32: SPI Speed      : 40MHz[0m
+[0;32mI (39) boot.esp32: SPI Mode       : DIO[0m
+[0;32mI (43) boot.esp32: SPI Flash Size : 2MB[0m
+[0;32mI (46) boot: Enabling RNG early entropy source...[0m
+[0;32mI (51) boot: Partition Table:[0m
+[0;32mI (53) boot: ## Label            Usage          Type ST Offset   Length[0m
+[0;32mI (60) boot:  0 nvs              WiFi data        01 02 00009000 00006000[0m
+[0;32mI (66) boot:  1 phy_init         RF data          01 01 0000f000 00001000[0m
+[0;32mI (73) boot:  2 factory          factory app      00 00 00010000 00100000[0m
+[0;32mI (79) boot:  3 storage          WiFi data        01 02 00110000 00010000[0m
+[0;32mI (86) boot: End of partition table[0m
+[0;32mI (89) esp_image: segment 0: paddr=00010020 vaddr=3f400020 size=353ech (218092) map[0m
+[0;32mI (171) esp_image: segment 1: paddr=00045414 vaddr=3ff80000 size=0001ch (    28) load[0m
+[0;32mI (171) esp_image: segment 2: paddr=00045438 vaddr=3ffb0000 size=03ed4h ( 16084) load[0m
+[0;32mI (181) esp_image: segment 3: paddr=00049314 vaddr=40080000 size=06d04h ( 27908) load[0m
+[0;32mI (193) esp_image: segment 4: paddr=00050020 vaddr=400d0020 size=a9650h (693840) map[0m
+[0;32mI (430) esp_image: segment 5: paddr=000f9678 vaddr=40086d04 size=10bd0h ( 68560) load[0m
+[0;32mI (469) boot: Loaded app from partition at offset 0x10000[0m
+[0;32mI (469) boot: Disabling RNG early entropy source...[0m
+[0;32mI (479) cpu_start: Multicore app[0m
+[0;32mI (488) cpu_start: Pro cpu start user code[0m
+[0;32mI (488) cpu_start: cpu freq: 160000000 Hz[0m
+[0;32mI (488) app_init: Application information:[0m
+[0;32mI (488) app_init: Project name:     hddesp32[0m
+[0;32mI (492) app_init: App version:      201b28d6-dirty[0m
+[0;32mI (496) app_init: Compile time:     May 12 2025 22:40:18[0m
+[0;32mI (501) app_init: ELF file SHA256:  976bf209a...[0m
+[0;32mI (506) app_init: ESP-IDF:          v5.4.1[0m
+[0;32mI (509) efuse_init: Min chip rev:     v0.0[0m
+[0;32mI (513) efuse_init: Max chip rev:     v3.99 [0m
+[0;32mI (517) efuse_init: Chip rev:         v3.1[0m
+[0;32mI (521) heap_init: Initializing. RAM available for dynamic allocation:[0m
+[0;32mI (527) heap_init: At 3FFAE6E0 len 00001920 (6 KiB): DRAM[0m
+[0;32mI (532) heap_init: At 3FFB93F0 len 00026C10 (155 KiB): DRAM[0m
+[0;32mI (538) heap_init: At 3FFE0440 len 00003AE0 (14 KiB): D/IRAM[0m
+[0;32mI (543) heap_init: At 3FFE4350 len 0001BCB0 (111 KiB): D/IRAM[0m
+[0;32mI (549) heap_init: At 400978D4 len 0000872C (33 KiB): IRAM[0m
+[0;32mI (555) spi_flash: detected chip: generic[0m
+[0;32mI (557) spi_flash: flash io: dio[0m
+[0;33mW (560) spi_flash: Detected size(4096k) larger than the size in the binary image header(2048k). Using the size in the binary image header.[0m
+[0;32mI (574) main_task: Started on CPU0[0m
+[0;32mI (584) main_task: Calling app_main()[0m
+[0;32mI (584) HDDESP32: Initializing HDD ESP32 Monitor...[0m
+[0;32mI (584) CONFIG_MGR: Initializing configuration manager[0m
+[0;32mI (604) CONFIG_MGR: Configuration manager initialized successfully[0m
+[0;32mI (604) HDDESP32: Configuration manager initialized successfully[0m
+[0;32mI (604) ESP32_ID_MGR: Initializing ESP32 ID Manager[0m
+[0;32mI (604) ESP32_ID_MGR: MAC Address: A0B7652842A8[0m
+[0;32mI (614) ESP32_ID_MGR: Generated and saved new ID: 42A8ACA0[0m
+[0;32mI (614) ESP32_ID_MGR: ESP32 ID Manager initialized successfully with ID: 42A8ACA0[0m
+[0;32mI (624) HDDESP32: ESP32 ID: 42A8ACA0[0m
+[0;32mI (624) HDDESP32: MAC Address: A0B7652842A8[0m
+[0;32mI (634) WIFI_MGR: Initializing WiFi Manager[0m
+[0;32mI (634) WIFI_MGR: Initializing TCP/IP stack[0m
+[0;32mI (634) WIFI_MGR: Creating WiFi station netif[0m
+[0;32mI (644) WIFI_MGR: Creating WiFi AP netif[0m
+[0;32mI (654) wifi:wifi driver task: 3ffc1450, prio:23, stack:6656, core=0[0m
+[0;32mI (654) wifi:wifi firmware version: 79fa3f41ba[0m
+[0;32mI (654) wifi:wifi certification version: v7.0[0m
+[0;32mI (664) wifi:config NVS flash: enabled[0m
+[0;32mI (664) wifi:config nano formatting: disabled[0m
+[0;32mI (664) wifi:Init data frame dynamic rx buffer num: 32[0m
+[0;32mI (674) wifi:Init static rx mgmt buffer num: 5[0m
+[0;32mI (674) wifi:Init management short buffer num: 32[0m
+[0;32mI (684) wifi:Init dynamic tx buffer num: 32[0m
+[0;32mI (684) wifi:Init static rx buffer size: 1600[0m
+[0;32mI (684) wifi:Init static rx buffer num: 10[0m
+[0;32mI (694) wifi:Init dynamic rx buffer num: 32[0m
+[0;32mI (694) wifi_init: rx ba win: 6[0m
+[0;32mI (704) wifi_init: accept mbox: 6[0m
+[0;32mI (704) wifi_init: tcpip mbox: 32[0m
+[0;32mI (704) wifi_init: udp mbox: 6[0m
+[0;32mI (704) wifi_init: tcp mbox: 6[0m
+[0;32mI (714) wifi_init: tcp tx win: 5760[0m
+[0;32mI (714) wifi_init: tcp rx win: 5760[0m
+[0;32mI (714) wifi_init: tcp mss: 1440[0m
+[0;32mI (724) wifi_init: WiFi IRAM OP enabled[0m
+[0;32mI (724) wifi_init: WiFi RX IRAM OP enabled[0m
+[0;32mI (724) WIFI_MGR: Registering event handlers[0m
+[0;32mI (734) WIFI_MGR: Setting WiFi to station mode[0m
+[0;32mI (734) phy_init: phy_version 4860,6b7a6e5,Feb  6 2025,14:47:07[0m
+[0;33mW (744) phy_init: failed to load RF calibration data (0x1102), falling back to full calibration[0m
+[0;32mI (824) phy_init: Saving new calibration data due to checksum failure or outdated calibration data, mode(2)[0m
+[0;32mI (834) wifi:mode : sta (a0:b7:65:28:42:a8)[0m
+[0;32mI (834) wifi:enable tsf[0m
+[0;32mI (844) WIFI_MGR: WiFi Manager initialized successfully[0m
+[0;32mI (844) WIFI_MGR: WiFi station started[0m
+[0;32mI (844) HDDESP32: WiFi Manager initialized successfully[0m
+[0;32mI (844) MQTT_MGR: Initializing MQTT Manager[0m
+[0;32mI (844) MQTT_MGR: MQTT Manager initialized with broker: node02.myqtthub.com:8883, SSL: true[0m
+[0;32mI (854) MQTT_MGR: MQTT Manager initialized successfully[0m
+[0;32mI (864) HDDESP32: MQTT Manager initialized successfully[0m
+[0;32mI (864) MQTT_MGR: Setting MQTT credentials for ESP32 ID: 42A8ACA0[0m
+[0;32mI (874) MQTT_MGR: MQTT credentials configured successfully with client_id=42A8ACA0[0m
+[0;33mW (884) WIFI_MGR: No saved WiFi credentials[0m
+[0;33mW (884) HDDESP32: No saved credentials or connection failed[0m
+[0;32mI (894) WIFI_MGR: Generated AP SSID: FirePanel_A8ACA0[0m
+[0;32mI (894) HDDESP32: Starting captive portal with SSID: FirePanel_A8ACA0[0m
+[0;32mI (904) WIFI_MGR: Starting WiFi STA+AP mode with AP: FirePanel_A8ACA0[0m
+[0;32mI (904) wifi:mode : sta (a0:b7:65:28:42:a8) + softAP (a0:b7:65:28:42:a9)[0m
+[0;32mI (914) wifi:Total power save buffer number: 16[0m
+[0;32mI (914) wifi:Init max length of beacon: 752/752[0m
+[0;32mI (924) wifi:Init max length of beacon: 752/752[0m
+[0;32mI (934) esp_netif_lwip: DHCP server started on interface WIFI_AP_DEF with IP: 192.168.4.1[0m
+[0;32mI (1194) wifi:Total power save buffer number: 16[0m
+[0;32mI (1204) WIFI_MGR: WiFi Access Point started[0m
+[0;32mI (1204) HDDESP32: WiFi state: AP_MODE[0m
+[0;32mI (1204) HDDESP32: AP IP Address: 192.168.4.1[0m
+[0;32mI (1204) HDDESP32: WiFi state: STA_AP_MODE (Captive Portal)[0m
+[0;32mI (1204) WIFI_MGR: WiFi Access Point stopped[0m
+[0;32mI (1214) WIFI_MGR: WiFi STA+AP mode started successfully[0m
+[0;32mI (1214) esp_netif_lwip: DHCP server started on interface WIFI_AP_DEF with IP: 192.168.4.1[0m
+[0;32mI (1224) WIFI_MGR: WiFi Access Point started[0m
+[0;32mI (1234) DNS_SERVER: DNS Server started on port 53[0m
+[0;32mI (1234) WIFI_PORTAL: DNS server started successfully[0m
+[0;32mI (1244) WIFI_PORTAL: Starting HTTP server on port: 80[0m
+[0;32mI (1244) SIMPLE_HTTP: Socket listening on port 80[0m
+[0;32mI (1244) WIFI_PORTAL: HTTP server started successfully[0m
+[0;32mI (1254) WIFI_PORTAL: Captive portal started successfully[0m
+[0;32mI (1254) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 1)[0m
+[0;32mI (6264) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 2)[0m
+[0;32mI (11264) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 3)[0m
+[0;32mI (11264) WIFI_MGR: WiFi disconnected, reconnection attempt 1/5[0m
+[0;33mW (11264) WIFI_MGR: No saved WiFi credentials[0m
+[0;32mI (16264) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 4)[0m
+[0;32mI (21264) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 5)[0m
+[0;32mI (26264) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 6)[0m
+[0;32mI (26264) WIFI_MGR: WiFi disconnected, reconnection attempt 2/5[0m
+[0;33mW (26264) WIFI_MGR: No saved WiFi credentials[0m
+[0;32mI (31264) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 7)[0m
+[0;32mI (36264) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 8)[0m
+[0;32mI (41264) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 9)[0m
+[0;32mI (41264) WIFI_MGR: WiFi disconnected, reconnection attempt 3/5[0m
+[0;33mW (41264) WIFI_MGR: No saved WiFi credentials[0m
+[0;32mI (46264) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 10)[0m
+[0;32mI (51264) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 11)[0m
+[0;32mI (56264) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 12)[0m
+[0;32mI (56264) WIFI_MGR: WiFi disconnected, reconnection attempt 4/5[0m
+[0;33mW (56264) WIFI_MGR: No saved WiFi credentials[0m
+[0;32mI (61264) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 13)[0m
+[0;32mI (66264) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 14)[0m
+[0;32mI (71264) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 15)[0m
+[0;32mI (71264) WIFI_MGR: WiFi disconnected, reconnection attempt 5/5[0m
+[0;33mW (71264) WIFI_MGR: No saved WiFi credentials[0m
+[0;32mI (71264) WIFI_MGR: Failed to reconnect to WiFi after 5 attempts, activating AP mode[0m
+[0;32mI (71274) WIFI_MGR: Generated AP SSID: FirePanel_A8ACA0[0m
+[0;32mI (71274) WIFI_MGR: Starting AP with SSID: FirePanel_A8ACA0[0m
+[0;32mI (71284) WIFI_MGR: Starting WiFi Access Point: FirePanel_A8ACA0[0m
+[0;32mI (71294) wifi:mode : softAP (a0:b7:65:28:42:a9)[0m
+[0;32mI (71314) wifi:Total power save buffer number: 16[0m
+[0;32mI (71314) WIFI_MGR: WiFi Access Point started successfully[0m
+[0;32mI (71314) WIFI_MGR: WiFi Access Point stopped[0m
+[0;32mI (71314) esp_netif_lwip: DHCP server started on interface WIFI_AP_DEF with IP: 192.168.4.1[0m
+[0;32mI (71324) WIFI_MGR: WiFi Access Point started[0m
+[0;32mI (76314) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 16)[0m
+[0;32mI (81314) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 17)[0m
+[0;32mI (81314) WIFI_MGR: WiFi disconnected, reconnection attempt 1/5[0m
+[0;33mW (81314) WIFI_MGR: No saved WiFi credentials[0m
+[0;32mI (86314) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 18)[0m
+[0;32mI (91314) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 19)[0m
+[0;32mI (96314) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 20)[0m
+[0;32mI (96314) WIFI_MGR: WiFi disconnected, reconnection attempt 2/5[0m
+[0;33mW (96314) WIFI_MGR: No saved WiFi credentials[0m
+[0;32mI (101314) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 21)[0m
+[0;32mI (106314) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 22)[0m
+[0;32mI (111314) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 23)[0m
+[0;32mI (111314) WIFI_MGR: WiFi disconnected, reconnection attempt 3/5[0m
+[0;33mW (111314) WIFI_MGR: No saved WiFi credentials[0m
+[0;32mI (116314) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 24)[0m
+[0;32mI (121314) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 25)[0m
+[0;32mI (126314) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 26)[0m
+[0;32mI (126314) WIFI_MGR: WiFi disconnected, reconnection attempt 4/5[0m
+[0;33mW (126314) WIFI_MGR: No saved WiFi credentials[0m
+[0;32mI (131314) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 27)[0m
+[0;32mI (136314) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 28)[0m
+[0;32mI (141314) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 29)[0m
+[0;32mI (141314) WIFI_MGR: WiFi disconnected, reconnection attempt 5/5[0m
+[0;33mW (141314) WIFI_MGR: No saved WiFi credentials[0m
+[0;32mI (141314) WIFI_MGR: Failed to reconnect to WiFi after 5 attempts, activating AP mode[0m
+[0;32mI (141324) WIFI_MGR: Generated AP SSID: FirePanel_A8ACA0[0m
+[0;32mI (141324) WIFI_MGR: Starting AP with SSID: FirePanel_A8ACA0[0m
+[0;32mI (141334) WIFI_MGR: Starting WiFi Access Point: FirePanel_A8ACA0[0m
+[0;32mI (141354) wifi:Total power save buffer number: 16[0m
+[0;32mI (141354) WIFI_MGR: WiFi Access Point started successfully[0m
+[0;32mI (141354) WIFI_MGR: WiFi Access Point stopped[0m
+[0;32mI (141354) esp_netif_lwip: DHCP server started on interface WIFI_AP_DEF with IP: 192.168.4.1[0m
+[0;32mI (141364) WIFI_MGR: WiFi Access Point started[0m
+[0;32mI (146354) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 30)[0m
+[0;32mI (151354) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 31)[0m
+[0;32mI (151354) WIFI_MGR: WiFi disconnected, reconnection attempt 1/5[0m
+[0;33mW (151354) WIFI_MGR: No saved WiFi credentials[0m
+[0;32mI (156354) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 32)[0m
+[0;32mI (161354) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 33)[0m
+[0;32mI (166354) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 34)[0m
+[0;32mI (166354) WIFI_MGR: WiFi disconnected, reconnection attempt 2/5[0m
+[0;33mW (166354) WIFI_MGR: No saved WiFi credentials[0m
+[0;32mI (171354) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 35)[0m
+[0;32mI (176354) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 36)[0m
+[0;32mI (181354) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 37)[0m
+[0;32mI (181354) WIFI_MGR: WiFi disconnected, reconnection attempt 3/5[0m
+[0;33mW (181354) WIFI_MGR: No saved WiFi credentials[0m
+[0;32mI (186354) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 38)[0m
+[0;32mI (191354) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 39)[0m
+[0;32mI (196354) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 40)[0m
+[0;32mI (196354) WIFI_MGR: WiFi disconnected, reconnection attempt 4/5[0m
+[0;33mW (196354) WIFI_MGR: No saved WiFi credentials[0m
+[0;32mI (201354) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 41)[0m
+[0;32mI (206354) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 42)[0m
+[0;32mI (211354) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 43)[0m
+[0;32mI (211354) WIFI_MGR: WiFi disconnected, reconnection attempt 5/5[0m
+[0;33mW (211354) WIFI_MGR: No saved WiFi credentials[0m
+[0;32mI (211354) WIFI_MGR: Failed to reconnect to WiFi after 5 attempts, activating AP mode[0m
+[0;32mI (211364) WIFI_MGR: Generated AP SSID: FirePanel_A8ACA0[0m
+[0;32mI (211364) WIFI_MGR: Starting AP with SSID: FirePanel_A8ACA0[0m
+[0;32mI (211374) WIFI_MGR: Starting WiFi Access Point: FirePanel_A8ACA0[0m
+[0;32mI (211394) wifi:Total power save buffer number: 16[0m
+[0;32mI (211394) WIFI_MGR: WiFi Access Point started successfully[0m
+[0;32mI (211394) WIFI_MGR: WiFi Access Point stopped[0m
+[0;32mI (211394) esp_netif_lwip: DHCP server started on interface WIFI_AP_DEF with IP: 192.168.4.1[0m
+[0;32mI (211404) WIFI_MGR: WiFi Access Point started[0m
+[0;32mI (216394) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 44)[0m
+[0;32mI (221394) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 45)[0m
+[0;32mI (221394) WIFI_MGR: WiFi disconnected, reconnection attempt 1/5[0m
+[0;33mW (221394) WIFI_MGR: No saved WiFi credentials[0m
+[0;32mI (226394) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 46)[0m
+[0;32mI (231394) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 47)[0m
+[0;32mI (236394) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 48)[0m
+[0;32mI (236394) WIFI_MGR: WiFi disconnected, reconnection attempt 2/5[0m
+[0;33mW (236394) WIFI_MGR: No saved WiFi credentials[0m
+[0;32mI (241394) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 49)[0m
+[0;32mI (246394) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 50)[0m
+[0;32mI (251394) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 51)[0m
+[0;32mI (251394) WIFI_MGR: WiFi disconnected, reconnection attempt 3/5[0m
+[0;33mW (251394) WIFI_MGR: No saved WiFi credentials[0m
+[0;32mI (256394) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 52)[0m
+[0;32mI (261394) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 53)[0m
+[0;32mI (266394) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 54)[0m
+[0;32mI (266394) WIFI_MGR: WiFi disconnected, reconnection attempt 4/5[0m
+[0;33mW (266394) WIFI_MGR: No saved WiFi credentials[0m
+[0;32mI (271394) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 55)[0m
+[0;32mI (276394) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 56)[0m
+[0;32mI (281394) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 57)[0m
+[0;32mI (281394) WIFI_MGR: WiFi disconnected, reconnection attempt 5/5[0m
+[0;33mW (281394) WIFI_MGR: No saved WiFi credentials[0m
+[0;32mI (281394) WIFI_MGR: Failed to reconnect to WiFi after 5 attempts, activating AP mode[0m
+[0;32mI (281404) WIFI_MGR: Generated AP SSID: FirePanel_A8ACA0[0m
+[0;32mI (281404) WIFI_MGR: Starting AP with SSID: FirePanel_A8ACA0[0m
+[0;32mI (281414) WIFI_MGR: Starting WiFi Access Point: FirePanel_A8ACA0[0m
+[0;32mI (281434) wifi:Total power save buffer number: 16[0m
+[0;32mI (281434) WIFI_MGR: WiFi Access Point started successfully[0m
+[0;32mI (281434) WIFI_MGR: WiFi Access Point stopped[0m
+[0;32mI (281434) esp_netif_lwip: DHCP server started on interface WIFI_AP_DEF with IP: 192.168.4.1[0m
+[0;32mI (281444) WIFI_MGR: WiFi Access Point started[0m
+[0;32mI (286434) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 58)[0m
+[0;32mI (291434) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 59)[0m
+[0;32mI (291434) WIFI_MGR: WiFi disconnected, reconnection attempt 1/5[0m
+[0;33mW (291434) WIFI_MGR: No saved WiFi credentials[0m
+[0;32mI (294234) wifi:new:<1,1>, old:<1,1>, ap:<1,1>, sta:<255,255>, prof:1, snd_ch_cfg:0x0[0m
+[0;32mI (294234) wifi:station: 3a:93:25:02:76:9a join, AID=1, bgn, 40U[0m
+[0;32mI (294264) WIFI_MGR: Station connected to AP - MAC: 3a:93:25:02:76:9a[0m
+[0;32mI (294524) wifi:<ba-add>idx:2 (ifx:1, 3a:93:25:02:76:9a), tid:7, ssn:0, winSize:64[0m
+[0;32mI (294524) wifi:<ba-add>idx:3 (ifx:1, 3a:93:25:02:76:9a), tid:0, ssn:0, winSize:64[0m
+[0;32mI (294534) esp_netif_lwip: DHCP server assigned IP to a client, IP is: 192.168.4.2[0m
+[0;32mI (294734) DNS_SERVER: DNS query for domain: connectivitycheck.gstatic.com[0m
+[0;32mI (294734) DNS_SERVER: DNS query for domain: www.google.com[0m
+[0;32mI (294764) SIMPLE_HTTP: Request: GET /generate_204[0m
+[0;32mI (294774) DNS_SERVER: DNS query for domain: mtalk.google.com[0m
+[0;32mI (295634) SIMPLE_HTTP: Request: GET /[0m
+[0;32mI (295744) DNS_SERVER: DNS query for domain: z-m-gateway.facebook.com[0m
+[0;32mI (295744) SIMPLE_HTTP: Request: GET /generate_204[0m
+[0;32mI (295774) SIMPLE_HTTP: Request: GET /api/status[0m
+[0;32mI (295784) SIMPLE_HTTP: Request: GET /api/scan[0m
+[0;32mI (295784) WIFI_MGR: Starting WiFi scan[0m
+ESP_ERROR_CHECK failed: esp_err_t 0xffffffff (ESP_FAIL) at 0x400e16ab
+file: "./components/wifi_manager/wifi_manager.c" line 1018
+func: wifi_manager_start_scan
+expression: esp_wifi_scan_start(&ctx->scan_config, false)
+
+abort() was called at PC 0x400897b7 on core 1
+
+
+Backtrace: 0x40081b3d:0x3ffcf760 0x400897c1:0x3ffcf780 0x400913d5:0x3ffcf7a0 0x400897b7:0x3ffcf810 0x400e16ab:0x3ffcf840 0x400da65b:0x3ffcf860 0x400da9e5:0x3ffcfbb0 0x4008a265:0x3ffd0210
+
+
+
+
+ELF file SHA256: 976bf209a
+
+Rebooting...
+ets Jul 29 2019 12:21:46
+
+rst:0xc (SW_CPU_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0030,len:6276
+load:0x40078000,len:15748
+load:0x40080400,len:4
+ho 8 tail 4 room 4
+load:0x40080404,len:3860
+entry 0x4008063c
+[0;32mI (31) boot: ESP-IDF v5.4.1 2nd stage bootloader[0m
+[0;32mI (31) boot: compile time May 12 2025 22:40:52[0m
+[0;32mI (31) boot: Multicore bootloader[0m
+[0;32mI (32) boot: chip revision: v3.1[0m
+[0;32mI (35) boot.esp32: SPI Speed      : 40MHz[0m
+[0;32mI (39) boot.esp32: SPI Mode       : DIO[0m
+[0;32mI (42) boot.esp32: SPI Flash Size : 2MB[0m
+[0;32mI (46) boot: Enabling RNG early entropy source...[0m
+[0;32mI (51) boot: Partition Table:[0m
+[0;32mI (53) boot: ## Label            Usage          Type ST Offset   Length[0m
+[0;32mI (59) boot:  0 nvs              WiFi data        01 02 00009000 00006000[0m
+[0;32mI (66) boot:  1 phy_init         RF data          01 01 0000f000 00001000[0m
+[0;32mI (72) boot:  2 factory          factory app      00 00 00010000 00100000[0m
+[0;32mI (79) boot:  3 storage          WiFi data        01 02 00110000 00010000[0m
+[0;32mI (86) boot: End of partition table[0m
+[0;32mI (89) esp_image: segment 0: paddr=00010020 vaddr=3f400020 size=353ech (218092) map[0m
+[0;32mI (171) esp_image: segment 1: paddr=00045414 vaddr=3ff80000 size=0001ch (    28) load[0m
+[0;32mI (171) esp_image: segment 2: paddr=00045438 vaddr=3ffb0000 size=03ed4h ( 16084) load[0m
+[0;32mI (181) esp_image: segment 3: paddr=00049314 vaddr=40080000 size=06d04h ( 27908) load[0m
+[0;32mI (193) esp_image: segment 4: paddr=00050020 vaddr=400d0020 size=a9650h (693840) map[0m
+[0;32mI (430) esp_image: segment 5: paddr=000f9678 vaddr=40086d04 size=10bd0h ( 68560) load[0m
+[0;32mI (468) boot: Loaded app from partition at offset 0x10000[0m
+[0;32mI (469) boot: Disabling RNG early entropy source...[0m
+[0;32mI (479) cpu_start: Multicore app[0m
+[0;32mI (487) cpu_start: Pro cpu start user code[0m
+[0;32mI (487) cpu_start: cpu freq: 160000000 Hz[0m
+[0;32mI (487) app_init: Application information:[0m
+[0;32mI (487) app_init: Project name:     hddesp32[0m
+[0;32mI (491) app_init: App version:      201b28d6-dirty[0m
+[0;32mI (496) app_init: Compile time:     May 12 2025 22:40:18[0m
+[0;32mI (501) app_init: ELF file SHA256:  976bf209a...[0m
+[0;32mI (505) app_init: ESP-IDF:          v5.4.1[0m
+[0;32mI (509) efuse_init: Min chip rev:     v0.0[0m
+[0;32mI (513) efuse_init: Max chip rev:     v3.99 [0m
+[0;32mI (517) efuse_init: Chip rev:         v3.1[0m
+[0;32mI (521) heap_init: Initializing. RAM available for dynamic allocation:[0m
+[0;32mI (527) heap_init: At 3FFAE6E0 len 00001920 (6 KiB): DRAM[0m
+[0;32mI (532) heap_init: At 3FFB93F0 len 00026C10 (155 KiB): DRAM[0m
+[0;32mI (537) heap_init: At 3FFE0440 len 00003AE0 (14 KiB): D/IRAM[0m
+[0;32mI (543) heap_init: At 3FFE4350 len 0001BCB0 (111 KiB): D/IRAM[0m
+[0;32mI (548) heap_init: At 400978D4 len 0000872C (33 KiB): IRAM[0m
+[0;32mI (555) spi_flash: detected chip: generic[0m
+[0;32mI (557) spi_flash: flash io: dio[0m
+[0;33mW (560) spi_flash: Detected size(4096k) larger than the size in the binary image header(2048k). Using the size in the binary image header.[0m
+[0;32mI (573) main_task: Started on CPU0[0m
+[0;32mI (583) main_task: Calling app_main()[0m
+[0;32mI (583) HDDESP32: Initializing HDD ESP32 Monitor...[0m
+[0;32mI (583) CONFIG_MGR: Initializing configuration manager[0m
+[0;32mI (613) CONFIG_MGR: Configuration manager initialized successfully[0m
+[0;32mI (613) HDDESP32: Configuration manager initialized successfully[0m
+[0;32mI (613) ESP32_ID_MGR: Initializing ESP32 ID Manager[0m
+[0;32mI (613) ESP32_ID_MGR: MAC Address: A0B7652842A8[0m
+[0;32mI (623) ESP32_ID_MGR: Loaded existing ID: 42A8ACA0[0m
+[0;32mI (633) ESP32_ID_MGR: ESP32 ID Manager initialized successfully with ID: 42A8ACA0[0m
+[0;32mI (633) HDDESP32: ESP32 ID: 42A8ACA0[0m
+[0;32mI (633) HDDESP32: MAC Address: A0B7652842A8[0m
+[0;32mI (643) WIFI_MGR: Initializing WiFi Manager[0m
+[0;32mI (643) WIFI_MGR: Initializing TCP/IP stack[0m
+[0;32mI (643) WIFI_MGR: Creating WiFi station netif[0m
+[0;32mI (653) WIFI_MGR: Creating WiFi AP netif[0m
+[0;32mI (663) wifi:wifi driver task: 3ffc1514, prio:23, stack:6656, core=0[0m
+[0;32mI (673) wifi:wifi firmware version: 79fa3f41ba[0m
+[0;32mI (673) wifi:wifi certification version: v7.0[0m
+[0;32mI (673) wifi:config NVS flash: enabled[0m
+[0;32mI (673) wifi:config nano formatting: disabled[0m
+[0;32mI (673) wifi:Init data frame dynamic rx buffer num: 32[0m
+[0;32mI (683) wifi:Init static rx mgmt buffer num: 5[0m
+[0;32mI (683) wifi:Init management short buffer num: 32[0m
+[0;32mI (693) wifi:Init dynamic tx buffer num: 32[0m
+[0;32mI (693) wifi:Init static rx buffer size: 1600[0m
+[0;32mI (693) wifi:Init static rx buffer num: 10[0m
+[0;32mI (703) wifi:Init dynamic rx buffer num: 32[0m
+[0;32mI (703) wifi_init: rx ba win: 6[0m
+[0;32mI (703) wifi_init: accept mbox: 6[0m
+[0;32mI (713) wifi_init: tcpip mbox: 32[0m
+[0;32mI (713) wifi_init: udp mbox: 6[0m
+[0;32mI (713) wifi_init: tcp mbox: 6[0m
+[0;32mI (723) wifi_init: tcp tx win: 5760[0m
+[0;32mI (723) wifi_init: tcp rx win: 5760[0m
+[0;32mI (723) wifi_init: tcp mss: 1440[0m
+[0;32mI (733) wifi_init: WiFi IRAM OP enabled[0m
+[0;32mI (733) wifi_init: WiFi RX IRAM OP enabled[0m
+[0;32mI (733) WIFI_MGR: Registering event handlers[0m
+[0;32mI (743) WIFI_MGR: Setting WiFi to station mode[0m
+[0;32mI (753) phy_init: phy_version 4860,6b7a6e5,Feb  6 2025,14:47:07[0m
+[0;32mI (833) phy_init: Saving new calibration data due to checksum failure or outdated calibration data, mode(0)[0m
+[0;32mI (853) wifi:mode : sta (a0:b7:65:28:42:a8)[0m
+[0;32mI (853) wifi:enable tsf[0m
+[0;32mI (863) WIFI_MGR: WiFi Manager initialized successfully[0m
+[0;32mI (863) WIFI_MGR: WiFi station started[0m
+[0;32mI (863) HDDESP32: WiFi Manager initialized successfully[0m
+[0;32mI (863) MQTT_MGR: Initializing MQTT Manager[0m
+[0;32mI (873) MQTT_MGR: MQTT Manager initialized with broker: node02.myqtthub.com:8883, SSL: true[0m
+[0;32mI (873) MQTT_MGR: MQTT Manager initialized successfully[0m
+[0;32mI (883) HDDESP32: MQTT Manager initialized successfully[0m
+[0;32mI (883) MQTT_MGR: Setting MQTT credentials for ESP32 ID: 42A8ACA0[0m
+[0;32mI (893) MQTT_MGR: MQTT credentials configured successfully with client_id=42A8ACA0[0m
+[0;33mW (903) WIFI_MGR: No saved WiFi credentials[0m
+[0;33mW (903) HDDESP32: No saved credentials or connection failed[0m
+[0;32mI (913) WIFI_MGR: Generated AP SSID: FirePanel_A8ACA0[0m
+[0;32mI (913) HDDESP32: Starting captive portal with SSID: FirePanel_A8ACA0[0m
+[0;32mI (923) WIFI_MGR: Starting WiFi STA+AP mode with AP: FirePanel_A8ACA0[0m
+[0;32mI (923) wifi:mode : sta (a0:b7:65:28:42:a8) + softAP (a0:b7:65:28:42:a9)[0m
+[0;32mI (933) wifi:Total power save buffer number: 16[0m
+[0;32mI (933) wifi:Init max length of beacon: 752/752[0m
+[0;32mI (943) wifi:Init max length of beacon: 752/752[0m
+[0;32mI (953) esp_netif_lwip: DHCP server started on interface WIFI_AP_DEF with IP: 192.168.4.1[0m
+[0;32mI (963) wifi:Total power save buffer number: 16[0m
+[0;32mI (963) WIFI_MGR: WiFi Access Point started[0m
+[0;32mI (963) HDDESP32: WiFi state: AP_MODE[0m
+[0;32mI (963) HDDESP32: AP IP Address: 192.168.4.1[0m
+[0;32mI (973) HDDESP32: WiFi state: STA_AP_MODE (Captive Portal)[0m
+[0;32mI (973) WIFI_MGR: WiFi Access Point stopped[0m
+[0;32mI (983) WIFI_MGR: WiFi STA+AP mode started successfully[0m
+[0;32mI (983) esp_netif_lwip: DHCP server started on interface WIFI_AP_DEF with IP: 192.168.4.1[0m
+[0;32mI (993) WIFI_MGR: WiFi Access Point started[0m
+[0;32mI (993) DNS_SERVER: DNS Server started on port 53[0m
+[0;32mI (1003) WIFI_PORTAL: DNS server started successfully[0m
+[0;32mI (1003) WIFI_PORTAL: Starting HTTP server on port: 80[0m
+[0;32mI (1013) SIMPLE_HTTP: Socket listening on port 80[0m
+[0;32mI (1013) WIFI_PORTAL: HTTP server started successfully[0m
+[0;32mI (1023) WIFI_PORTAL: Captive portal started successfully[0m
+[0;32mI (1023) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 1)[0m
+[0;32mI (6033) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 2)[0m
+[0;32mI (6993) wifi:new:<1,1>, old:<1,1>, ap:<1,1>, sta:<0,0>, prof:1, snd_ch_cfg:0x0[0m
+[0;32mI (6993) wifi:station: 3a:93:25:02:76:9a join, AID=1, bgn, 40U[0m
+[0;32mI (7053) WIFI_MGR: Station connected to AP - MAC: 3a:93:25:02:76:9a[0m
+[0;32mI (7263) wifi:<ba-add>idx:2 (ifx:1, 3a:93:25:02:76:9a), tid:0, ssn:0, winSize:64[0m
+[0;32mI (7273) esp_netif_lwip: DHCP server assigned IP to a client, IP is: 192.168.4.2[0m
+[0;32mI (7403) DNS_SERVER: DNS query for domain: www.google.com[0m
+[0;32mI (7413) DNS_SERVER: DNS query for domain: connectivitycheck.gstatic.com[0m
+[0;32mI (7413) wifi:<ba-add>idx:3 (ifx:1, 3a:93:25:02:76:9a), tid:7, ssn:1, winSize:64[0m
+[0;32mI (7433) SIMPLE_HTTP: Request: GET /generate_204[0m
+[0;32mI (7763) SIMPLE_HTTP: Request: GET /[0m
+[0;32mI (7833) SIMPLE_HTTP: Request: GET /generate_204[0m
+[0;32mI (7843) DNS_SERVER: DNS query for domain: content-autofill.googleapis.com[0m
+[0;32mI (7853) SIMPLE_HTTP: Request: GET /api/status[0m
+[0;32mI (7853) SIMPLE_HTTP: Request: GET /api/scan[0m
+[0;32mI (7853) WIFI_MGR: Starting WiFi scan[0m
+[0;32mI (9863) WIFI_MGR: Waiting for scan to complete[0m
+[0;32mI (11033) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 3)[0m
+[0;32mI (11033) WIFI_MGR: WiFi disconnected, reconnection attempt 1/5[0m
+[0;33mW (11033) WIFI_MGR: No saved WiFi credentials[0m
+[0;32mI (12083) WIFI_MGR: WiFi scan completed, status: 0, found APs: 30[0m
+[0;32mI (12093) SIMPLE_HTTP: Request: GET /favicon.ico[0m
+[0;32mI (12103) SIMPLE_HTTP: Request: GET /generate_204[0m
+[0;32mI (12113) SIMPLE_HTTP: Request: GET /gen_204[0m
+[0;32mI (12123) SIMPLE_HTTP: Request: GET /[0m
+[0;32mI (12863) SIMPLE_HTTP: Request: GET /api/status[0m
+[0;32mI (16033) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 4)[0m
+[0;32mI (17863) SIMPLE_HTTP: Request: GET /api/status[0m
+[0;32mI (19283) SIMPLE_HTTP: Request: GET /generate_204[0m
+[0;32mI (21033) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 5)[0m
+[0;32mI (22863) SIMPLE_HTTP: Request: GET /api/status[0m
+[0;32mI (26033) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 6)[0m
+[0;32mI (26033) WIFI_MGR: WiFi disconnected, reconnection attempt 2/5[0m
+[0;33mW (26033) WIFI_MGR: No saved WiFi credentials[0m
+[0;32mI (27863) SIMPLE_HTTP: Request: GET /api/status[0m
+[0;32mI (29603) SIMPLE_HTTP: Request: POST /api/connect[0m
+[0;32mI (29603) SIMPLE_HTTP: Connecting to WiFi: PABLO-2.4G[0m
+[0;32mI (29603) WIFI_MGR: Connecting to WiFi network: PABLO-2.4G[0m
+[0;32mI (29603) WIFI_MGR: Saving WiFi credentials[0m
+[0;32mI (29613) WIFI_MGR: Updating STA configuration in STA+AP mode[0m
+[0;32mI (29643) HDDESP32: WiFi state: STA_AP_MODE (Captive Portal)[0m
+[0;32mI (30833) wifi:primary chan differ, old=1, new=7, start CSA timer[0m
+[0;32mI (31033) HDDESP32: System running with ID: 42A8ACA0, WiFi not connected (iteration 7)[0m
+[0;32mI (31233) wifi:switch to channel 7[0m
+[0;32mI (31233) wifi:ap channel adjust o:1,1 n:7,2[0m
+[0;32mI (31233) wifi:new:<7,2>, old:<1,1>, ap:<7,2>, sta:<0,0>, prof:1, snd_ch_cfg:0x0[0m
+[0;32mI (31233) wifi:new:<7,2>, old:<7,2>, ap:<7,2>, sta:<7,0>, prof:1, snd_ch_cfg:0x0[0m
+[0;32mI (31243) wifi:state: init -> auth (0xb0)[0m
+[0;32mI (31263) wifi:state: auth -> assoc (0x0)[0m
+[0;32mI (31273) wifi:state: assoc -> run (0x10)[0m
+[0;32mI (31293) wifi:connected with PABLO-2.4G, aid = 84, channel 7, BW20, bssid = e8:6d:e9:55:91:dc[0m
+[0;32mI (31293) wifi:security: WPA2-PSK, phy: bgn, rssi: -37[0m
+[0;32mI (31323) wifi:pm start, type: 1[0m
+
+[0;32mI (31323) wifi:dp: 1, bi: 102400, li: 3, scale listen interval from 307200 us to 307200 us[0m
+[0;32mI (31323) WIFI_MGR: Connected to WiFi network: PABLO-2.4G[0m
+[0;32mI (31383) wifi:AP's beacon interval = 102400 us, DTIM period = 1[0m
+[0;32mI (34493) esp_netif_handlers: sta ip: 192.168.18.38, mask: 255.255.255.0, gw: 192.168.18.1[0m
+[0;32mI (34493) WIFI_MGR: Got IP address: 192.168.18.38[0m
+[0;32mI (34493) HDDESP32: WiFi state: STA_AP_MODE (Captive Portal)[0m
+[0;32mI (34493) WIFI_MGR: Successfully connected to WiFi network[0m
+[0;32mI (34503) SIMPLE_HTTP: Successfully connected to WiFi[0m
+[0;32mI (34513) SIMPLE_HTTP: Request: GET /api/status[0m
+[0;32mI (36033) HDDESP32: WiFi connected, starting MQTT connection[0m
+[0;32mI (36033) MQTT_MGR: Setting MQTT credentials for ESP32 ID: 42A8ACA0[0m
+[0;32mI (36033) MQTT_MGR: MQTT credentials configured successfully with client_id=42A8ACA0[0m
+[0;32mI (36033) MQTT_MGR: Connecting to MQTT broker: node02.myqtthub.com:8883[0m
+[0;32mI (36043) MQTT_MGR: MQTT URI: mqtts://node02.myqtthub.com:8883[0m
+[0;32mI (36053) MQTT_MGR: Configuring SSL for MQTT connection[0m
+[0;32mI (36053) MQTT_MGR: MQTT Config - Client ID: 42A8ACA0[0m
+[0;32mI (36053) MQTT_MGR: MQTT Config - Username: 42A8ACA0[0m
+[0;32mI (36063) MQTT_MGR: MQTT Config - Password: 42A8ACA0[0m
+[0;32mI (36063) MQTT_MGR: MQTT Config - LWT Topic: system/status/42A8ACA0[0m
+[0;32mI (36073) MQTT_MGR: MQTT client started successfully, waiting for connection...[0m
+[0;32mI (36083) HDDESP32: MQTT state: CONNECTING[0m
+[0;32mI (36653) wifi:<ba-add>idx:0 (ifx:0, e8:6d:e9:55:91:dc), tid:0, ssn:5, winSize:64[0m
+[0;32mI (36803) esp-x509-crt-bundle: Certificate validated[0m
+[0;32mI (37863) SIMPLE_HTTP: Request: GET /api/status[0m
+[0;32mI (37943) MQTT_MGR: MQTT client connected to broker[0m
+[0;32mI (37943) HDDESP32: MQTT state: CONNECTED[0m
+[0;32mI (37943) HDDESP32: Before network_info - Free heap: 137716[0m
+[0;32mI (37953) MQTT_MGR: Publishing message to topic: esp32/network_info[0m
+[0;32mI (37953) MQTT_MGR: Successfully connected to MQTT broker[0m
+[0;32mI (37963) MQTT_MGR: Message published successfully, msg_id=0[0m
+[0;32mI (37963) HDDESP32: After network_info - Free heap: 136156[0m
+[0;32mI (37973) HDDESP32: WiFi connected but still in AP+STA mode, switching to STA only[0m
+[0;32mI (37983) wifi:station: 3a:93:25:02:76:9a leave, AID = 1, reason = 2, bss_flags is 756835, bss:0x3ffd04a0[0m
+[0;32mI (37993) wifi:new:<7,0>, old:<7,2>, ap:<7,2>, sta:<7,0>, prof:1, snd_ch_cfg:0x0[0m
+[0;32mI (37993) wifi:<ba-del>idx:2, tid:0[0m
+[0;32mI (38003) wifi:<ba-del>idx:3, tid:7[0m
+[0;32mI (38003) wifi:mode : sta (a0:b7:65:28:42:a8)[0m
+[0;32mI (38003) WIFI_MGR: Station disconnected from AP - MAC: 3a:93:25:02:76:9a[0m
+[0;32mI (38013) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 8)[0m
+[0;32mI (38013) WIFI_MGR: WiFi Access Point stopped[0m
+[0;32mI (38473) MQTT_MGR: Subscribing to topic: esp32/config/42A8ACA0 with QoS 0[0m
+[0;32mI (38473) MQTT_MGR: Successfully subscribed to topic: esp32/config/42A8ACA0, msg_id=15481[0m
+[0;32mI (38473) MQTT_MGR: Subscribing to topic: esp32/config/42A8ACA0/reset with QoS 0[0m
+[0;32mI (38483) MQTT_MGR: Successfully subscribed to topic: esp32/config/42A8ACA0/reset, msg_id=55464[0m
+[0;32mI (38983) MQTT_MGR: Publishing message to topic: esp32/network_info[0m
+[0;32mI (38983) MQTT_MGR: Message published successfully, msg_id=0[0m
+[0;32mI (38983) MQTT_MGR: MQTT client subscribed to topic, msg_id=15481[0m
+[0;32mI (38993) MQTT_MGR: MQTT client subscribed to topic, msg_id=55464[0m
+[0;32mI (43023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 9)[0m
+[0;32mI (48023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 10)[0m
+[0;32mI (53023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 11)[0m
+[0;32mI (58023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 12)[0m
+[0;32mI (63023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 13)[0m
+[0;32mI (68023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 14)[0m
+[0;32mI (73023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 15)[0m
+[0;32mI (78023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 16)[0m
+[0;32mI (83023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 17)[0m
+[0;32mI (88023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 18)[0m
+[0;32mI (93023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 19)[0m
+[0;32mI (98023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 20)[0m
+[0;32mI (103023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 21)[0m
+[0;32mI (108023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 22)[0m
+[0;32mI (113023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 23)[0m
+[0;32mI (118023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 24)[0m
+[0;32mI (123023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 25)[0m
+[0;32mI (128023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 26)[0m
+[0;32mI (133023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 27)[0m
+[0;32mI (138023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 28)[0m
+[0;32mI (143023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 29)[0m
+[0;32mI (148023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 30)[0m
+[0;32mI (153023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 31)[0m
+[0;32mI (158023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 32)[0m
+[0;32mI (163023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 33)[0m
+[0;32mI (168023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 34)[0m
+[0;32mI (173023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 35)[0m
+[0;32mI (178023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 36)[0m
+[0;32mI (183023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 37)[0m
+[0;32mI (188023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 38)[0m
+[0;32mI (193023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 39)[0m
+[0;32mI (198023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 40)[0m
+[0;32mI (203023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 41)[0m
+[0;32mI (208023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 42)[0m
+[0;32mI (213023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 43)[0m
+[0;32mI (218023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 44)[0m
+[0;32mI (223023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 45)[0m
+[0;32mI (228023) HDDESP32: System running with ID: 42A8ACA0, WiFi and MQTT connected (iteration 46)[0m

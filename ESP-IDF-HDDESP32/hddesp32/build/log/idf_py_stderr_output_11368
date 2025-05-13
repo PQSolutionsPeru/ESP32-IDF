@@ -1,0 +1,22 @@
+[0;33m--- Warning: GDB cannot open serial ports accessed as COMx[0m
+[0;33m--- Using \\.\COM3 instead...[0m
+[0;33m--- esp-idf-monitor 1.6.2 on \\.\COM3 115200[0m
+[0;33m--- Quit: Ctrl+] | Menu: Ctrl+T | Help: Ctrl+T followed by Ctrl+H[0m
+[0;33m--- 0x40080400: _init at ??:?
+[0m
+[0;33m--- 0x400e16ab: wifi_manager_start_scan at E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP-IDF-HDDESP32/hddesp32/components/wifi_manager/wifi_manager.c:1018 (discriminator 1)
+[0m
+[0;33m--- 0x400897b7: _esp_error_check_failed at C:/Espressif/frameworks/esp-idf-v5.4.1/components/esp_system/esp_err.c:49
+[0m
+[0;33m--- 0x40081b3d: panic_abort at C:/Espressif/frameworks/esp-idf-v5.4.1/components/esp_system/panic.c:454
+--- 0x400897c1: esp_system_abort at C:/Espressif/frameworks/esp-idf-v5.4.1/components/esp_system/port/esp_system_chip.c:87
+--- 0x400913d5: abort at C:/Espressif/frameworks/esp-idf-v5.4.1/components/newlib/abort.c:38
+--- 0x400897b7: _esp_error_check_failed at C:/Espressif/frameworks/esp-idf-v5.4.1/components/esp_system/esp_err.c:49
+--- 0x400e16ab: wifi_manager_start_scan at E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP-IDF-HDDESP32/hddesp32/components/wifi_manager/wifi_manager.c:1018 (discriminator 1)
+--- 0x400da65b: handle_scan_api at E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP-IDF-HDDESP32/hddesp32/components/wifi_captive_portal/simple_http_server.c:100
+--- 0x400da9e5: http_server_task at E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP-IDF-HDDESP32/hddesp32/components/wifi_captive_portal/simple_http_server.c:287
+--- 0x4008a265: vPortTaskWrapper at C:/Espressif/frameworks/esp-idf-v5.4.1/components/freertos/FreeRTOS-Kernel/portable/xtensa/port.c:139
+[0m
+[0;33m--- 0x40080400: _init at ??:?
+[0m
+[0m

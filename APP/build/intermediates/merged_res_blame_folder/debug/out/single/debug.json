@@ -1,0 +1,78 @@
+[
+    {
+        "merged": "com.pqsolutions.hdd_monitor.app-merged_res-88:/mipmap-hdpi_ic_launcher.webp.flat",
+        "source": "com.pqsolutions.hdd_monitor.app-main-90:/mipmap-hdpi/ic_launcher.webp"
+    },
+    {
+        "merged": "com.pqsolutions.hdd_monitor.app-merged_res-88:/xml_backup_rules.xml.flat",
+        "source": "com.pqsolutions.hdd_monitor.app-main-90:/xml/backup_rules.xml"
+    },
+    {
+        "merged": "com.pqsolutions.hdd_monitor.app-merged_res-88:/mipmap-xhdpi_ic_launcher.webp.flat",
+        "source": "com.pqsolutions.hdd_monitor.app-main-90:/mipmap-xhdpi/ic_launcher.webp"
+    },
+    {
+        "merged": "com.pqsolutions.hdd_monitor.app-merged_res-88:/mipmap-hdpi_ic_launcher_round.webp.flat",
+        "source": "com.pqsolutions.hdd_monitor.app-main-90:/mipmap-hdpi/ic_launcher_round.webp"
+    },
+    {
+        "merged": "com.pqsolutions.hdd_monitor.app-merged_res-88:/xml_data_extraction_rules.xml.flat",
+        "source": "com.pqsolutions.hdd_monitor.app-main-90:/xml/data_extraction_rules.xml"
+    },
+    {
+        "merged": "com.pqsolutions.hdd_monitor.app-merged_res-88:/mipmap-xxhdpi_ic_launcher_round.webp.flat",
+        "source": "com.pqsolutions.hdd_monitor.app-main-90:/mipmap-xxhdpi/ic_launcher_round.webp"
+    },
+    {
+        "merged": "com.pqsolutions.hdd_monitor.app-merged_res-88:/raw_button_click.mp3.flat",
+        "source": "com.pqsolutions.hdd_monitor.app-main-90:/raw/button_click.mp3"
+    },
+    {
+        "merged": "com.pqsolutions.hdd_monitor.app-merged_res-88:/mipmap-xhdpi_ic_launcher_round.webp.flat",
+        "source": "com.pqsolutions.hdd_monitor.app-main-90:/mipmap-xhdpi/ic_launcher_round.webp"
+    },
+    {
+        "merged": "com.pqsolutions.hdd_monitor.app-merged_res-88:/drawable_ic_launcher_foreground.xml.flat",
+        "source": "com.pqsolutions.hdd_monitor.app-main-90:/drawable/ic_launcher_foreground.xml"
+    },
+    {
+        "merged": "com.pqsolutions.hdd_monitor.app-merged_res-88:/drawable_onboarding_image.png.flat",
+        "source": "com.pqsolutions.hdd_monitor.app-main-90:/drawable/onboarding_image.png"
+    },
+    {
+        "merged": "com.pqsolutions.hdd_monitor.app-merged_res-88:/mipmap-anydpi_ic_launcher.xml.flat",
+        "source": "com.pqsolutions.hdd_monitor.app-main-90:/mipmap-anydpi/ic_launcher.xml"
+    },
+    {
+        "merged": "com.pqsolutions.hdd_monitor.app-merged_res-88:/drawable_ic_launcher_background.xml.flat",
+        "source": "com.pqsolutions.hdd_monitor.app-main-90:/drawable/ic_launcher_background.xml"
+    },
+    {
+        "merged": "com.pqsolutions.hdd_monitor.app-merged_res-88:/mipmap-xxxhdpi_ic_launcher_round.webp.flat",
+        "source": "com.pqsolutions.hdd_monitor.app-main-90:/mipmap-xxxhdpi/ic_launcher_round.webp"
+    },
+    {
+        "merged": "com.pqsolutions.hdd_monitor.app-merged_res-88:/mipmap-anydpi_ic_launcher_round.xml.flat",
+        "source": "com.pqsolutions.hdd_monitor.app-main-90:/mipmap-anydpi/ic_launcher_round.xml"
+    },
+    {
+        "merged": "com.pqsolutions.hdd_monitor.app-merged_res-88:/drawable_ic_notification.xml.flat",
+        "source": "com.pqsolutions.hdd_monitor.app-main-90:/drawable/ic_notification.xml"
+    },
+    {
+        "merged": "com.pqsolutions.hdd_monitor.app-merged_res-88:/mipmap-xxxhdpi_ic_launcher.webp.flat",
+        "source": "com.pqsolutions.hdd_monitor.app-main-90:/mipmap-xxxhdpi/ic_launcher.webp"
+    },
+    {
+        "merged": "com.pqsolutions.hdd_monitor.app-merged_res-88:/mipmap-mdpi_ic_launcher_round.webp.flat",
+        "source": "com.pqsolutions.hdd_monitor.app-main-90:/mipmap-mdpi/ic_launcher_round.webp"
+    },
+    {
+        "merged": "com.pqsolutions.hdd_monitor.app-merged_res-88:/mipmap-mdpi_ic_launcher.webp.flat",
+        "source": "com.pqsolutions.hdd_monitor.app-main-90:/mipmap-mdpi/ic_launcher.webp"
+    },
+    {
+        "merged": "com.pqsolutions.hdd_monitor.app-merged_res-88:/mipmap-xxhdpi_ic_launcher.webp.flat",
+        "source": "com.pqsolutions.hdd_monitor.app-main-90:/mipmap-xxhdpi/ic_launcher.webp"
+    }
+]
