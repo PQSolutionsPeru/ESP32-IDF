@@ -1,4 +1,4 @@
-# Install script for directory: E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP-IDF-HDDESP32/hddesp32/main
+# Install script for directory: E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/main
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

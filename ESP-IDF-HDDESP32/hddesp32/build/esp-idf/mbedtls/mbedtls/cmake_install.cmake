@@ -39,10 +39,10 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for each subdirectory.
-  include("E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/mbedtls/mbedtls/include/cmake_install.cmake")
-  include("E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/mbedtls/mbedtls/3rdparty/cmake_install.cmake")
-  include("E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/mbedtls/mbedtls/library/cmake_install.cmake")
-  include("E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/mbedtls/mbedtls/pkgconfig/cmake_install.cmake")
+  include("E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/mbedtls/mbedtls/include/cmake_install.cmake")
+  include("E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/mbedtls/mbedtls/3rdparty/cmake_install.cmake")
+  include("E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/mbedtls/mbedtls/library/cmake_install.cmake")
+  include("E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/mbedtls/mbedtls/pkgconfig/cmake_install.cmake")
 
 endif()
 

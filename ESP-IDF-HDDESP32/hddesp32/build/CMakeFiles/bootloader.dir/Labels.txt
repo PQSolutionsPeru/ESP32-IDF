@@ -1,13 +1,13 @@
 # Target labels
  bootloader
 # Source files and their labels
-E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP-IDF-HDDESP32/hddesp32/build/CMakeFiles/bootloader
-E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP-IDF-HDDESP32/hddesp32/build/CMakeFiles/bootloader.rule
-E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP-IDF-HDDESP32/hddesp32/build/CMakeFiles/bootloader-complete.rule
-E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src/bootloader-stamp/bootloader-build.rule
-E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src/bootloader-stamp/bootloader-configure.rule
-E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src/bootloader-stamp/bootloader-download.rule
-E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src/bootloader-stamp/bootloader-install.rule
-E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src/bootloader-stamp/bootloader-mkdir.rule
-E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src/bootloader-stamp/bootloader-patch.rule
-E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src/bootloader-stamp/bootloader-update.rule
+E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/CMakeFiles/bootloader
+E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/CMakeFiles/bootloader.rule
+E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/CMakeFiles/bootloader-complete.rule
+E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src/bootloader-stamp/bootloader-build.rule
+E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src/bootloader-stamp/bootloader-configure.rule
+E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src/bootloader-stamp/bootloader-download.rule
+E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src/bootloader-stamp/bootloader-install.rule
+E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src/bootloader-stamp/bootloader-mkdir.rule
+E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src/bootloader-stamp/bootloader-patch.rule
+E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src/bootloader-stamp/bootloader-update.rule
