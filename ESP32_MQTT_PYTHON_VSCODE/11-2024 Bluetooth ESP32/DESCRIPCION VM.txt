@@ -1,0 +1,933 @@
+FUNCION EN UNA INSTANCIA VIRTUAL EN GOOGLE CLOUD COMPUTING:
+Información básica de la instancia virtual:
+Nombre
+instanciavm-myqtthub
+ID de instancia
+4950703917799859794
+Descripción
+Ninguna
+Tipo
+Instancia
+Estado
+ Activa
+Fecha y hora de creación
+may 4, 2024, 1:42:06 a. m. UTC-05:00
+
+
+import json
+import paho.mqtt.client as mqtt
+from google.cloud import firestore
+
+# Configuración del broker MQTT que funcionaba bien:
+MQTT_BROKER = 'node02.myqtthub.com'
+MQTT_PORT = 8883
+MQTT_CLIENT_ID = 'compute_engine'
+MQTT_USER = 'compute_engine'
+MQTT_PASSWORD = 'compute_engine'
+MQTT_TOPIC = 'EMPRESA_TEST/ESP32-PQ1/eventos'
+
+# Configuración de Firestore
+db = firestore.Client(project='fir-hdd-monitor-d00de')
+collection_path = 'hdd-monitor/accounts/clients/client_1/panels/panel_1/relays'
+
+def on_connect(client, userdata, flags, rc):
+    if rc == 0:
+        print("Conectado al Broker MQTT!")
+        topics = [
+            ("esp32/mac_search", 1),
+            ("esp32/network_info", 1),
+            ("esp32/config/+", 1),
+            ("clients/+/panels/+", 1),
+            ("system/status/+", 1)
+        ]
+        for topic, qos in topics:
+            client.subscribe(topic, qos)
+            print(f"Suscrito a: {topic} con QoS: {qos}")
+
+def on_message(client, userdata, msg):
+    """ Callback llamado al recibir un mensaje del broker MQTT.
+        Decodifica el mensaje JSON y actualiza Firestore.
+    """
+    try:
+        print(f"Mensaje recibido: `{msg.payload.decode()}` desde el tema `{msg.topic}`")
+        data = json.loads(msg.payload.decode())
+        update_firestore(data)
+    except json.JSONDecodeError as e:
+        print(f"Error al decodificar JSON: {e}")
+
+def update_firestore(data):
+    """ Actualiza Firestore con los datos recibidos del mensaje MQTT.
+    """
+    try:
+        relay_name = data['name']
+        status = data['status']
+        date_time = data['date_time']
+        doc_ref = db.document(f"{collection_path}/{relay_name}")
+        doc_ref.set({
+            'status': status,
+            'date_time': date_time
+        }, merge=True)
+        print(f"Firestore actualizado para {relay_name} con estado {status} y fecha/hora {date_time}")
+    except Exception as e:
+        print(f"Error al actualizar Firestore: {e}")
+
+def run():
+    """ Crea y ejecuta el cliente MQTT, gestionando la conexión y el loop principal.
+    """
+    client = mqtt.Client(client_id=MQTT_CLIENT_ID, protocol=mqtt.MQTTv311)
+    client.username_pw_set(MQTT_USER, MQTT_PASSWORD)
+    client.tls_set()
+    client.on_connect = on_connect
+    client.on_message = on_message
+
+    try:
+        client.connect(MQTT_BROKER, MQTT_PORT)
+        client.loop_forever()
+    except Exception as e:
+        print(f"Error al conectar o durante MQTT loop: {e}")
+        client.disconnect()
+        raise
+
+if __name__ == '__main__':
+    run()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Documentación del Sistema de Integración MQTT-Firestore
+
+## Descripción General
+Este programa implementa un sistema de integración entre un broker MQTT y Google Cloud Firestore, diseñado para ejecutarse en una instancia de Google Cloud Computing. El sistema actúa como un puente que recibe datos de dispositivos ESP32 a través de MQTT y los almacena en tiempo real en una base de datos Firestore.
+
+## Detalles de la Instancia Virtual
+- **Nombre**: instanciavm-myqtthub
+- **ID**: 4950703917799859794
+- **Estado**: Activa
+- **Fecha de Creación**: 4 de mayo, 2024, 1:42:06 AM UTC-05:00
+
+## Configuración del Sistema
+
+### Dependencias
+- `paho-mqtt`: Cliente MQTT para Python
+- `google-cloud-firestore`: SDK de Firestore para Python
+- `json`: Biblioteca estándar para manejo de JSON
+
+### Constantes de Configuración
+1. **Configuración MQTT**:
+   - Broker: node02.myqtthub.com
+   - Puerto: 8883 (puerto seguro TLS)
+   - Cliente ID: compute_engine
+   - Usuario: compute_engine
+   - Contraseña: compute_engine
+   - Tópico: EMPRESA_TEST/ESP32-PQ1/eventos
+
+2. **Configuración Firestore**:
+   - Proyecto: fir-hdd-monitor-d00de
+   - Ruta de Colección: hdd-monitor/accounts/clients/client_1/panels/panel_1/relays
+
+## Arquitectura del Sistema
+
+### 1. Función `run()`
+- **Propósito**: Función principal que inicializa y ejecuta el cliente MQTT
+- **Flujo de Operación**:
+  1. Crea una instancia del cliente MQTT con protocolo v3.1.1
+  2. Configura credenciales de usuario
+  3. Habilita TLS para conexión segura
+  4. Asigna callbacks de conexión y mensaje
+  5. Establece conexión con el broker
+  6. Inicia loop infinito de eventos
+- **Manejo de Errores**: 
+  - Captura excepciones durante la conexión
+  - Desconecta el cliente en caso de error
+  - Re-lanza la excepción para manejo superior
+
+### 2. Callback `on_connect(client, userdata, flags, rc)`
+- **Propósito**: Maneja el evento de conexión al broker
+- **Parámetros**:
+  - client: Instancia del cliente MQTT
+  - userdata: Datos de usuario (no utilizados)
+  - flags: Banderas de conexión
+  - rc: Código de retorno
+- **Comportamiento**:
+  - Si rc=0: Conexión exitosa, suscribe al tópico
+  - Si rc≠0: Reporta error de conexión
+
+### 3. Callback `on_message(client, userdata, msg)`
+- **Propósito**: Procesa mensajes MQTT recibidos
+- **Parámetros**:
+  - client: Instancia del cliente MQTT
+  - userdata: Datos de usuario (no utilizados)
+  - msg: Objeto mensaje con payload y metadata
+- **Procesamiento**:
+  1. Decodifica el payload del mensaje
+  2. Convierte JSON a diccionario Python
+  3. Llama a update_firestore con los datos
+- **Manejo de Errores**: 
+  - Captura errores de decodificación JSON
+
+### 4. Función `update_firestore(data)`
+- **Propósito**: Actualiza documentos en Firestore
+- **Parámetro data**: Diccionario con:
+  - name: Nombre del relay
+  - status: Estado del relay
+  - date_time: Timestamp del evento
+- **Operación**:
+  1. Construye referencia al documento usando relay_name
+  2. Actualiza documento con estado y timestamp
+  3. Usa merge=True para actualización parcial
+- **Manejo de Errores**:
+  - Captura y reporta cualquier error de Firestore
+
+## Formato de Datos
+
+### Mensaje MQTT Esperado
+```json
+{
+    "name": "string",    // Identificador del relay
+    "status": boolean,   // Estado actual
+    "date_time": string  // Timestamp del evento
+}
+```
+
+### Documento Firestore Resultante
+```javascript
+{
+    "status": boolean,   // Estado del relay
+    "date_time": string  // Timestamp del último cambio
+}
+```
+
+## Flujo de Datos Completo
+1. ESP32 publica mensaje en EMPRESA_TEST/ESP32-PQ1/eventos
+2. Cliente MQTT recibe mensaje
+3. on_message decodifica el JSON
+4. update_firestore actualiza el documento correspondiente
+5. Los cambios son visibles inmediatamente en Firestore
+
+## Consideraciones de Seguridad
+- Conexión MQTT sobre TLS (puerto 8883)
+- Autenticación mediante usuario/contraseña
+- Firestore usa autenticación implícita de Google Cloud
+- Tópico MQTT específico para limitar alcance
+
+## Manejo de Errores
+- Reconexión automática MQTT (proporcionada por loop_forever)
+- Logging de errores de conexión
+- Captura de errores de decodificación JSON
+- Manejo de errores de escritura Firestore
+- Desconexión limpia en caso de error fatal
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import json
+import paho.mqtt.client as mqtt
+from google.cloud import firestore
+import time
+from datetime import datetime
+from typing import Optional, Dict, Any
+
+# Configuración del broker MQTT
+MQTT_BROKER = 'node02.myqtthub.com'
+MQTT_PORT = 8883
+MQTT_CLIENT_ID = 'compute_engine'
+MQTT_USER = 'compute_engine'
+MQTT_PASSWORD = 'compute_engine'
+
+# Configuración de Firestore
+db = firestore.Client(project='fir-hdd-monitor-d00de')
+
+def on_connect(client, userdata, flags, rc):
+   """Callback de conexión MQTT"""
+   if rc == 0:
+       print("Conectado al Broker MQTT!")
+       # Suscribirse a todos los tópicos relevantes
+       topics = [
+           ("esp32/mac_search", 0),           # Búsqueda de MAC
+           ("esp32/network_info", 0),         # Información de red de ESP32s
+           ("esp32/config/+", 0),             # Configuración de ESP32s
+           ("clients/+/panels/+", 0),         # Mensajes de paneles
+           ("system/status/+", 0)             # Estado de ESP32s
+       ]
+       client.subscribe(topics)
+       print("Suscrito a tópicos de operación")
+   else:
+       print("Error al conectar, código de retorno:", rc)
+
+def on_message(client, userdata, msg):
+   """Procesa mensajes MQTT recibidos"""
+   try:
+       topic = msg.topic
+       payload = json.loads(msg.payload.decode())
+       print(f"Mensaje recibido en {topic}: {payload}")
+
+       # Manejar diferentes tipos de mensajes
+       if topic == "esp32/mac_search":
+           handle_mac_search(client, payload)
+       elif topic == "esp32/network_info":  # Ya no usa wildcard
+           handle_network_info(client, payload)
+       elif topic.startswith("esp32/config/"):
+           handle_config_message(payload)
+       elif topic.startswith("clients/"):
+           handle_panel_message(topic, payload)
+       elif topic.startswith("system/status/"):
+           handle_status_update(payload)
+
+   except json.JSONDecodeError as e:
+       print(f"Error decodificando JSON: {e}")
+   except Exception as e:
+       print(f"Error procesando mensaje: {e}")
+
+def handle_mac_search(client, payload: Dict[str, Any]):
+   """Maneja búsqueda de ESP32 por MAC"""
+   try:
+       mac = payload.get('MAC')
+       response_topic = payload.get('response_topic')
+
+       if not mac or not response_topic:
+           return
+
+       esp32_ref = db.collection('hdd-monitor/esp32/registered')
+       query = esp32_ref.where('MAC', '==', mac).limit(1).get()
+
+       for doc in query:
+           response = {
+               'MAC': mac,
+               'esp32_id': doc.id
+           }
+           client.publish(response_topic, json.dumps(response))
+           print(f"MAC encontrada: {mac}, ESP32 ID: {doc.id}")
+           return
+
+       print(f"MAC no encontrada: {mac}")
+
+   except Exception as e:
+       print(f"Error en búsqueda MAC: {e}")
+
+def handle_network_info(client, payload: Dict[str, Any]):
+   """Registra o actualiza información de red del ESP32"""
+   try:
+       mac = payload.get('MAC')
+       ip = payload.get('IP')
+
+       if not mac or not ip:
+           print("MAC o IP faltante en payload")
+           return
+
+       # Buscar ESP32 existente
+       esp32_ref = db.collection('hdd-monitor/esp32/registered')
+       query = esp32_ref.where('MAC', '==', mac).limit(1).get()
+       
+       esp32_doc = None
+       for doc in query:
+           esp32_doc = doc.reference
+           break
+
+       # Si no existe, crear nuevo documento
+       if not esp32_doc:
+           esp32_doc = esp32_ref.document()
+           print(f"Creando nuevo ESP32 con ID: {esp32_doc.id}")
+
+       # Actualizar datos
+       update_data = {
+           'MAC': mac,
+           'IP': ip,
+           'status': 'CONFIG',  # Nuevo ESP32 siempre inicia en CONFIG
+           'lastUpdate': firestore.SERVER_TIMESTAMP
+       }
+       
+       esp32_doc.set(update_data, merge=True)
+       print(f"ESP32 registrado/actualizado: {esp32_doc.id}")
+
+       # Si es nuevo, enviar mensaje de confirmación
+       client.publish(
+           "esp32/registration",
+           json.dumps({
+               "esp32_id": esp32_doc.id,
+               "status": "registered"
+           })
+       )
+
+   except Exception as e:
+       print(f"Error registrando ESP32: {e}")
+
+def handle_config_message(payload: Dict[str, Any]):
+   """Procesa mensajes de configuración de ESP32"""
+   try:
+       esp32_id = payload.get('esp32_id')
+       if not esp32_id:
+           return
+
+       esp32_doc = db.document(f'hdd-monitor/esp32/registered/{esp32_id}')
+
+       if payload.get('status') == 'config_applied':
+           # Actualizar estado a RUNNING cuando se confirma configuración
+           update_data = {
+               'status': 'RUNNING',
+               'lastUpdate': firestore.SERVER_TIMESTAMP
+           }
+           esp32_doc.set(update_data, merge=True)
+           print(f"ESP32 {esp32_id} configurado y en estado RUNNING")
+
+   except Exception as e:
+       print(f"Error procesando configuración: {e}")
+
+def handle_panel_message(topic: str, payload: Dict[str, Any]):
+   """Procesa mensajes de estado de paneles"""
+   try:
+       parts = topic.split('/')
+       if len(parts) != 4:  # clients/client_id/panels/panel_id
+           return
+
+       client_id = parts[1]
+       panel_id = parts[3]
+       esp32_id = payload.get('esp32_id')
+
+       if not esp32_id:
+           print("ESP32 ID faltante en mensaje de panel")
+           return
+
+       if 'relay' in payload and 'state' in payload:
+           # Actualizar estado del relay
+           relay_name = payload['relay']
+           new_state = payload['state']
+           date_time = payload.get('date_time', datetime.now().strftime('%d-%m-%Y %H:%M'))
+
+           panel_ref = db.document(f'hdd-monitor/accounts/clients/{client_id}/panels/{panel_id}')
+           relay_ref = panel_ref.collection('relays').document(relay_name)
+
+           # Obtener estado anterior
+           old_doc = relay_ref.get()
+           old_state = old_doc.get('status') if old_doc.exists else None
+
+           # Actualizar estado
+           relay_ref.set({
+               'status': new_state,
+               'date_time': date_time
+           }, merge=True)
+
+           # Si cambió el estado, crear notificación
+           if old_state != new_state:
+               create_notification(client_id, panel_id, relay_name, new_state)
+
+           print(f"Actualizado relay {relay_name} a {new_state}")
+
+   except Exception as e:
+       print(f"Error procesando mensaje de panel: {e}")
+
+def handle_status_update(payload: Dict[str, Any]):
+   """Maneja actualizaciones de estado de ESP32s"""
+   try:
+       esp32_id = payload.get('esp32_id')
+       if not esp32_id:
+           return
+
+       status = payload.get('status')
+       if status in ['CONFIG', 'RUNNING', 'OFFLINE']:
+           doc_ref = db.document(f'hdd-monitor/esp32/registered/{esp32_id}')
+           doc_ref.set({
+               'status': status,
+               'lastUpdate': firestore.SERVER_TIMESTAMP
+           }, merge=True)
+           print(f"Estado de ESP32 {esp32_id} actualizado a: {status}")
+
+   except Exception as e:
+       print(f"Error actualizando estado: {e}")
+
+def create_notification(client_id: str, panel_id: str, relay_name: str, new_status: str):
+   """Crea notificación de cambio de estado de relay"""
+   try:
+       panel_ref = db.document(f'hdd-monitor/accounts/clients/{client_id}/panels/{panel_id}')
+       panel_data = panel_ref.get().to_dict()
+       panel_name = panel_data.get('name', 'Panel desconocido')
+
+       notification = {
+           'panelDocName': panel_id,
+           'date_time': datetime.now().strftime('%d/%m/%Y, %H:%M'),
+           'message': f'El relay {relay_name} del panel "{panel_name}" ha cambiado a {new_status}',
+           'relayName': relay_name,
+           'isRead': False
+       }
+
+       notifications_ref = db.collection(f'hdd-monitor/accounts/clients/{client_id}/notifications')
+       notifications_ref.add(notification)
+       print(f"Notificación creada para cambio en {panel_name}")
+
+   except Exception as e:
+       print(f"Error creando notificación: {e}")
+
+def run():
+   """Función principal"""
+   client = mqtt.Client(client_id=MQTT_CLIENT_ID, protocol=mqtt.MQTTv311)
+   client.username_pw_set(MQTT_USER, MQTT_PASSWORD)
+   client.tls_set()
+   client.on_connect = on_connect
+   client.on_message = on_message
+
+   while True:
+       try:
+           client.connect(MQTT_BROKER, MQTT_PORT)
+           client.loop_forever()
+       except Exception as e:
+           print(f"Error en conexión MQTT: {e}")
+           time.sleep(5)  # Esperar antes de reintentar
+       finally:
+           try:
+               client.disconnect()
+           except:
+               pass
+
+if __name__ == '__main__':
+   run()
+
+
+
+
+
+
+
+
+
+
+
+
+##################################################################################################################################################################################
+##################################################################################################################################################################################
+##################################################################################################################################################################################
+##################################################################################################################################################################################
+
+
+
+
+
+
+
+
+import json
+import paho.mqtt.client as mqtt
+from google.cloud import firestore
+import time
+from datetime import datetime
+from typing import Optional, Dict, Any
+
+# Configuración del broker MQTT
+MQTT_BROKER = 'node02.myqtthub.com'
+MQTT_PORT = 8883
+MQTT_CLIENT_ID = 'compute_engine'
+MQTT_USER = 'compute_engine'
+MQTT_PASSWORD = 'compute_engine'
+
+# Configuración de Firestore
+db = firestore.Client(project='fir-hdd-monitor-d00de')
+
+def on_connect(client, userdata, flags, rc):
+   """Callback de conexión MQTT"""
+   if rc == 0:
+       print("Conectado al Broker MQTT!")
+       # Suscribirse a todos los tópicos relevantes
+       topics = [
+           ("esp32/mac_search", 0),           # Búsqueda de MAC
+           ("esp32/network_info", 0),         # Información de red de ESP32s
+           ("esp32/config/+", 0),             # Configuración de ESP32s
+           ("clients/+/panels/+", 0),         # Mensajes de paneles
+           ("system/status/+", 0)             # Estado de ESP32s
+       ]
+       client.subscribe(topics)
+       print("Suscrito a tópicos de operación")
+   else:
+       print("Error al conectar, código de retorno:", rc)
+
+def on_message(client, userdata, msg):
+   """Procesa mensajes MQTT recibidos"""
+   try:
+       topic = msg.topic
+       payload = json.loads(msg.payload.decode())
+       print(f"Mensaje recibido en {topic}: {payload}")
+
+       # Manejar diferentes tipos de mensajes
+       if topic == "esp32/mac_search":
+           handle_mac_search(client, payload)
+       elif topic == "esp32/network_info":  # Ya no usa wildcard
+           handle_network_info(client, payload)
+       elif topic.startswith("esp32/config/"):
+           handle_config_message(payload)
+       elif topic.startswith("clients/"):
+           handle_panel_message(topic, payload)
+       elif topic.startswith("system/status/"):
+           handle_status_update(payload)
+
+   except json.JSONDecodeError as e:
+       print(f"Error decodificando JSON: {e}")
+   except Exception as e:
+       print(f"Error procesando mensaje: {e}")
+
+def handle_mac_search(client, payload: Dict[str, Any]):
+   """Maneja búsqueda de ESP32 por MAC"""
+   try:
+       mac = payload.get('MAC')
+       response_topic = payload.get('response_topic')
+
+       if not mac or not response_topic:
+           return
+
+       esp32_ref = db.collection('hdd-monitor/esp32/registered')
+       query = esp32_ref.where('MAC', '==', mac).limit(1).get()
+
+       for doc in query:
+           response = {
+               'MAC': mac,
+               'esp32_id': doc.id
+           }
+           client.publish(response_topic, json.dumps(response))
+           print(f"MAC encontrada: {mac}, ESP32 ID: {doc.id}")
+           return
+
+       print(f"MAC no encontrada: {mac}")
+
+   except Exception as e:
+       print(f"Error en búsqueda MAC: {e}")
+
+def normalize_mac(mac: str) -> str:
+    """Normaliza formato MAC address"""
+    mac = mac.upper().replace(":", "").replace("-", "")
+    return mac
+
+def handle_network_info(client, payload: Dict[str, Any]):
+    """Registra o actualiza información de red del ESP32 y envía configuración"""
+    try:
+        print(f"[VM] Procesando network_info: {payload}")
+        mac = normalize_mac(payload.get('MAC', ''))
+        ip = payload.get('IP')
+        esp32_id = payload.get('esp32_id')
+        status = payload.get('status')
+
+        if not all([mac, ip, esp32_id]):
+            print("[VM] Error: Información faltante en payload")
+            return
+        
+        print(f"[VM] Buscando ESP32 {esp32_id} con MAC {mac}")
+        esp32_ref = db.collection('hdd-monitor/esp32/registered')
+        esp32_doc = esp32_ref.document(esp32_id)
+
+        # Actualizar información del ESP32
+        update_data = {
+            'MAC': mac,
+            'IP': ip,
+            'status': status,
+            'lastUpdate': firestore.SERVER_TIMESTAMP
+        }
+        
+        esp32_doc.set(update_data, merge=True)
+        print(f"[VM] ESP32 {esp32_id} actualizado con status: {status}")
+
+        # Si está esperando configuración, buscar panel asignado
+        if status == 'AWAITING_CONFIG':
+            print(f"[VM] Buscando panel para ESP32 {esp32_id}")
+            # Buscar en todos los clientes
+            clients_ref = db.collection('hdd-monitor/accounts/clients')
+            
+            for client in clients_ref.stream():
+                client_id = client.id
+                panels_ref = clients_ref.document(client_id).collection('panels')
+                
+                # Buscar panel por esp32_id
+                query = panels_ref.where('esp32_id', '==', esp32_id).limit(1).get()
+                
+                for panel in query:
+                    panel_id = panel.id
+                    panel_data = panel.to_dict()
+                    print(f"[VM] Panel encontrado para ESP32 {esp32_id}:")
+                    print(f"[VM] - Cliente: {client_id}")
+                    print(f"[VM] - Panel: {panel_id}")
+                    print(f"[VM] - Datos: {panel_data}")
+                    
+                    # Enviar configuración
+                    config_message = {
+                        'client_id': client_id,
+                        'panel_id': panel_id,
+                        'esp32_id': esp32_id,
+                        'timestamp': datetime.now().isoformat()
+                    }
+                    
+                    config_topic = f"esp32/config/{esp32_id}"
+                    print(f"[VM] Enviando configuración a {config_topic}")
+                    client.publish(
+                        config_topic,
+                        json.dumps(config_message),
+                        retain=True,
+                        qos=1
+                    )
+                    
+                    # Actualizar ESP32 con la asignación
+                    update_data = {
+                        'client_id': client_id,
+                        'panel_id': panel_id,
+                        'status': 'CONFIG',
+                        'lastUpdate': firestore.SERVER_TIMESTAMP
+                    }
+                    esp32_doc.set(update_data, merge=True)
+                    print(f"[VM] ESP32 {esp32_id} actualizado con asignación")
+                    return
+
+            print(f"[VM] ESP32 {esp32_id} en AWAITING_CONFIG pero sin panel asignado")
+
+    except Exception as e:
+        print(f"[VM] Error en handle_network_info: {e}")
+        import traceback
+        traceback.print_exc()
+
+def handle_config_message(payload: Dict[str, Any]):
+    """Procesa mensajes de configuración de ESP32"""
+    try:
+        print(f"[VM] Config message recibido: {payload}")
+        esp32_id = payload.get('esp32_id')
+        if not esp32_id:
+            print("[VM] Error: esp32_id faltante")
+            return
+
+        esp32_doc = db.document(f'hdd-monitor/esp32/registered/{esp32_id}')
+
+        if payload.get('status') == 'config_applied':
+            print(f"[VM] ESP32 {esp32_id} confirmó configuración")
+            # Actualizar estado a RUNNING
+            update_data = {
+                'status': 'RUNNING',
+                'lastUpdate': firestore.SERVER_TIMESTAMP
+            }
+            esp32_doc.set(update_data, merge=True)
+            print(f"[VM] ESP32 {esp32_id} actualizado a RUNNING")
+
+    except Exception as e:
+        print(f"[VM] Error procesando configuración: {e}")
+        import traceback
+        traceback.print_exc()
+
+def handle_panel_message(topic: str, payload: Dict[str, Any]):
+   """Procesa mensajes de estado de paneles"""
+   try:
+       parts = topic.split('/')
+       if len(parts) != 4:  # clients/client_id/panels/panel_id
+           return
+
+       client_id = parts[1]
+       panel_id = parts[3]
+       esp32_id = payload.get('esp32_id')
+
+       if not esp32_id:
+           print("ESP32 ID faltante en mensaje de panel")
+           return
+
+       if 'relay' in payload and 'state' in payload:
+           # Actualizar estado del relay
+           relay_name = payload['relay']
+           new_state = payload['state']
+           date_time = payload.get('date_time', datetime.now().strftime('%d-%m-%Y %H:%M'))
+
+           panel_ref = db.document(f'hdd-monitor/accounts/clients/{client_id}/panels/{panel_id}')
+           relay_ref = panel_ref.collection('relays').document(relay_name)
+
+           # Obtener estado anterior
+           old_doc = relay_ref.get()
+           old_state = old_doc.get('status') if old_doc.exists else None
+
+           # Actualizar estado
+           relay_ref.set({
+               'status': new_state,
+               'date_time': date_time
+           }, merge=True)
+
+           # Si cambió el estado, crear notificación
+           if old_state != new_state:
+               create_notification(client_id, panel_id, relay_name, new_state)
+
+           print(f"Actualizado relay {relay_name} a {new_state}")
+
+   except Exception as e:
+       print(f"Error procesando mensaje de panel: {e}")
+
+def handle_status_update(payload: Dict[str, Any]):
+   """Maneja actualizaciones de estado de ESP32s"""
+   try:
+       esp32_id = payload.get('esp32_id')
+       if not esp32_id:
+           return
+
+       status = payload.get('status')
+       if status in ['CONFIG', 'RUNNING', 'OFFLINE']:
+           doc_ref = db.document(f'hdd-monitor/esp32/registered/{esp32_id}')
+           doc_ref.set({
+               'status': status,
+               'lastUpdate': firestore.SERVER_TIMESTAMP
+           }, merge=True)
+           print(f"Estado de ESP32 {esp32_id} actualizado a: {status}")
+
+   except Exception as e:
+       print(f"Error actualizando estado: {e}")
+
+def handle_panel_assignment(client_id: str, panel_id: str, esp32_id: str):
+    """Maneja la asignación de un ESP32 a un panel específico"""
+    try:
+        # Verificar que el ESP32 existe
+        esp32_ref = db.document(f'hdd-monitor/esp32/registered/{esp32_id}')
+        esp32_doc = esp32_ref.get()
+        
+        if not esp32_doc.exists:
+            print(f"ESP32 {esp32_id} no encontrado")
+            return
+        
+        esp32_data = esp32_doc.to_dict()
+        if esp32_data.get('status') == 'AWAITING_CONFIG':
+            # Enviar configuración al ESP32
+            config_message = {
+                'client_id': client_id,
+                'panel_id': panel_id,
+                'esp32_id': esp32_id,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            # Publicar en el tópico específico del ESP32
+            client.publish(
+                f"esp32/config/{esp32_id}",
+                json.dumps(config_message),
+                retain=True
+            )
+            print(f"Configuración enviada a ESP32 {esp32_id} para panel {panel_id}")
+            
+            # Actualizar estado en Firestore
+            esp32_ref.set({
+                'clientId': client_id,
+                'panelId': panel_id,
+                'lastUpdate': firestore.SERVER_TIMESTAMP
+            }, merge=True)
+            
+    except Exception as e:
+        print(f"Error en handle_panel_assignment: {e}")
+
+# Agregar al diccionario de topics en on_connect
+topics = [
+    ("esp32/mac_search", 0),
+    ("esp32/network_info", 0),
+    ("esp32/config/+", 0),
+    ("esp32/panel_assignment", 0),  # Nuevo tópico para asignaciones
+    ("clients/+/panels/+", 0),
+    ("system/status/+", 0)
+]
+
+# Agregar al on_message
+elif topic == "esp32/panel_assignment":
+    handle_panel_assignment(
+        payload.get('client_id'),
+        payload.get('panel_id'),
+        payload.get('esp32_id')
+    )
+
+def create_notification(client_id: str, panel_id: str, relay_name: str, new_status: str):
+   """Crea notificación de cambio de estado de relay"""
+   try:
+       panel_ref = db.document(f'hdd-monitor/accounts/clients/{client_id}/panels/{panel_id}')
+       panel_data = panel_ref.get().to_dict()
+       panel_name = panel_data.get('name', 'Panel desconocido')
+
+       notification = {
+           'panelDocName': panel_id,
+           'date_time': datetime.now().strftime('%d/%m/%Y, %H:%M'),
+           'message': f'El relay {relay_name} del panel "{panel_name}" ha cambiado a {new_status}',
+           'relayName': relay_name,
+           'isRead': False
+       }
+
+       notifications_ref = db.collection(f'hdd-monitor/accounts/clients/{client_id}/notifications')
+       notifications_ref.add(notification)
+       print(f"Notificación creada para cambio en {panel_name}")
+
+   except Exception as e:
+       print(f"Error creando notificación: {e}")
+
+def run():
+    """Función principal"""
+    while True:
+        try:
+            # Configurar cliente MQTT con reintentos
+            client = mqtt.Client(client_id=MQTT_CLIENT_ID, protocol=mqtt.MQTTv311)
+            client.username_pw_set(MQTT_USER, MQTT_PASSWORD)
+            client.tls_set()
+            client.on_connect = on_connect
+            client.on_message = on_message
+            client.on_disconnect = on_disconnect
+
+            # Agregar manejo de desconexión
+            def on_disconnect(client, userdata, rc):
+                """Callback llamado al desconectarse del broker MQTT"""
+                if rc != 0:
+                    print(f"Desconexión inesperada. Código: {rc}")
+                    time.sleep(5)  # Esperar antes de reconectar
+                else:
+                    print("Desconexión normal")
+
+            print("Conectando al broker MQTT...")
+            client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
+            
+            # Iniciar loop con manejo de errores
+            try:
+                client.loop_forever()
+            except Exception as e:
+                print(f"Error en loop MQTT: {e}")
+                time.sleep(5)
+            
+        except KeyboardInterrupt:
+            print("Programa interrumpido por usuario")
+            break
+        except Exception as e:
+            print(f"Error en conexión MQTT: {e}")
+            time.sleep(5)
+        finally:
+            try:
+                client.disconnect()
+            except:
+                pass
+
+if __name__ == '__main__':
+    run()
+
+
+
+   
+
+mosquitto_pub -h node02.myqtthub.com -p 1883 -u compute_engine -P compute_engine -t test -m "test message"
+
+
+
+
+
+
+e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\AndroidManifest.xml e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\bluetooth e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\bluetooth\BleConnector.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\bluetooth\BleModels.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\bluetooth\BleScanner.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\bluetooth\BluetoothGattCallback.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\util e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\util\BlePermissionHandler.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\util\IdManager.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\util\KeyboardUtils.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\AuthRepository.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\Client.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\ClientRepository.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\Event.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\EventRepository.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\Notification.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\NotificationRepository.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\Panel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\PanelRepository.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\UserData.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\UserPreferences.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\UserRepository.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\di e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\di\AppModule.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\di\FirebaseModule.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\model e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\model\EventStatus.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\model\Stateable.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\model\UserRole.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\GetPanelsUseCase.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\LoginUseCase.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\NotificationUseCase.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\UseCase.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\esp32 e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\esp32\ESP32Device.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\esp32\ESP32Repository.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\AnimatedNotificationBell.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\AppTopBar.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\ClientComponents.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\ClientManagementDialogs.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\CommonComponents.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\ConfirmationDialogs.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\CustomTextField.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\DashboardComponents.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\EventCard.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\EventDialog.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\EventListItem.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\EventTypeSelector.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\LoadingContent.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\NewEventTypeDialog.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\PanelListComponents.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\SnackbarHandler.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\UserComponents.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\UserListComponents.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\navigation e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\navigation\AppNavigation.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\AdminDashboardScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\BleConfigScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\ClientManagementScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\EventScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\LoginScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\NotificationHistoryScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\OnboardingScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\UserDashboardScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\UserManagementScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\state e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\state\BleState.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\state\ClientManagementState.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\state\EventViewState.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\state\MainUiEvent.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\state\MainUiState.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\theme e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\theme\Color.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\theme\PanelColors.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\theme\Theme.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\theme\Type.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\util e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\util\Animations.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\util\Constants.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\util\Dimentions.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\util\Extensions.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\util\Feedback.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\util\FeedbackUtil.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\BleViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\ClientManagementViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\DashboardViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\EventViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\LoginViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\MainViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\NotificationHistoryViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\NotificationViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\UserManagementViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\BaseViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\MainActivity.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\service e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\service\FirebaseMessagingService.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\HddApplication.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\androidTest\java\com\pqsolutions\hdd_monitor e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\test\java\com\pqsolutions\hdd_monitor e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\res\drawable e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\res\mipmap-hdpi e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\res\mipmap-mdpi e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\res\mipmap-xhdpi e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\res\mipmap-anydpi e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\res\mipmap-xxhdpi e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\res\mipmap-xxxhdpi e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\res\raw e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\res\values e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\res\values\colors.xml e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\res\values\strings.xml e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\res\values\themes.xml e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\res\xml e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\build.gradle.kts e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\build.gradle.kts e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\proguard-rules.pro e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\gradle.properties e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\gradle\wrapper\gradle-wrapper.properties e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\gradle\libs.versions.toml e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\local.properties e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\settings.gradle.kts

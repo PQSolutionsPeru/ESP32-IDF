@@ -1,0 +1,1142 @@
+----------------------------------- BleConnector.kt:
+package com.pqsolutions.hdd_monitor.bluetooth
+
+import android.annotation.SuppressLint
+import android.bluetooth.*
+import android.content.Context
+import android.util.Log
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import java.util.*
+import javax.inject.Inject
+import javax.inject.Singleton
+
+@Singleton
+class BleConnector @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
+    private var bluetoothGatt: BluetoothGatt? = null
+    private var writeCharacteristic: BluetoothGattCharacteristic? = null
+
+    private val _connectionState = MutableStateFlow<BleConnectionState>(BleConnectionState.Disconnected)
+    val connectionState: StateFlow<BleConnectionState> = _connectionState.asStateFlow()
+
+    private val gattCallback = object : BluetoothGattCallback() {
+        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+            when (newState) {
+                BluetoothProfile.STATE_CONNECTED -> {
+                    Log.d(TAG, "Conectado al dispositivo GATT")
+                    _connectionState.value = BleConnectionState.Connected
+                    gatt.discoverServices()
+                }
+                BluetoothProfile.STATE_DISCONNECTED -> {
+                    Log.d(TAG, "Desconectado del dispositivo GATT")
+                    disconnect()
+                    _connectionState.value = BleConnectionState.Disconnected
+                }
+            }
+        }
+
+        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                findWriteCharacteristic(gatt)
+            } else {
+                Log.e(TAG, "Error descubriendo servicios: $status")
+                disconnect()
+            }
+        }
+
+        override fun onCharacteristicWrite(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            status: Int
+        ) {
+            val success = status == BluetoothGatt.GATT_SUCCESS
+            Log.d(TAG, "Escritura ${if (success) "exitosa" else "fallida"}")
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun connect(device: BluetoothDevice) {
+        try {
+            _connectionState.value = BleConnectionState.Connecting
+            bluetoothGatt = device.connectGatt(context, false, gattCallback)
+            Log.d(TAG, "Iniciando conexión a ${device.name}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error conectando", e)
+            _connectionState.value = BleConnectionState.Error("Error de conexión: ${e.message}")
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun disconnect() {
+        try {
+            bluetoothGatt?.close()
+            bluetoothGatt = null
+            writeCharacteristic = null
+            _connectionState.value = BleConnectionState.Disconnected
+        } catch (e: Exception) {
+            Log.e(TAG, "Error desconectando", e)
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun sendWifiConfig(config: WifiConfig): Boolean {
+        try {
+            val message = """
+                {START}
+                {"ssid":"${config.ssid}","password":"${config.password}"}
+                {END}
+            """.trimIndent()
+
+            return writeCharacteristic?.let { characteristic ->
+                characteristic.value = message.toByteArray()
+                bluetoothGatt?.writeCharacteristic(characteristic) == true
+            } ?: false
+        } catch (e: Exception) {
+            Log.e(TAG, "Error enviando configuración WiFi", e)
+            return false
+        }
+    }
+
+    private fun findWriteCharacteristic(gatt: BluetoothGatt) {
+        val service = gatt.getService(UART_SERVICE_UUID)
+        writeCharacteristic = service?.getCharacteristic(UART_RX_CHAR_UUID)
+
+        if (writeCharacteristic == null) {
+            Log.e(TAG, "No se encontró característica de escritura")
+            disconnect()
+        }
+    }
+
+    companion object {
+        private const val TAG = "BleConnector"
+        val UART_SERVICE_UUID: UUID = UUID.fromString("6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
+        val UART_RX_CHAR_UUID: UUID = UUID.fromString("6E400002-B5A3-F393-E0A9-E50E24DCCA9E")
+        val UART_TX_CHAR_UUID: UUID = UUID.fromString("6E400003-B5A3-F393-E0A9-E50E24DCCA9E")
+    }
+}
+
+
+-------------------------- BleModels.kt:
+package com.pqsolutions.hdd_monitor.bluetooth
+
+data class WifiConfig(
+    val ssid: String,
+    val password: String
+)
+
+data class BleDevice(
+    val address: String,
+    val name: String
+)
+
+sealed class BleConnectionState {
+    object Disconnected : BleConnectionState()
+    object Connecting : BleConnectionState()
+    object Connected : BleConnectionState()
+    data class Error(val message: String) : BleConnectionState()
+}
+
+
+-------------------------------- BleScanner.kt:
+package com.pqsolutions.hdd_monitor.bluetooth
+
+import android.annotation.SuppressLint
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
+import android.bluetooth.le.*
+import android.content.Context
+import android.util.Log
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import javax.inject.Inject
+import javax.inject.Singleton
+
+@Singleton
+class BleScanner @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
+    private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+    private val bluetoothAdapter = bluetoothManager.adapter
+    private val bleScanner = bluetoothAdapter?.bluetoothLeScanner
+
+    private val _isScanning = MutableStateFlow(false)
+    val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
+
+    private val _foundDevices = MutableStateFlow<Set<BluetoothDevice>>(emptySet())
+    val foundDevices: StateFlow<Set<BluetoothDevice>> = _foundDevices.asStateFlow()
+
+    private val scanCallback = object : ScanCallback() {
+        override fun onScanResult(callbackType: Int, result: ScanResult) {
+            val device = result.device
+            if (device.name?.startsWith("ESP32-") == true) {
+                val currentDevices = _foundDevices.value.toMutableSet()
+                currentDevices.add(device)
+                _foundDevices.value = currentDevices
+                Log.d(TAG, "ESP32 encontrado: ${device.name}")
+            }
+        }
+
+        override fun onScanFailed(errorCode: Int) {
+            val errorMsg = when (errorCode) {
+                ScanCallback.SCAN_FAILED_ALREADY_STARTED -> "Escaneo ya en progreso"
+                ScanCallback.SCAN_FAILED_APPLICATION_REGISTRATION_FAILED ->
+                    "Error registrando aplicación para escaneo"
+                ScanCallback.SCAN_FAILED_FEATURE_UNSUPPORTED ->
+                    "Bluetooth LE no soportado"
+                else -> "Error desconocido: $errorCode"
+            }
+            Log.e(TAG, errorMsg)
+            stopScan()
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun startScan() {
+        if (_isScanning.value) return
+
+        try {
+            _foundDevices.value = emptySet()
+            _isScanning.value = true
+
+            val settings = ScanSettings.Builder()
+                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                .build()
+
+            bleScanner?.startScan(null, settings, scanCallback)
+            Log.d(TAG, "Escaneo BLE iniciado")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error iniciando escaneo", e)
+            stopScan()
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun stopScan() {
+        try {
+            bleScanner?.stopScan(scanCallback)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error deteniendo escaneo", e)
+        } finally {
+            _isScanning.value = false
+        }
+    }
+
+    fun clearDevices() {
+        _foundDevices.value = emptySet()
+    }
+
+    companion object {
+        private const val TAG = "BleScanner"
+    }
+}
+
+
+
+
+---------------------------- BluetoothGattCallback:
+package com.pqsolutions.hdd_monitor.bluetooth
+
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCallback
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothProfile
+
+abstract class BluetoothGattCallbackWrapper : BluetoothGattCallback() {
+
+    abstract fun onConnectionStateChanged(gatt: BluetoothGatt, status: Int, newState: Int)
+
+    override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+        onConnectionStateChanged(gatt, status, newState)
+    }
+}
+
+
+
+
+-------------------------------- BlePermissionHandler:
+package com.pqsolutions.hdd_monitor.util
+
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.bluetooth.BluetoothManager
+import android.os.Build
+import android.util.Log
+
+object BlePermissionHandler {
+    private const val TAG = "BlePermissionHandler"
+
+    fun getRequiredPermissions(): Array<String> {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            arrayOf(
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_CONNECT
+            )
+        } else {
+            arrayOf(
+                Manifest.permission.BLUETOOTH,
+                Manifest.permission.BLUETOOTH_ADMIN
+            )
+        }
+    }
+
+    fun allPermissionsGranted(context: Context): Boolean {
+        return getRequiredPermissions().all {
+            context.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    fun checkBluetoothEnabled(context: Context): Boolean {
+        val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        val adapter = bluetoothManager.adapter
+        return adapter?.isEnabled == true
+    }
+
+    fun logPermissionStatus(context: Context) {
+        getRequiredPermissions().forEach { permission ->
+            val isGranted = context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+            Log.d(TAG, "Permiso $permission: ${if (isGranted) "CONCEDIDO" else "DENEGADO"}")
+        }
+        val bluetoothEnabled = checkBluetoothEnabled(context)
+        Log.d(TAG, "Bluetooth habilitado: $bluetoothEnabled")
+    }
+}
+
+
+
+---------------------------------------- BleConfigScreen.kt:
+package com.pqsolutions.hdd_monitor.presentation.screens
+
+import android.Manifest
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.pqsolutions.hdd_monitor.R
+import com.pqsolutions.hdd_monitor.data.Client
+import com.pqsolutions.hdd_monitor.presentation.components.ScreenTopBar
+import com.pqsolutions.hdd_monitor.presentation.state.BleState
+import com.pqsolutions.hdd_monitor.presentation.theme.HDD1_2Theme
+import com.pqsolutions.hdd_monitor.presentation.viewmodel.BleViewModel
+import kotlinx.coroutines.delay
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BleConfigScreen(
+    viewModel: BleViewModel = hiltViewModel(),
+    onConfigurationComplete: () -> Unit,
+    onBackClick: () -> Unit
+) {
+    var showPermissionDialog by remember { mutableStateOf(false) }
+    var showBluetoothDialog by remember { mutableStateOf(false) }
+    var wifiSsid by remember { mutableStateOf("") }
+    var wifiPassword by remember { mutableStateOf("") }
+    var panelName by remember { mutableStateOf("") }
+    var panelLocation by remember { mutableStateOf("") }
+    var selectedClientName by remember { mutableStateOf("") }
+    var selectedClientId by remember { mutableStateOf("") }
+    var showMenu by remember { mutableStateOf(false) }
+
+    val state by viewModel.state.collectAsState()
+    val devices by viewModel.devices.collectAsState()
+    val clients by viewModel.clients.collectAsState()
+    val context = LocalContext.current
+    val scrollState = rememberScrollState()
+
+    LaunchedEffect(state) {
+        Log.d("BleConfigScreen", "Estado actual: $state")
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val allGranted = permissions.values.all { it }
+        Log.d("BleConfigScreen", "Permisos concedidos: $allGranted")
+        if (allGranted) {
+            viewModel.onPermissionsGranted()
+        } else {
+            showPermissionDialog = true
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (!viewModel.hasRequiredPermissions()) {
+            Log.d("BleConfigScreen", "Solicitando permisos iniciales")
+            permissionLauncher.launch(
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    arrayOf(
+                        Manifest.permission.BLUETOOTH_SCAN,
+                        Manifest.permission.BLUETOOTH_CONNECT
+                    )
+                } else {
+                    arrayOf(
+                        Manifest.permission.BLUETOOTH,
+                        Manifest.permission.BLUETOOTH_ADMIN
+                    )
+                }
+            )
+        } else if (!viewModel.isBluetoothEnabled()) {
+            Log.d("BleConfigScreen", "Bluetooth desactivado")
+            showBluetoothDialog = true
+        }
+    }
+
+    HDD1_2Theme {
+        Scaffold(
+            topBar = {
+                ScreenTopBar(
+                    title = stringResource(R.string.configure_esp32),
+                    onBackClick = onBackClick
+                )
+            }
+        ) { paddingValues ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(16.dp)
+                    .verticalScroll(scrollState),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                when (state) {
+                    is BleState.Initial,
+                    is BleState.Scanning -> {
+                        ScanningSection(
+                            state = state,
+                            devices = devices,
+                            onScanClick = {
+                                Log.d("BleConfigScreen", "Iniciando escaneo")
+                                if (viewModel.hasRequiredPermissions()) {
+                                    viewModel.startScan()
+                                } else {
+                                    showPermissionDialog = true
+                                }
+                            },
+                            onDeviceClick = { device ->
+                                Log.d("BleConfigScreen", "Conectando a dispositivo: ${device.address}")
+                                viewModel.connectToDevice(device)
+                            }
+                        )
+                    }
+
+                    is BleState.Connecting -> {
+                        LoadingSection(message = "Conectando al dispositivo...")
+                    }
+
+                    is BleState.Connected -> {
+                        WifiConfigSection(
+                            wifiSsid = wifiSsid,
+                            wifiPassword = wifiPassword,
+                            onSsidChange = { wifiSsid = it },
+                            onPasswordChange = { wifiPassword = it },
+                            onSendClick = {
+                                Log.d("BleConfigScreen", "Enviando configuración WiFi: SSID=$wifiSsid")
+                                viewModel.sendWifiConfiguration(wifiSsid, wifiPassword)
+                            }
+                        )
+                    }
+
+                    is BleState.WifiConfigReceived -> {
+                        LoadingSection(message = "Configuración WiFi enviada, esperando conexión...")
+                    }
+
+                    is BleState.WifiConnected,
+                    is BleState.WaitingPanelConfig -> {
+                        PanelConfigSection(
+                            selectedClientName = selectedClientName,
+                            showMenu = showMenu,
+                            clients = clients,
+                            panelName = panelName,
+                            panelLocation = panelLocation,
+                            onClientSelect = { client ->
+                                selectedClientName = client.name
+                                selectedClientId = client.documentName
+                                showMenu = false
+                            },
+                            onShowMenuChange = { showMenu = it },
+                            onPanelNameChange = { panelName = it },
+                            onPanelLocationChange = { panelLocation = it },
+                            onSendClick = {
+                                viewModel.sendPanelConfiguration(
+                                    panelName = panelName,
+                                    panelLocation = panelLocation,
+                                    clientName = selectedClientName,
+                                    clientId = selectedClientId
+                                )
+                            }
+                        )
+                    }
+
+                    is BleState.ConfigurationSuccess -> {
+                        SuccessSection(message = "¡Configuración exitosa!\nEl dispositivo se está reiniciando...")
+                    }
+
+                    is BleState.ConfigurationError -> {
+                        ErrorSection(
+                            message = (state as BleState.ConfigurationError).message,
+                            onRetryClick = { viewModel.startScan() }
+                        )
+                    }
+
+                    is BleState.Error -> {
+                        ErrorSection(
+                            message = (state as BleState.Error).message,
+                            onRetryClick = { viewModel.startScan() }
+                        )
+                    }
+
+                    is BleState.RequiresPermission -> {
+                        LaunchedEffect(Unit) {
+                            permissionLauncher.launch((state as BleState.RequiresPermission).permissions.toTypedArray())
+                        }
+                        LoadingSection(message = "Solicitando permisos necesarios...")
+                    }
+
+                    is BleState.Disconnected -> {
+                        Button(
+                            onClick = { viewModel.startScan() },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Reintentar conexión")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showPermissionDialog) {
+        PermissionDialog(
+            onDismiss = { showPermissionDialog = false },
+            onConfirm = {
+                showPermissionDialog = false
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.fromParts("package", context.packageName, null)
+                }
+                context.startActivity(intent)
+            }
+        )
+    }
+
+    if (showBluetoothDialog) {
+        BluetoothDialog(
+            context = context,
+            onDismiss = { showBluetoothDialog = false }
+        )
+    }
+}
+
+@Composable
+private fun ScanningSection(
+    state: BleState,
+    devices: List<BluetoothDevice>,
+    onScanClick: () -> Unit,
+    onDeviceClick: (BluetoothDevice) -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        if (state is BleState.Scanning) {
+            CircularProgressIndicator()
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Buscando dispositivos...")
+            Spacer(modifier = Modifier.height(16.dp))
+            devices.forEach { device ->
+                DeviceButton(device = device, onClick = onDeviceClick)
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+        } else {
+            Button(
+                onClick = onScanClick,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Buscar dispositivos")
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WifiConfigSection(
+    wifiSsid: String,
+    wifiPassword: String,
+    onSsidChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onSendClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            "Conectado al dispositivo",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        OutlinedTextField(
+            value = wifiSsid,
+            onValueChange = onSsidChange,
+            label = { Text("Nombre de red WiFi") },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        OutlinedTextField(
+            value = wifiPassword,
+            onValueChange = onPasswordChange,
+            label = { Text("Contraseña WiFi") },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = onSendClick,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = wifiSsid.isNotBlank() && wifiPassword.isNotBlank()
+        ) {
+            Text("Configurar WiFi")
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PanelConfigSection(
+    selectedClientName: String,
+    showMenu: Boolean,
+    clients: List<Client>,
+    panelName: String,
+    panelLocation: String,
+    onClientSelect: (Client) -> Unit,
+    onShowMenuChange: (Boolean) -> Unit,
+    onPanelNameChange: (String) -> Unit,
+    onPanelLocationChange: (String) -> Unit,
+    onSendClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            "WiFi conectado. Configurar panel",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        ExposedDropdownMenuBox(
+            expanded = showMenu,
+            onExpandedChange = onShowMenuChange
+        ) {
+            OutlinedTextField(
+                value = selectedClientName,
+                onValueChange = { },
+                readOnly = true,
+                label = { Text("Cliente") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showMenu) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor()
+            )
+
+            ExposedDropdownMenu(
+                expanded = showMenu,
+                onDismissRequest = { onShowMenuChange(false) }
+            ) {
+                clients.forEach { client ->
+                    DropdownMenuItem(
+                        text = { Text(client.name) },
+                        onClick = { onClientSelect(client) }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        OutlinedTextField(
+            value = panelName,
+            onValueChange = onPanelNameChange,
+            label = { Text("Nombre del panel") },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        OutlinedTextField(
+            value = panelLocation,
+            onValueChange = onPanelLocationChange,
+            label = { Text("Ubicación del panel") },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = onSendClick,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = selectedClientName.isNotBlank() &&
+                    panelName.isNotBlank() &&
+                    panelLocation.isNotBlank()
+        ) {
+            Text("Configurar Panel")
+        }
+    }
+}
+
+@Composable
+private fun LoadingSection(message: String) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        CircularProgressIndicator()
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            message,
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.bodyLarge
+        )
+    }
+}
+
+@Composable
+private fun SuccessSection(message: String) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Icon(
+            imageVector = Icons.Default.CheckCircle,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(48.dp)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            message,
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.bodyLarge
+        )
+    }
+}
+
+@Composable
+private fun ErrorSection(
+    message: String,
+    onRetryClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Icon(
+            imageVector = Icons.Default.Error,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(48.dp)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            message,
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.error
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(
+            onClick = onRetryClick,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Reintentar")
+        }
+    }
+}
+
+@Composable
+private fun DeviceButton(
+    device: BluetoothDevice,
+    onClick: (BluetoothDevice) -> Unit
+) {
+    val context = LocalContext.current
+
+    val deviceName = remember(device) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                device.name?.let { name ->
+                    val id = name.substringAfter("ESP32-", "")
+                    if (id.isNotEmpty()) {
+                        "ESP32 #$id"
+                    } else {
+                        "ESP32 (Sin ID)"
+                    }
+                } ?: "Dispositivo desconocido"
+            } else {
+                "Dispositivo desconocido"
+            }
+        } else {
+            device.name?.let { name ->
+                val id = name.substringAfter("ESP32-", "")
+                if (id.isNotEmpty()) {
+                    "ESP32 #$id"
+                } else {
+                    "ESP32 (Sin ID)"
+                }
+            } ?: "Dispositivo desconocido"
+        }
+    }
+
+    Button(
+        onClick = { onClick(device) },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+    ) {
+        Text(deviceName)
+    }
+}
+
+@Composable
+private fun PermissionDialog(
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Se requieren permisos") },
+        text = { Text("Se necesitan permisos de Bluetooth para configurar el dispositivo") },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("Ir a Ajustes")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar")
+            }
+        }
+    )
+}
+
+@Composable
+private fun BluetoothDialog(
+    context: Context,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Bluetooth Desactivado") },
+        text = { Text("Por favor activa el Bluetooth para continuar") },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onDismiss()
+                    val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+                    if (context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
+                        PackageManager.PERMISSION_GRANTED
+                    ) {
+                        context.startActivity(enableBtIntent)
+                    }
+                }
+            ) {
+                Text("Activar")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar")
+            }
+        }
+    )
+}
+
+
+
+
+
+-------------------------------- BleState.kt:
+package com.pqsolutions.hdd_monitor.presentation.state
+
+sealed class BleState {
+    data object Initial : BleState()
+    data object Scanning : BleState()
+    data object Connecting : BleState()
+    data object Connected : BleState()
+    data object Disconnected : BleState()
+    data object WifiConfigReceived : BleState()
+    data object WifiConnected : BleState()
+    data object WaitingPanelConfig : BleState()
+    data object ConfigurationSuccess : BleState()
+    data class ConfigurationError(val message: String) : BleState()
+    data class Error(val message: String) : BleState()
+    data class RequiresPermission(
+        val permissions: List<String>,
+        val onPermissionGranted: () -> Unit
+    ) : BleState()
+}
+
+
+
+
+
+
+---------------------------------------- BleViewModel.kt:
+package com.pqsolutions.hdd_monitor.presentation.viewmodel
+
+import android.bluetooth.BluetoothDevice
+import android.content.Context
+import android.util.Log
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.pqsolutions.hdd_monitor.bluetooth.BleConnector
+import com.pqsolutions.hdd_monitor.bluetooth.BleScanner
+import com.pqsolutions.hdd_monitor.bluetooth.BleConnectionState
+import com.pqsolutions.hdd_monitor.bluetooth.WifiConfig
+import com.pqsolutions.hdd_monitor.data.Client
+import com.pqsolutions.hdd_monitor.data.ClientRepository
+import com.pqsolutions.hdd_monitor.presentation.state.BleState
+import com.pqsolutions.hdd_monitor.util.BlePermissionHandler
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+private const val TAG = "BleViewModel"
+private const val SCAN_TIMEOUT = 30000L // 30 segundos
+private const val WIFI_CONFIG_TIMEOUT = 30000L // 30 segundos
+
+@HiltViewModel
+class BleViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val bleScanner: BleScanner,
+    private val bleConnector: BleConnector,
+    private val clientRepository: ClientRepository
+) : ViewModel() {
+
+    private val _state = MutableStateFlow<BleState>(BleState.Initial)
+    val state: StateFlow<BleState> = _state.asStateFlow()
+
+    private val _devices = MutableStateFlow<List<BluetoothDevice>>(emptyList())
+    val devices: StateFlow<List<BluetoothDevice>> = _devices.asStateFlow()
+
+    private val _clients = MutableStateFlow<List<Client>>(emptyList())
+    val clients: StateFlow<List<Client>> = _clients.asStateFlow()
+
+    private var scanJob: Job? = null
+    private var timeoutJob: Job? = null
+
+    init {
+        observeDevices()
+        observeConnectionState()
+        loadClients()
+    }
+
+    private fun loadClients() {
+        viewModelScope.launch {
+            clientRepository.getClients()
+                .onSuccess { clientList ->
+                    _clients.value = clientList
+                    Log.d(TAG, "Clientes cargados: ${clientList.size}")
+                }
+                .onFailure { error ->
+                    Log.e(TAG, "Error cargando clientes", error)
+                    _state.value = BleState.Error("Error cargando lista de clientes")
+                }
+        }
+    }
+
+    fun hasRequiredPermissions(): Boolean =
+        BlePermissionHandler.allPermissionsGranted(context)
+
+    fun isBluetoothEnabled(): Boolean =
+        BlePermissionHandler.checkBluetoothEnabled(context)
+
+    private fun observeDevices() {
+        viewModelScope.launch {
+            bleScanner.foundDevices.collect { devices ->
+                _devices.value = devices.toList()
+            }
+        }
+    }
+
+    private fun observeConnectionState() {
+        viewModelScope.launch {
+            bleConnector.connectionState.collect { connectionState ->
+                when (connectionState) {
+                    is BleConnectionState.Connected -> {
+                        _state.value = BleState.Connected
+                        timeoutJob?.cancel()
+                    }
+                    is BleConnectionState.Disconnected -> {
+                        if (_state.value !is BleState.ConfigurationSuccess) {
+                            _state.value = BleState.Disconnected
+                        }
+                    }
+                    is BleConnectionState.Error -> {
+                        _state.value = BleState.Error(connectionState.message)
+                    }
+                    else -> {} // Estados manejados en otro lugar
+                }
+            }
+        }
+    }
+
+    fun startScan() {
+        if (!hasRequiredPermissions()) {
+            requestPermissions { startScan() }
+            return
+        }
+
+        scanJob?.cancel()
+        bleScanner.clearDevices()
+        _state.value = BleState.Scanning
+
+        scanJob = viewModelScope.launch {
+            bleScanner.startScan()
+            delay(SCAN_TIMEOUT)
+            stopScan()
+
+            if (_devices.value.isEmpty()) {
+                _state.value = BleState.Error(
+                    "No se encontraron dispositivos ESP32.\n" +
+                            "Asegúrate que el dispositivo esté encendido y cercano."
+                )
+            }
+        }
+    }
+
+    fun stopScan() {
+        scanJob?.cancel()
+        bleScanner.stopScan()
+        if (_state.value is BleState.Scanning) {
+            _state.value = BleState.Initial
+        }
+    }
+
+    fun connectToDevice(device: BluetoothDevice) {
+        if (!hasRequiredPermissions()) {
+            requestPermissions { connectToDevice(device) }
+            return
+        }
+
+        _state.value = BleState.Connecting
+        startTimeoutTimer()
+        bleConnector.connect(device)
+    }
+
+    fun sendWifiConfiguration(ssid: String, password: String) {
+        if (_state.value != BleState.Connected) {
+            Log.e(TAG, "Intento de enviar configuración WiFi sin estar conectado")
+            return
+        }
+
+        viewModelScope.launch {
+            _state.value = BleState.WifiConfigReceived
+
+            val success = bleConnector.sendWifiConfig(WifiConfig(ssid, password))
+            if (!success) {
+                _state.value = BleState.Error("Error enviando configuración WiFi")
+            } else {
+                startTimeoutTimer(WIFI_CONFIG_TIMEOUT)
+            }
+        }
+    }
+
+    fun sendPanelConfiguration(
+        panelName: String,
+        panelLocation: String,
+        clientName: String,
+        clientId: String
+    ) {
+        viewModelScope.launch {
+            _state.value = BleState.ConfigurationSuccess
+
+            // Por ahora solo simulamos éxito
+            delay(2000)
+            _state.value = BleState.WaitingPanelConfig
+        }
+    }
+
+    private fun startTimeoutTimer(timeout: Long = WIFI_CONFIG_TIMEOUT) {
+        timeoutJob?.cancel()
+        timeoutJob = viewModelScope.launch {
+            delay(timeout)
+            if (_state.value !is BleState.ConfigurationSuccess) {
+                _state.value = BleState.Error("Timeout de operación")
+                disconnect()
+            }
+        }
+    }
+
+    private fun requestPermissions(onGranted: () -> Unit) {
+        _state.value = BleState.RequiresPermission(
+            permissions = BlePermissionHandler.getRequiredPermissions().toList(),
+            onPermissionGranted = onGranted
+        )
+    }
+
+    fun disconnect() {
+        bleConnector.disconnect()
+        timeoutJob?.cancel()
+    }
+
+    fun onPermissionsGranted() {
+        when (val currentState = state.value) {
+            is BleState.RequiresPermission -> currentState.onPermissionGranted()
+            else -> startScan()
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        disconnect()
+        stopScan()
+        scanJob?.cancel()
+        timeoutJob?.cancel()
+    }
+}
+
+
+
+e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\AndroidManifest.xml e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\bluetooth e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\bluetooth\BleConnector.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\bluetooth\BleModels.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\bluetooth\BleScanner.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\bluetooth\BluetoothGattCallback.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\util e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\util\BlePermissionHandler.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\util\IdManager.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\util\KeyboardUtils.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\AuthRepository.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\Client.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\ClientRepository.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\Event.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\EventRepository.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\Notification.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\NotificationRepository.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\Panel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\PanelRepository.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\UserData.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\UserPreferences.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\UserRepository.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\di e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\di\AppModule.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\di\FirebaseModule.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\model e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\model\EventStatus.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\model\Stateable.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\model\UserRole.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\GetPanelsUseCase.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\LoginUseCase.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\NotificationUseCase.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\UseCase.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\AnimatedNotificationBell.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\AppTopBar.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\ClientComponents.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\ClientManagementDialogs.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\CommonComponents.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\ConfirmationDialogs.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\CustomTextField.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\DashboardComponents.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\EventCard.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\EventDialog.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\EventListItem.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\EventTypeSelector.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\LoadingContent.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\NewEventTypeDialog.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\PanelListComponents.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\SnackbarHandler.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\UserComponents.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\UserListComponents.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\navigation e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\navigation\AppNavigation.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\AdminDashboardScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\BleConfigScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\ClientManagementScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\EventScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\LoginScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\NotificationHistoryScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\OnboardingScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\UserDashboardScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\UserManagementScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\state e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\state\BleState.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\state\ClientManagementState.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\state\EventViewState.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\state\MainUiEvent.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\state\MainUiState.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\theme e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\theme\Color.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\theme\PanelColors.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\theme\Theme.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\theme\Type.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\util e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\util\Animations.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\util\Constants.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\util\Dimentions.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\util\Extensions.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\util\Feedback.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\util\FeedbackUtil.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\BleViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\ClientManagementViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\DashboardViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\EventViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\LoginViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\MainViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\NotificationHistoryViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\NotificationViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\UserManagementViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\BaseViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\MainActivity.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\service e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\service\FirebaseMessagingService.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\HddApplication.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\androidTest\java\com\pqsolutions\hdd_monitor e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\src\test\java\com\pqsolutions\hdd_monitor e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\build.gradle.kts e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\build.gradle.kts e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\app\proguard-rules.pro e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\gradle.properties e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\gradle\wrapper\gradle-wrapper.properties e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\gradle\libs.versions.toml e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\local.properties e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\APP\HDD1_2\settings.gradle.kts

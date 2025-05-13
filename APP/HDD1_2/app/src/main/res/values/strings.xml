@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Títulos de la aplicación -->
+    <string name="app_name">HDD Monitor</string>
+    <string name="notification_history_title">Historial de Notificaciones</string>
+    <string name="events">Agenda HDD</string>
+
+    <!-- Títulos de Dashboard -->
+    <string name="admin_dashboard_title">Panel de Administración</string>
+    <string name="user_dashboard_title">Panel de Usuario</string>
+    <string name="manage_clients">Gestionar Clientes</string>
+    <string name="view_events">Agenda HDD</string>
+    <string name="view_notification_history">Ver Historial de Notificaciones</string>
+    <string name="logout">Cerrar Sesión</string>
+
+    <!-- Navegación -->
+    <string name="back">Volver</string>
+    <string name="menu">Menú</string>
+    <string name="scroll_to_top">Volver arriba</string>
+    <string name="navigation_drawer_open">Abrir navegación</string>
+    <string name="navigation_drawer_close">Cerrar navegación</string>
+
+    <!-- Gestión de Clientes -->
+    <string name="client_management">Gestión de Clientes</string>
+    <string name="client_list">Lista de Clientes</string>
+    <string name="new_client">Nuevo Cliente</string>
+    <string name="edit_client">Editar Cliente</string>
+    <string name="client_details">Datos del Cliente</string>
+    <string name="client_name">Nombre del Cliente</string>
+    <string name="no_clients">No hay clientes registrados</string>
+    <string name="client_created">Cliente creado exitosamente</string>
+    <string name="client_updated">Cliente actualizado exitosamente</string>
+    <string name="client_deleted">Cliente eliminado exitosamente</string>
+    <string name="header_client_info">Información del Cliente</string>
+    <string name="select_clients">Seleccionar Clientes</string>
+    <string name="manage_client_users">Gestionar Usuarios del Cliente</string>
+    <string name="manage_client_panels">Gestionar Paneles del Cliente</string>
+    <string name="client_id">ID del Cliente: %1$s</string>
+    <string name="client_users_count">Usuarios: %1$d</string>
+    <string name="client_panels_count">Paneles: %1$d</string>
+    <string name="client_info">Información del Cliente</string>
+    <string name="panels_count">Paneles: %d</string>
+    <string name="users_count">Usuarios: %d</string>
+
+    <!-- Gestión de Paneles -->
+    <string name="manage_panels">Gestionar Paneles</string>
+    <string name="new_panel">Nuevo Panel</string>
+    <string name="edit_panel">Editar Panel</string>
+    <string name="no_panels">No hay paneles registrados</string>
+    <string name="no_panels_available">No hay paneles disponibles</string>
+    <string name="panel_created">Panel creado exitosamente</string>
+    <string name="panel_updated">Panel actualizado exitosamente</string>
+    <string name="panel_deleted">Panel eliminado exitosamente</string>
+    <string name="no_panels_found">No se encontraron paneles</string>
+    <string name="fire_panels">Paneles contra incendios</string>
+    <string name="loading_relays">Cargando relays…</string>
+    <string name="panel">Panel</string>
+    <string name="select_panel">Seleccionar Panel</string>
+    <string name="single_client_panel_hint">Selecciona un cliente para asignar un panel específico. Solo se puede seleccionar un cliente si deseas asociar un panel.</string>
+    <string name="panel_wifi_status">Estado de conexión WiFi</string>
+    <string name="panel_relay_status">Estado de relays</string>
+    <string name="panel_connection_ok">Conectado</string>
+    <string name="panel_connection_error">Desconectado</string>
+    <string name="field_panel">Panel: %1$s</string>
+
+    <!-- ESP32 Strings -->
+    <string name="panel_esp32_connected">ESP32 Conectado</string>
+    <string name="panel_esp32_disconnected">ESP32 Desconectado</string>
+
+    <!-- BleConfig Strings -->
+    <string name="configure_esp32">Configurar Chip Monitor</string>
+    <string name="wifi_name">Nombre de red WiFi</string>
+    <string name="wifi_password">Contraseña WiFi</string>
+    <string name="panel_name">Nombre del Panel</string>
+    <string name="panel_location">Ubicación del Panel</string>
+    <string name="search_devices">Buscar dispositivos</string>
+    <string name="scanning_devices">Buscando dispositivos...</string>
+    <string name="send_configuration">Enviar configuración</string>
+    <string name="configuration_successful">Configuración enviada exitosamente</string>
+    <string name="permissions_required">Permisos necesarios</string>
+    <string name="bluetooth_permission_explanation">Para configurar el chip monitor se necesitan permisos de Bluetooth. Por favor, concede los permisos en la configuración de la aplicación.</string>
+    <string name="go_to_settings">Ir a Configuración</string>
+    <string name="unknown_device">Dispositivo desconocido</string>
+
+    <!-- Gestión de Usuarios -->
+    <string name="manage_users">Gestionar Usuarios</string>
+    <string name="new_user">Nuevo Usuario</string>
+    <string name="edit_user">Editar Usuario</string>
+    <string name="no_users">No hay usuarios registrados</string>
+    <string name="user_created">Usuario creado exitosamente</string>
+    <string name="user_updated">Usuario actualizado exitosamente</string>
+    <string name="user_deleted">Usuario eliminado exitosamente</string>
+
+    <!-- Campos de formulario -->
+    <string name="email">Correo Electrónico</string>
+    <string name="password">Contraseña</string>
+    <string name="field_name">Nombre</string>
+    <string name="field_email">Email</string>
+    <string name="field_password">Contraseña</string>
+    <string name="field_location">Ubicación: %s</string>
+    <string name="field_esp32_ip">IP: %s</string>
+    <string name="field_ssid">SSID</string>
+    <string name="field_ssid_password">Contraseña SSID</string>
+    <string name="field_panel_id">ID Panel: %1$s</string>
+    <string name="field_relay">Relay: %1$s</string>
+    <string name="field_status">Estado: %1$s</string>
+    <string name="date">Fecha</string>
+    <string name="time">Hora</string>
+
+    <!-- Acciones -->
+    <string name="login">Iniciar Sesión</string>
+    <string name="confirm">Confirmar</string>
+    <string name="cancel">Cancelar</string>
+    <string name="accept">Aceptar</string>
+    <string name="delete">Eliminar</string>
+    <string name="edit">Editar</string>
+    <string name="save">Guardar</string>
+    <string name="retry">Reintentar</string>
+    <string name="create">Crear</string>
+    <string name="update">Actualizar</string>
+    <string name="close">Cerrar</string>
+    <string name="refresh">Actualizar</string>
+    <string name="show_password">Mostrar contraseña</string>
+    <string name="hide_password">Ocultar contraseña</string>
+
+    <!-- Diálogos de confirmación -->
+    <string name="confirm_deletion">Confirmar eliminación</string>
+    <string name="delete_confirmation_message">¿Está seguro que desea eliminar este elemento?</string>
+    <string name="confirm_acceptance">Confirmar aceptación</string>
+    <string name="accept_event_confirmation_message">¿Está seguro que desea aceptar este evento?</string>
+    <string name="unsaved_changes">Cambios sin guardar</string>
+    <string name="unsaved_changes_message">¿Desea descartar los cambios realizados?</string>
+    <string name="discard">Descartar</string>
+    <string name="keep_editing">Seguir editando</string>
+    <string name="please_wait">Por favor espere…</string>
+    <string name="info_confirm_delete">¿Está seguro que desea eliminar este elemento?</string>
+    <string name="info_confirm_delete_client">¿Está seguro que desea eliminar este cliente? Se eliminarán también todos sus paneles y usuarios asociados.</string>
+    <string name="info_confirm_delete_panel">¿Está seguro que desea eliminar este panel?</string>
+    <string name="info_confirm_delete_user">¿Está seguro que desea eliminar este usuario?</string>
+
+    <!-- Eventos -->
+    <string name="no_events">No hay eventos disponibles</string>
+    <string name="create_new_event">Crear Nuevo Evento</string>
+    <string name="edit_event">Editar Evento</string>
+    <string name="event_already_accepted">Este evento ya ha sido aceptado y no puede ser editado.</string>
+    <string name="event_title">Título del Evento</string>
+    <string name="event_description">Descripción del Evento</string>
+    <string name="delete_event">Eliminar evento</string>
+    <string name="event_status_programmed">Programado</string>
+    <string name="event_status_accepted">Aceptado</string>
+    <string name="events_count">Eventos: %d</string>
+    <string name="event_details">Detalles del Evento</string>
+
+    <!-- Notificaciones -->
+    <string name="no_notifications">No hay notificaciones disponibles</string>
+    <string name="notification_unread">No leído</string>
+    <string name="unread_count">%d no leídos</string>
+    <string name="channel_name">Actualizaciones de Panel</string>
+    <string name="channel_description">Notificaciones de cambios en el estado de los paneles</string>
+    <string name="default_notification_channel_id">panel_updates</string>
+    <string name="notification_title">Notificación</string>
+    <string name="notification_details">Detalles de la Notificación</string>
+
+    <!-- Errores y mensajes -->
+    <string name="error">Error</string>
+    <string name="error_message">Ha ocurrido un error</string>
+    <string name="no_data_available">No hay datos disponibles</string>
+    <string name="error_required_field">Campo requerido</string>
+    <string name="error_invalid_email">Email inválido</string>
+    <string name="error_invalid_ip">IP inválida</string>
+    <string name="error_password_length">La contraseña debe tener al menos 6 caracteres</string>
+    <string name="error_ssid_password_length">La contraseña SSID debe tener al menos 8 caracteres</string>
+    <string name="error_loading_clients">Error al cargar los clientes</string>
+    <string name="error_loading_panels">Error al cargar los paneles</string>
+    <string name="error_loading_users">Error al cargar los usuarios</string>
+    <string name="error_creating_client">Error al crear el cliente</string>
+    <string name="error_updating_client">Error al actualizar el cliente</string>
+    <string name="error_deleting_client">Error al eliminar el cliente</string>
+    <string name="error_creating_panel">Error al crear el panel</string>
+    <string name="error_updating_panel">Error al actualizar el panel</string>
+    <string name="error_deleting_panel">Error al eliminar el panel</string>
+    <string name="error_creating_user">Error al crear el usuario</string>
+    <string name="error_updating_user">Error al actualizar el usuario</string>
+    <string name="error_deleting_user">Error al eliminar el usuario</string>
+    <string name="error_connection">Error de conexión</string>
+    <string name="error_try_again">Intente nuevamente más tarde</string>
+    <string name="confirm_finalization">Confirmar finalización</string>
+    <string name="finalize_event_confirmation_message">¿Está seguro que desea finalizar este evento? Esta acción no se puede deshacer.</string>
+    <string name="finalize">Finalizar</string>
+    <string name="event">evento</string>
+
+    <!-- Mensajes WhatsApp -->
+    <string name="whatsapp_event_message">Buen día, quisiera conversar sobre el evento \"%1$s\"</string>
+
+    <!-- Contact -->
+    <string name="contact_admin">Contactar Administrador</string>
+    <string name="contact_support">Soporte Técnico</string>
+    <string name="contact_message_hint">Escribe tu mensaje aquí</string>
+    <string name="contact_subject_hint">Asunto</string>
+
+    <!-- Estados -->
+    <string name="status_ok">OK</string>
+    <string name="status_error">Error</string>
+    <string name="status_disconnected">Desconectado</string>
+    <string name="status_programmed">Programado</string>
+    <string name="status_completed">Completado</string>
+    <string name="status_pending">Pendiente</string>
+</resources>

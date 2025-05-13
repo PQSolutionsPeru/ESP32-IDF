@@ -1,0 +1,1 @@
+ACTIVAR / DESACTIVAR memory_report_enabled = True  # Cambiar a False para desactivar los informes de memoria DENTRO DE MAIN.PY
