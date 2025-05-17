@@ -22,6 +22,7 @@
 #include "config_manager.h"
 #include "esp32_id_manager.h"
 #include "wifi_manager.h"
+#include "time_manager.h" // Añadido Time Manager
 
 #define TAG "MQTT_MGR"
 
@@ -412,10 +413,20 @@ esp_err_t mqtt_manager_set_esp32_id(const char *esp32_id) {
         // Configurar tópico LWT
         snprintf(ctx->lwt_topic, sizeof(ctx->lwt_topic), "system/status/%s", esp32_id);
         
-        // Configurar mensaje LWT - sin usar cJSON
+        // Configurar mensaje LWT con timestamp real
+        char timestamp_str[32];
+        if (time_manager_is_synchronized()) {
+            // Usar tiempo real si está sincronizado
+            time_manager_get_timestamp(timestamp_str, sizeof(timestamp_str));
+        } else {
+            // Usar el timestamp del sistema como fallback
+            snprintf(timestamp_str, sizeof(timestamp_str), "%lld", (long long)(esp_timer_get_time() / 1000));
+        }
+        
+        // Construir mensaje LWT sin usar cJSON
         snprintf(ctx->lwt_message, sizeof(ctx->lwt_message),
-                "{\"esp32_id\":\"%s\",\"status\":\"OFFLINE\",\"type\":\"lwt\"}",
-                esp32_id);
+                "{\"esp32_id\":\"%s\",\"status\":\"OFFLINE\",\"type\":\"lwt\",\"timestamp\":%s}",
+                esp32_id, timestamp_str);
         
         // Configurar tópico de configuración
         snprintf(ctx->config_topic, sizeof(ctx->config_topic), "esp32/config/%s", esp32_id);
@@ -428,7 +439,7 @@ esp_err_t mqtt_manager_set_esp32_id(const char *esp32_id) {
     return ESP_OK;
 }
 
-// Inicia conexión al broker MQTT - VERSIÓN CORREGIDA
+// Inicia conexión al broker MQTT
 esp_err_t mqtt_manager_connect(void) {
     mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
     
@@ -468,6 +479,24 @@ esp_err_t mqtt_manager_connect(void) {
             ctx->client = NULL;
         }
         
+        // *********** INICIO DE OPTIMIZACIÓN DE MEMORIA ***********
+        // Limpieza de memoria y verificación antes de inicializar SSL
+        ESP_LOGI(TAG, "Preparando memoria para negociación SSL");
+        ESP_LOGI(TAG, "Memoria libre antes de limpieza: %ld bytes", esp_get_free_heap_size());
+        
+        // Forzar colección de basura
+        for (int i = 0; i < 5; i++) {
+            heap_caps_check_integrity_all(true);
+            ESP_LOGI(TAG, "Iteración de limpieza %d, memoria libre: %ld bytes", 
+                    i, esp_get_free_heap_size());
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+        
+        // Alimentar el watchdog para evitar reseteos durante este proceso
+        esp_task_wdt_reset();
+        ESP_LOGI(TAG, "Memoria libre después de limpieza: %ld bytes", esp_get_free_heap_size());
+        // *********** FIN DE OPTIMIZACIÓN DE MEMORIA ***********
+        
         // Construir URI completa con el protocolo correcto
         char uri[256];
         if (ctx->use_ssl) {
@@ -493,6 +522,17 @@ esp_err_t mqtt_manager_connect(void) {
         mqtt_cfg.session.keepalive = DEFAULT_KEEPALIVE;
         mqtt_cfg.session.disable_clean_session = false;
         
+        // Actualizar mensaje LWT con timestamp actual
+        if (time_manager_is_synchronized()) {
+            char timestamp_str[32];
+            time_manager_get_timestamp(timestamp_str, sizeof(timestamp_str));
+            
+            // Construir mensaje LWT sin usar cJSON
+            snprintf(ctx->lwt_message, sizeof(ctx->lwt_message),
+                    "{\"esp32_id\":\"%s\",\"status\":\"OFFLINE\",\"type\":\"lwt\",\"timestamp\":%s}",
+                    ctx->esp32_id, timestamp_str);
+        }
+        
         // Last Will
         mqtt_cfg.session.last_will.topic = ctx->lwt_topic;
         mqtt_cfg.session.last_will.msg = ctx->lwt_message;
@@ -507,10 +547,13 @@ esp_err_t mqtt_manager_connect(void) {
         // Configuración de buffer
         mqtt_cfg.buffer.size = DEFAULT_BUFFER_SIZE;
         
+        // *********** INICIO DE OPTIMIZACIÓN DE STACK SIZE ***********
         // Aumentar stack size para evitar stack overflow
-        mqtt_cfg.task.stack_size = 5120;  // Aumentado de 4096 (valor por defecto) a 5120
+        mqtt_cfg.task.stack_size = 6144;  // Aumentado de 5120 a 6144
         mqtt_cfg.task.priority = 5;       // Prioridad media
+        // *********** FIN DE OPTIMIZACIÓN DE STACK SIZE ***********
         
+        // *********** INICIO DE OPTIMIZACIÓN DE SSL ***********
         // Configuración SSL específica para coincidir con la implementación MicroPython
         if (ctx->use_ssl) {
             ESP_LOGI(TAG, "Configuring SSL for MQTT connection");
@@ -524,13 +567,20 @@ esp_err_t mqtt_manager_connect(void) {
             // Configuración equivalente a cert_reqs=ssl.CERT_NONE de MicroPython
             mqtt_cfg.broker.verification.certificate = NULL;
             mqtt_cfg.broker.verification.certificate_len = 0;
+            
+            // Minimizar requisitos de memoria SSL
+            mqtt_cfg.broker.verification.skip_validity_check = true;
         }
+        // *********** FIN DE OPTIMIZACIÓN DE SSL ***********
         
         // Mostrar información de depuración
         ESP_LOGI(TAG, "MQTT Config - Client ID: %s", mqtt_cfg.credentials.client_id);
         ESP_LOGI(TAG, "MQTT Config - Username: %s", mqtt_cfg.credentials.username);
         ESP_LOGI(TAG, "MQTT Config - Password: %s", ctx->password);
         ESP_LOGI(TAG, "MQTT Config - LWT Topic: %s", mqtt_cfg.session.last_will.topic);
+        
+        // Verificar memoria antes de crear cliente MQTT
+        ESP_LOGI(TAG, "Free memory before MQTT client init: %ld bytes", esp_get_free_heap_size());
         
         // Crear cliente MQTT
         ctx->client = esp_mqtt_client_init(&mqtt_cfg);
@@ -914,7 +964,7 @@ mqtt_manager_state_t mqtt_manager_get_state(void) {
     return ctx->state;
 }
 
-// Envia información de red y estado del dispositivo (VERSIÓN OPTIMIZADA)
+// Envia información de red y estado del dispositivo (VERSIÓN OPTIMIZADA Y ACTUALIZADA)
 esp_err_t mqtt_manager_send_network_info(void) {
     mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
     
@@ -929,19 +979,35 @@ esp_err_t mqtt_manager_send_network_info(void) {
     }
     
     // Usar buffer estático para evitar stack allocation
-    static char json_buffer[256];
+    static char json_buffer[512];
     char ip_address[16] = "0.0.0.0";
     
     wifi_manager_get_ip(ip_address, sizeof(ip_address));
     
+    // Obtener timestamp real en formato adecuado
+    char timestamp_str[32];
+    if (time_manager_is_synchronized()) {
+        // Usar tiempo real si está sincronizado
+        time_manager_get_timestamp(timestamp_str, sizeof(timestamp_str));
+        
+        // También obtener un timestamp legible para registros
+        char time_str[32];
+        time_manager_get_lima_time_str(time_str, sizeof(time_str));
+        ESP_LOGI(TAG, "Using synchronized time: %s", time_str);
+    } else {
+        // Usar el timestamp del sistema como fallback
+        snprintf(timestamp_str, sizeof(timestamp_str), "%lld", (long long)(esp_timer_get_time() / 1000));
+        ESP_LOGW(TAG, "Time not synchronized, using system timestamp");
+    }
+    
     // Construir JSON directamente sin cJSON
     int len = snprintf(json_buffer, sizeof(json_buffer),
                       "{\"esp32_id\":\"%s\",\"MAC\":\"%s\",\"IP\":\"%s\","
-                      "\"status\":\"ONLINE\",\"timestamp\":%lld}",
+                      "\"status\":\"ONLINE\",\"timestamp\":%s}",
                       ctx->esp32_id,
                       ctx->mac_address,
                       ip_address,
-                      (long long)(esp_timer_get_time() / 1000));
+                      timestamp_str);
     
     if (len < 0 || len >= sizeof(json_buffer)) {
         ESP_LOGE(TAG, "JSON buffer too small");
@@ -952,7 +1018,7 @@ esp_err_t mqtt_manager_send_network_info(void) {
     return mqtt_manager_publish("esp32/network_info", json_buffer, len, 0, false);
 }
 
-// Envía un heartbeat al broker (VERSIÓN OPTIMIZADA)
+// Envía un heartbeat al broker (VERSIÓN OPTIMIZADA Y ACTUALIZADA CON TIMESTAMP REAL)
 esp_err_t mqtt_manager_send_heartbeat(void) {
     mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
     
@@ -982,28 +1048,61 @@ esp_err_t mqtt_manager_send_heartbeat(void) {
     char topic[TOPIC_BUFFER_SIZE];
     snprintf(topic, sizeof(topic), "system/status/%s", ctx->esp32_id);
     
+    // Obtener timestamp real
+    char timestamp_str[32];
+    char time_str[64] = {0}; // Para mostrar en logs
+    
+    if (time_manager_is_synchronized()) {
+        // Usar tiempo real
+        time_manager_get_timestamp(timestamp_str, sizeof(timestamp_str));
+        time_manager_get_lima_time_str(time_str, sizeof(time_str));
+        ESP_LOGI(TAG, "Heartbeat with Lima time: %s", time_str);
+    } else {
+        // Usar el timestamp del sistema como fallback
+        snprintf(timestamp_str, sizeof(timestamp_str), "%lld", (long long)(esp_timer_get_time() / 1000));
+        ESP_LOGW(TAG, "Time not synchronized, using system timestamp");
+    }
+    
     // Crear JSON string directamente
     int len;
     
     if (strlen(ctx->client_panel_id) > 0 && strlen(ctx->panel_id) > 0) {
         len = snprintf(json_buffer, sizeof(json_buffer),
                       "{\"esp32_id\":\"%s\",\"status\":\"ONLINE\","
-                      "\"timestamp\":%lld,\"type\":\"heartbeat\","
+                      "\"timestamp\":%s,\"type\":\"heartbeat\","
                       "\"message_id\":\"%s\",\"client_id\":\"%s\","
-                      "\"panel_id\":\"%s\"}",
+                      "\"panel_id\":\"%s\"",
                       ctx->esp32_id,
-                      (long long)(esp_timer_get_time() / 1000),
+                      timestamp_str,
                       message_id,
                       ctx->client_panel_id,
                       ctx->panel_id);
+        
+        // Añadir información de tiempo si está disponible
+        if (time_str[0] != 0) {
+            len += snprintf(json_buffer + len, sizeof(json_buffer) - len,
+                           ",\"time\":\"%s\"", time_str);
+        }
+        
+        // Cerrar JSON
+        len += snprintf(json_buffer + len, sizeof(json_buffer) - len, "}");
     } else {
         len = snprintf(json_buffer, sizeof(json_buffer),
                       "{\"esp32_id\":\"%s\",\"status\":\"ONLINE\","
-                      "\"timestamp\":%lld,\"type\":\"heartbeat\","
-                      "\"message_id\":\"%s\"}",
+                      "\"timestamp\":%s,\"type\":\"heartbeat\","
+                      "\"message_id\":\"%s\"",
                       ctx->esp32_id,
-                      (long long)(esp_timer_get_time() / 1000),
+                      timestamp_str,
                       message_id);
+        
+        // Añadir información de tiempo si está disponible
+        if (time_str[0] != 0) {
+            len += snprintf(json_buffer + len, sizeof(json_buffer) - len,
+                           ",\"time\":\"%s\"", time_str);
+        }
+        
+        // Cerrar JSON
+        len += snprintf(json_buffer + len, sizeof(json_buffer) - len, "}");
     }
     
     if (len < 0 || len >= sizeof(json_buffer)) {

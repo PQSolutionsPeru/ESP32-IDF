@@ -85,6 +85,6 @@ $<TARGET_FILE:__idf_config_manager>
 $<TARGET_FILE:__idf_esp32_id_manager>
 $<TARGET_FILE:__idf_wifi_manager>
 $<TARGET_FILE:__idf_wifi_captive_portal>
+$<TARGET_FILE:__idf_time_manager>
 $<TARGET_FILE:__idf_mqtt_manager>
-$<TARGET_FILE:__idf_relay_manager>
 $<TARGET_FILE:__idf_main>
