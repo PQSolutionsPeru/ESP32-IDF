@@ -71,87 +71,99 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
     // comandos de reset, etc.
 }
 
-// Callback para manejar los cambios de estado del WiFi
+// WiFi callback ULTRA-OPTIMIZADO para ESP32 4MB
 static void wifi_state_callback(wifi_manager_state_t state, void *user_data) {
+    static bool mqtt_setup_done = false;  // Flag para evitar setup múltiple
+    
     switch (state) {
         case WIFI_MANAGER_STATE_INIT:
-            ESP_LOGI(TAG, "WiFi state: INIT");
+            ESP_LOGI(TAG, "WiFi: INIT");
+            mqtt_setup_done = false;
             break;
         case WIFI_MANAGER_STATE_DISCONNECTED:
-            ESP_LOGI(TAG, "WiFi state: DISCONNECTED");
+            ESP_LOGI(TAG, "WiFi: DISCONNECTED");
+            mqtt_setup_done = false;
             break;
         case WIFI_MANAGER_STATE_CONNECTING:
-            ESP_LOGI(TAG, "WiFi state: CONNECTING");
+            ESP_LOGI(TAG, "WiFi: CONNECTING");
             break;
         case WIFI_MANAGER_STATE_CONNECTED:
-            ESP_LOGI(TAG, "WiFi state: CONNECTED");
+            ESP_LOGI(TAG, "WiFi: CONNECTED");
             
-            // Mostrar dirección IP
-            char ip_address[16];
-            if (wifi_manager_get_ip(ip_address, sizeof(ip_address)) == ESP_OK) {
-                ESP_LOGI(TAG, "IP Address: %s", ip_address);
+            // Información básica sin arrays grandes
+            char ip[16];
+            if (wifi_manager_get_ip(ip, sizeof(ip)) == ESP_OK) {
+                ESP_LOGI(TAG, "IP: %s", ip);
             }
             
-            // Obtener potencia de señal
             int8_t rssi;
             if (wifi_manager_get_rssi(&rssi) == ESP_OK) {
-                ESP_LOGI(TAG, "Signal strength (RSSI): %d dBm", rssi);
+                ESP_LOGI(TAG, "Signal: %d dBm", rssi);
             }
             
-            // Sincronizar hora con NTP cuando WiFi se conecta
-            ESP_LOGI(TAG, "WiFi connected, synchronizing time");
-            time_manager_sync_time();
-            
-            // Si estamos en modo STA+AP, cambiar a modo STATION solamente
-            wifi_mode_t current_mode;
-            if (esp_wifi_get_mode(&current_mode) == ESP_OK && current_mode == WIFI_MODE_APSTA) {
-                ESP_LOGI(TAG, "Switching from AP+STA mode to STATION-only mode");
-                esp_err_t ret = esp_wifi_set_mode(WIFI_MODE_STA);
-                if (ret != ESP_OK) {
-                    ESP_LOGE(TAG, "Failed to switch to station-only mode: %s", esp_err_to_name(ret));
+            // Setup MQTT una sola vez
+            if (!mqtt_setup_done) {
+                mqtt_setup_done = true;
+                
+                // Sincronizar tiempo
+                ESP_LOGI(TAG, "Synchronizing time");
+                time_manager_sync_time();
+                
+                // Cambiar a modo STA si es necesario
+                wifi_mode_t mode;
+                if (esp_wifi_get_mode(&mode) == ESP_OK && mode == WIFI_MODE_APSTA) {
+                    ESP_LOGI(TAG, "Switching to STA-only mode");
+                    esp_err_t ret = esp_wifi_set_mode(WIFI_MODE_STA);
+                    if (ret != ESP_OK) {
+                        ESP_LOGE(TAG, "Failed to switch mode: %s", esp_err_to_name(ret));
+                    }
                 }
-            }
-            
-            // Cuando WiFi está conectado, iniciar la conexión MQTT
-            if (!mqtt_manager_is_connected()) {
-                ESP_LOGI(TAG, "WiFi connected, starting MQTT connection");
-                // Obtener el ID del ESP32 y configurar MQTT
-                char esp32_id[ESP32_ID_LENGTH + 1];
-                if (esp32_id_manager_get_id(esp32_id, sizeof(esp32_id)) == ESP_OK) {
-                    ESP_LOGI(TAG, "Configuring MQTT with ESP32 ID: %s", esp32_id);
-                    mqtt_manager_set_esp32_id(esp32_id);
+                
+                // Setup MQTT minimalista
+                mqtt_manager_state_t mqtt_state = mqtt_manager_get_state();
+                if (mqtt_state != MQTT_MANAGER_STATE_CONNECTED && 
+                    mqtt_state != MQTT_MANAGER_STATE_CONNECTING) {
                     
-                    // Intentar conexión MQTT con más información de depuración
-                    ESP_LOGI(TAG, "Attempting MQTT connection...");
-                    esp_err_t mqtt_result = mqtt_manager_connect();
-                    if (mqtt_result != ESP_OK) {
-                        ESP_LOGE(TAG, "MQTT connection failed with error: %s (0x%x)", 
-                                esp_err_to_name(mqtt_result), mqtt_result);
+                    char esp32_id[ESP32_ID_LENGTH + 1];
+                    if (esp32_id_manager_get_id(esp32_id, sizeof(esp32_id)) == ESP_OK) {
+                        ESP_LOGI(TAG, "Configuring MQTT with ID: %s", esp32_id);
+                        if (mqtt_manager_set_esp32_id(esp32_id) == ESP_OK) {
+                            ESP_LOGI(TAG, "Attempting MQTT connection...");
+                            esp_err_t result = mqtt_manager_connect();
+                            if (result != ESP_OK) {
+                                ESP_LOGE(TAG, "MQTT connection failed: %s", esp_err_to_name(result));
+                            } else {
+                                ESP_LOGI(TAG, "MQTT connection started");
+                            }
+                        } else {
+                            ESP_LOGE(TAG, "Failed to set ESP32 ID");
+                        }
                     } else {
-                        ESP_LOGI(TAG, "MQTT connection started successfully");
+                        ESP_LOGE(TAG, "Failed to get ESP32 ID");
                     }
                 } else {
-                    ESP_LOGE(TAG, "Failed to get ESP32 ID");
+                    ESP_LOGI(TAG, "MQTT already in progress, state: %d", mqtt_state);
                 }
             }
             break;
         case WIFI_MANAGER_STATE_AP_MODE:
-            ESP_LOGI(TAG, "WiFi state: AP_MODE");
+            ESP_LOGI(TAG, "WiFi: AP_MODE");
+            mqtt_setup_done = false;
             
-            // Mostrar IP del AP
             char ap_ip[16];
             if (wifi_manager_get_ap_ip(ap_ip, sizeof(ap_ip)) == ESP_OK) {
-                ESP_LOGI(TAG, "AP IP Address: %s", ap_ip);
+                ESP_LOGI(TAG, "AP IP: %s", ap_ip);
             }
             break;
         case WIFI_MANAGER_STATE_STA_AP_MODE:
-            ESP_LOGI(TAG, "WiFi state: STA_AP_MODE (Captive Portal)");
+            ESP_LOGI(TAG, "WiFi: STA_AP_MODE");
             break;
         case WIFI_MANAGER_STATE_ERROR:
-            ESP_LOGI(TAG, "WiFi state: ERROR");
+            ESP_LOGI(TAG, "WiFi: ERROR");
+            mqtt_setup_done = false;
             break;
         default:
-            ESP_LOGI(TAG, "WiFi state: UNKNOWN");
+            ESP_LOGI(TAG, "WiFi: UNKNOWN");
             break;
     }
 }
@@ -243,74 +255,85 @@ void app_main(void)
         }
     }
     
-    // Bucle principal
+    // Bucle principal ULTRA-OPTIMIZADO para ESP32 4MB
     int counter = 0;
-    bool mqtt_connection_attempted = false;
+    int last_memory_check = 0;
+    int last_mqtt_retry = 0;
 
     while (1) {
         counter++;
 
-        if (counter % 60 == 0) {  // Cada 5 minutos (60 * 5 segundos)
+        // Reporte de memoria solo cada 10 minutos para reducir overhead
+        if (counter - last_memory_check >= 120) {  // 120 * 5s = 10 minutos
             print_memory_info();
+            last_memory_check = counter;
         }
         
-        // Comprobar si la hora está sincronizada
+        // Verificar tiempo de forma minimalista
         if (wifi_manager_is_connected() && !time_manager_is_synchronized()) {
             time_manager_check_sync();
         }
         
-        // Verificar estado WiFi y MQTT
-        if (wifi_manager_is_connected()) {
-            // Si WiFi está conectado pero MQTT no, intentar iniciar la conexión MQTT
-            if (!mqtt_manager_is_connected() && !mqtt_connection_attempted) {
-                ESP_LOGI(TAG, "WiFi connected, starting MQTT connection");
-                mqtt_connection_attempted = true;
-                
-                // Obtener el ID del ESP32 y configurar MQTT
-                char esp32_id_local[ESP32_ID_LENGTH + 1];
-                if (esp32_id_manager_get_id(esp32_id_local, sizeof(esp32_id_local)) == ESP_OK) {
-                    mqtt_manager_set_esp32_id(esp32_id_local);
-                    mqtt_manager_connect();
-                }
-            }
-            
-            // Procesar MQTT (mensajes entrantes, reconexiones, etc.)
-            mqtt_manager_loop(0);
-            
-            // Verificar si estamos en modo AP+STA y cambiar a solo STA
-            wifi_mode_t current_mode;
-            if (esp_wifi_get_mode(&current_mode) == ESP_OK && current_mode == WIFI_MODE_APSTA) {
-                ESP_LOGI(TAG, "WiFi connected but still in AP+STA mode, switching to STA only");
+        // Estados simples sin variables complejas
+        bool wifi_ok = wifi_manager_is_connected();
+        mqtt_manager_state_t mqtt_state = mqtt_manager_get_state();
+        bool mqtt_ok = (mqtt_state == MQTT_MANAGER_STATE_CONNECTED);
+        
+        if (wifi_ok) {
+            // Cambio de modo WiFi minimalista
+            wifi_mode_t mode;
+            if (esp_wifi_get_mode(&mode) == ESP_OK && mode == WIFI_MODE_APSTA) {
+                ESP_LOGI(TAG, "Still in AP+STA mode, switching to STA only");
                 esp_wifi_set_mode(WIFI_MODE_STA);
             }
             
-            if (mqtt_manager_is_connected()) {
-                // Mostrar la hora actual si está sincronizada
-                if (time_manager_is_synchronized()) {
-                    char time_str[32];
-                    time_manager_get_lima_time_str(time_str, sizeof(time_str));
-                    ESP_LOGI(TAG, "System running with ID: %s, WiFi and MQTT connected (iteration %d), time: %s", 
-                             esp32_id, counter, time_str);
-                } else {
-                    ESP_LOGI(TAG, "System running with ID: %s, WiFi and MQTT connected (iteration %d)", esp32_id, counter);
+            // Procesar MQTT
+            mqtt_manager_loop(0);
+            
+            if (mqtt_ok) {
+                // Log cada 2 minutos cuando todo funciona
+                if (counter % 24 == 0) {  // 24 * 5s = 2 minutos
+                    if (time_manager_is_synchronized()) {
+                        char time_str[32];
+                        time_manager_get_lima_time_str(time_str, sizeof(time_str));
+                        ESP_LOGI(TAG, "System OK - WiFi+MQTT connected, Time: %s", time_str);
+                    } else {
+                        ESP_LOGI(TAG, "System OK - WiFi+MQTT connected");
+                    }
                 }
             } else {
-                ESP_LOGI(TAG, "System running with ID: %s, WiFi connected, MQTT disconnected (iteration %d)", esp32_id, counter);
+                // Log cada minuto cuando MQTT falla
+                if (counter % 12 == 0) {  // 12 * 5s = 1 minuto
+                    ESP_LOGI(TAG, "WiFi OK, MQTT: %s", 
+                            mqtt_state == MQTT_MANAGER_STATE_CONNECTING ? "CONNECTING" :
+                            mqtt_state == MQTT_MANAGER_STATE_RECONNECTING ? "RECONNECTING" :
+                            mqtt_state == MQTT_MANAGER_STATE_ERROR ? "ERROR" : "DISCONNECTED");
+                }
                 
-                // Reintentar MQTT cada 30 iteraciones (150 segundos = 2.5 minutos)
-                if (counter % 30 == 0) {
-                    ESP_LOGI(TAG, "Retrying MQTT connection periodically");
-                    mqtt_manager_connect();
+                // Reintentar MQTT cada 2 minutos
+                if ((counter - last_mqtt_retry) >= 24 && 
+                    mqtt_state != MQTT_MANAGER_STATE_CONNECTING) {
+                    
+                    ESP_LOGI(TAG, "Retrying MQTT connection (state: %d)", mqtt_state);
+                    char esp32_id_local[ESP32_ID_LENGTH + 1];
+                    if (esp32_id_manager_get_id(esp32_id_local, sizeof(esp32_id_local)) == ESP_OK) {
+                        mqtt_manager_set_esp32_id(esp32_id_local);
+                        mqtt_manager_connect();
+                    }
+                    last_mqtt_retry = counter;
                 }
             }
         } else {
-            ESP_LOGI(TAG, "System running with ID: %s, WiFi not connected (iteration %d)", esp32_id, counter);
-            mqtt_connection_attempted = false;  // Resetear el flag cuando WiFi se desconecta
+            // WiFi desconectado - log cada minuto
+            if (counter % 12 == 0) {
+                ESP_LOGI(TAG, "System running - WiFi DISCONNECTED");
+            }
             
-            // Manejar la desconexión WiFi - intentar reconectar o activar AP si falla
-            wifi_manager_handle_disconnection("FirePanel", "firepanel", 5);
+            // Manejo simple de desconexión
+            wifi_manager_handle_disconnection("FirePanel", "firepanel", 3);  // Menos reintentos
         }
         
-        vTaskDelay(5000 / portTICK_PERIOD_MS);
+        // Pausa eficiente
+        vTaskDelay(pdMS_TO_TICKS(5000));
     }
 }

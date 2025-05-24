@@ -17,12 +17,13 @@
 #include "esp_timer.h" // Para esp_timer_get_time()
 #include "mqtt_client.h"
 #include "esp_tls.h"
-#include "esp_crt_bundle.h"
+#include "mqtt_ssl_setup.h"
 #include "esp_random.h"
 #include "config_manager.h"
 #include "esp32_id_manager.h"
 #include "wifi_manager.h"
 #include "time_manager.h" // Añadido Time Manager
+#include "esp_task_wdt.h"
 
 #define TAG "MQTT_MGR"
 
@@ -108,203 +109,143 @@ static void generate_message_id(char *buffer, size_t size) {
     snprintf(buffer, size, "msg_%" PRIu32, random);
 }
 
-// Handler de eventos MQTT - Corregido para ESP-IDF 5.4.1
+// Handler de eventos MQTT ULTRA-SIMPLIFICADO para ESP32 4MB
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data) {
     esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
     mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
-    esp_mqtt_client_handle_t client = event->client;
     
-    // Actualizar timestamp de actividad
-    ctx->last_activity_time = esp_timer_get_time() / 1000;  // Convertir a ms
+    // Variables locales mínimas - sin arrays grandes
+    ctx->last_activity_time = esp_timer_get_time() / 1000;
     
     switch (event->event_id) {
         case MQTT_EVENT_CONNECTED:
-            ESP_LOGI(TAG, "MQTT client connected to broker");
+            ESP_LOGI(TAG, "MQTT connected");
             
-            // Adquirir mutex para proteger la actualización del estado
-            if (xSemaphoreTake(ctx->mutex, portMAX_DELAY) == pdTRUE) {
-                // Marcar como conectado
+            // Operación atómica mínima
+            if (xSemaphoreTake(ctx->mutex, 10) == pdTRUE) {
                 ctx->state = MQTT_MANAGER_STATE_CONNECTED;
                 ctx->was_connected = true;
                 ctx->reconnect_attempts = 0;
-                
-                // Notificar a través del grupo de eventos
-                xEventGroupClearBits(ctx->event_group, MQTT_DISCONNECTED_BIT | MQTT_ERROR_BIT);
-                xEventGroupSetBits(ctx->event_group, MQTT_CONNECTED_BIT);
-                
-                // Liberar mutex
                 xSemaphoreGive(ctx->mutex);
             }
             
-            // Notificar al callback
+            // Notificación simple de eventos
+            xEventGroupClearBits(ctx->event_group, MQTT_DISCONNECTED_BIT | MQTT_ERROR_BIT);
+            xEventGroupSetBits(ctx->event_group, MQTT_CONNECTED_BIT);
+            
+            // Callback sin parámetros complejos
             if (ctx->state_callback) {
                 ctx->state_callback(ctx->state, ctx->state_user_data);
             }
             
-            // Suscribirse al tópico de configuración después de un breve retraso
-            vTaskDelay(pdMS_TO_TICKS(500));  // Pequeño retraso antes de suscribirse
-            
+            // Suscripciones mínimas después de un delay
+            vTaskDelay(pdMS_TO_TICKS(500));
             if (strlen(ctx->esp32_id) > 0) {
-                char config_topic[TOPIC_BUFFER_SIZE];
+                char config_topic[128];
                 snprintf(config_topic, sizeof(config_topic), "esp32/config/%s", ctx->esp32_id);
-                
-                // Guardar el tópico de configuración
                 strncpy(ctx->config_topic, config_topic, sizeof(ctx->config_topic) - 1);
                 ctx->config_topic[sizeof(ctx->config_topic) - 1] = '\0';
-                
-                // Suscribirse con QoS 0 para reducir uso de memoria
                 mqtt_manager_subscribe(ctx->config_topic, 0);
                 
-                // Suscribirse también al tópico de reset
-                char reset_topic[TOPIC_BUFFER_SIZE];
+                char reset_topic[128];
                 snprintf(reset_topic, sizeof(reset_topic), "esp32/config/%s/reset", ctx->esp32_id);
                 mqtt_manager_subscribe(reset_topic, 0);
             }
             
-            // Enviar información de red después de otro pequeño retraso
-            vTaskDelay(pdMS_TO_TICKS(500));
-            
-            // Enviar mensajes pendientes si hay
+            // Enviar mensajes pendientes (máximo 2)
             mqtt_pending_message_t pending_msg;
             int pending_count = 0;
-            while (xQueueReceive(ctx->pending_messages, &pending_msg, 0) == pdTRUE && pending_count < 3) {
-                ESP_LOGI(TAG, "Sending pending message to topic: %s", pending_msg.topic);
-                esp_mqtt_client_publish(client, pending_msg.topic, pending_msg.data, 
+            while (xQueueReceive(ctx->pending_messages, &pending_msg, 0) == pdTRUE && pending_count < 2) {
+                esp_mqtt_client_publish(event->client, pending_msg.topic, pending_msg.data, 
                                         pending_msg.data_len, pending_msg.qos, pending_msg.retain);
                 pending_count++;
-                vTaskDelay(pdMS_TO_TICKS(100));  // Pequeño retraso entre mensajes
+                vTaskDelay(pdMS_TO_TICKS(50));
             }
             
-            // Publicar información de red después de todos los demás mensajes
+            // Enviar network info
+            vTaskDelay(pdMS_TO_TICKS(500));
             mqtt_manager_send_network_info();
-            
             break;
             
         case MQTT_EVENT_DISCONNECTED:
-            ESP_LOGW(TAG, "MQTT client disconnected from broker");
+            ESP_LOGW(TAG, "MQTT disconnected");
             
-            // Adquirir mutex para proteger la actualización del estado
-            if (xSemaphoreTake(ctx->mutex, portMAX_DELAY) == pdTRUE) {
-                // Si habíamos estado conectados, pasar a estado de reconexión
-                if (ctx->was_connected) {
-                    ctx->state = MQTT_MANAGER_STATE_RECONNECTING;
-                } else {
-                    ctx->state = MQTT_MANAGER_STATE_DISCONNECTED;
-                }
-                
-                // Notificar a través del grupo de eventos
-                xEventGroupClearBits(ctx->event_group, MQTT_CONNECTED_BIT);
-                xEventGroupSetBits(ctx->event_group, MQTT_DISCONNECTED_BIT);
-                
-                // Liberar mutex
+            if (xSemaphoreTake(ctx->mutex, 10) == pdTRUE) {
+                ctx->state = ctx->was_connected ? MQTT_MANAGER_STATE_RECONNECTING : MQTT_MANAGER_STATE_DISCONNECTED;
                 xSemaphoreGive(ctx->mutex);
             }
             
-            // Notificar al callback
+            xEventGroupClearBits(ctx->event_group, MQTT_CONNECTED_BIT);
+            xEventGroupSetBits(ctx->event_group, MQTT_DISCONNECTED_BIT);
+            
             if (ctx->state_callback) {
                 ctx->state_callback(ctx->state, ctx->state_user_data);
             }
-            
             break;
             
         case MQTT_EVENT_SUBSCRIBED:
-            ESP_LOGI(TAG, "MQTT client subscribed to topic, msg_id=%d", event->msg_id);
-            break;
-            
-        case MQTT_EVENT_UNSUBSCRIBED:
-            ESP_LOGI(TAG, "MQTT client unsubscribed from topic, msg_id=%d", event->msg_id);
+            ESP_LOGI(TAG, "MQTT subscribed, msg_id=%d", event->msg_id);
             break;
             
         case MQTT_EVENT_PUBLISHED:
-            ESP_LOGD(TAG, "MQTT message published successfully, msg_id=%d", event->msg_id);
-            
-            // Adquirir mutex para proteger la actualización del tiempo de actividad
-            if (xSemaphoreTake(ctx->mutex, portMAX_DELAY) == pdTRUE) {
+            // Solo actualizar timestamp, sin logs verbosos
+            if (xSemaphoreTake(ctx->mutex, 5) == pdTRUE) {
                 ctx->last_activity_time = esp_timer_get_time() / 1000;
                 xSemaphoreGive(ctx->mutex);
             }
-            
             break;
             
         case MQTT_EVENT_DATA:
             ESP_LOGI(TAG, "MQTT data received");
-            ESP_LOGD(TAG, "Topic: %.*s", event->topic_len, event->topic);
-            ESP_LOGD(TAG, "Data: %.*s", event->data_len, event->data);
+            // Procesamiento MINIMALISTA de datos
+            if (ctx->message_callback && event->topic_len < 128 && event->data_len < 256) {
+                // Buffers estáticos PEQUEÑOS para evitar stack overflow
+                static char mini_topic[128];
+                static char mini_data[256];
+                
+                // Copiar solo si cabe en buffers pequeños
+                if (event->topic_len < sizeof(mini_topic) && event->data_len < sizeof(mini_data)) {
+                    memcpy(mini_topic, event->topic, event->topic_len);
+                    mini_topic[event->topic_len] = '\0';
+                    
+                    memcpy(mini_data, event->data, event->data_len);
+                    mini_data[event->data_len] = '\0';
+                    
+                    // Callback simple
+                    ctx->message_callback(mini_topic, mini_data, event->data_len, ctx->message_user_data);
+                }
+            }
             
-            // Adquirir mutex para proteger la actualización del tiempo de actividad
-            if (xSemaphoreTake(ctx->mutex, portMAX_DELAY) == pdTRUE) {
+            if (xSemaphoreTake(ctx->mutex, 5) == pdTRUE) {
                 ctx->last_activity_time = esp_timer_get_time() / 1000;
                 xSemaphoreGive(ctx->mutex);
             }
-            
-            // Crear copias nul-terminated de topic y data
-            char *topic = malloc(event->topic_len + 1);
-            char *data = malloc(event->data_len + 1);
-            
-            if (topic && data) {
-                memcpy(topic, event->topic, event->topic_len);
-                topic[event->topic_len] = '\0';
-                
-                memcpy(data, event->data, event->data_len);
-                data[event->data_len] = '\0';
-                
-                // Procesar mensaje
-                if (ctx->message_callback) {
-                    ctx->message_callback(topic, data, event->data_len, ctx->message_user_data);
-                }
-                
-                // Liberar memoria
-                free(topic);
-                free(data);
-            } else {
-                ESP_LOGE(TAG, "Failed to allocate memory for MQTT message");
-                if (topic) free(topic);
-                if (data) free(data);
-            }
-            
             break;
             
         case MQTT_EVENT_ERROR:
-            ESP_LOGE(TAG, "MQTT error occurred");
+            ESP_LOGE(TAG, "MQTT error");
             
             if (event->error_handle->error_type == MQTT_ERROR_TYPE_TCP_TRANSPORT) {
                 if (event->error_handle->esp_tls_last_esp_err) {
-                    ESP_LOGE(TAG, "Last ESP TLS error: 0x%x -> %s", 
-                             event->error_handle->esp_tls_last_esp_err, 
-                             esp_err_to_name(event->error_handle->esp_tls_last_esp_err));
-                }
-                if (event->error_handle->esp_tls_stack_err) {
-                    ESP_LOGE(TAG, "TLS stack error: 0x%x", event->error_handle->esp_tls_stack_err);
-                }
-                if (event->error_handle->esp_transport_sock_errno) {
-                    ESP_LOGE(TAG, "Socket errno: %d -> %s", 
-                             event->error_handle->esp_transport_sock_errno,
-                             strerror(event->error_handle->esp_transport_sock_errno));
+                    ESP_LOGE(TAG, "TLS error: 0x%x", event->error_handle->esp_tls_last_esp_err);
                 }
             }
             
-            // Adquirir mutex para proteger la actualización del estado
-            if (xSemaphoreTake(ctx->mutex, portMAX_DELAY) == pdTRUE) {
-                // Actualizar estado
+            if (xSemaphoreTake(ctx->mutex, 5) == pdTRUE) {
                 ctx->state = MQTT_MANAGER_STATE_ERROR;
-                
-                // Notificar a través del grupo de eventos
-                xEventGroupClearBits(ctx->event_group, MQTT_CONNECTED_BIT);
-                xEventGroupSetBits(ctx->event_group, MQTT_ERROR_BIT);
-                
-                // Liberar mutex
                 xSemaphoreGive(ctx->mutex);
             }
             
-            // Notificar al callback
+            xEventGroupClearBits(ctx->event_group, MQTT_CONNECTED_BIT);
+            xEventGroupSetBits(ctx->event_group, MQTT_ERROR_BIT);
+            
             if (ctx->state_callback) {
                 ctx->state_callback(ctx->state, ctx->state_user_data);
             }
-            
             break;
             
         default:
-            ESP_LOGD(TAG, "Other MQTT event: %d", event->event_id);
+            // Sin logs para eventos menores
             break;
     }
 }
@@ -413,20 +354,29 @@ esp_err_t mqtt_manager_set_esp32_id(const char *esp32_id) {
         // Configurar tópico LWT
         snprintf(ctx->lwt_topic, sizeof(ctx->lwt_topic), "system/status/%s", esp32_id);
         
-        // Configurar mensaje LWT con timestamp real
+        // Configurar mensaje LWT con timestamp real y hora formateada cuando está disponible
         char timestamp_str[32];
         if (time_manager_is_synchronized()) {
             // Usar tiempo real si está sincronizado
             time_manager_get_timestamp(timestamp_str, sizeof(timestamp_str));
+            
+            // Obtener hora formateada
+            char time_str[32];
+            time_manager_get_lima_time_str(time_str, sizeof(time_str));
+            
+            // Construir mensaje LWT con timestamp y hora formateada
+            snprintf(ctx->lwt_message, sizeof(ctx->lwt_message),
+                    "{\"esp32_id\":\"%s\",\"status\":\"OFFLINE\",\"type\":\"lwt\",\"timestamp\":%s,\"time\":\"%s\"}",
+                    esp32_id, timestamp_str, time_str);
         } else {
             // Usar el timestamp del sistema como fallback
             snprintf(timestamp_str, sizeof(timestamp_str), "%lld", (long long)(esp_timer_get_time() / 1000));
+            
+            // Construir mensaje LWT sin hora formateada
+            snprintf(ctx->lwt_message, sizeof(ctx->lwt_message),
+                    "{\"esp32_id\":\"%s\",\"status\":\"OFFLINE\",\"type\":\"lwt\",\"timestamp\":%s}",
+                    esp32_id, timestamp_str);
         }
-        
-        // Construir mensaje LWT sin usar cJSON
-        snprintf(ctx->lwt_message, sizeof(ctx->lwt_message),
-                "{\"esp32_id\":\"%s\",\"status\":\"OFFLINE\",\"type\":\"lwt\",\"timestamp\":%s}",
-                esp32_id, timestamp_str);
         
         // Configurar tópico de configuración
         snprintf(ctx->config_topic, sizeof(ctx->config_topic), "esp32/config/%s", esp32_id);
@@ -479,12 +429,17 @@ esp_err_t mqtt_manager_connect(void) {
             ctx->client = NULL;
         }
         
-        // *********** INICIO DE OPTIMIZACIÓN DE MEMORIA ***********
-        // Limpieza de memoria y verificación antes de inicializar SSL
+        // *********** PREPARACIÓN DE MEMORIA PARA SSL SIN VERIFICACIÓN ***********
         ESP_LOGI(TAG, "Preparando memoria para negociación SSL");
         ESP_LOGI(TAG, "Memoria libre antes de limpieza: %ld bytes", esp_get_free_heap_size());
         
-        // Forzar colección de basura
+        // Verificar memoria mínima requerida
+        if (esp_get_free_heap_size() < 30000) {
+            ESP_LOGW(TAG, "Memoria baja antes de iniciar SSL (%ld bytes), puede causar problemas", 
+                    esp_get_free_heap_size());
+        }
+        
+        // Limpieza de memoria más suave para SSL sin verificación
         for (int i = 0; i < 5; i++) {
             heap_caps_check_integrity_all(true);
             ESP_LOGI(TAG, "Iteración de limpieza %d, memoria libre: %ld bytes", 
@@ -492,12 +447,16 @@ esp_err_t mqtt_manager_connect(void) {
             vTaskDelay(pdMS_TO_TICKS(100));
         }
         
-        // Alimentar el watchdog para evitar reseteos durante este proceso
+        // Alimentar el watchdog
+        #ifdef CONFIG_ESP_TASK_WDT_EN
         esp_task_wdt_reset();
-        ESP_LOGI(TAG, "Memoria libre después de limpieza: %ld bytes", esp_get_free_heap_size());
-        // *********** FIN DE OPTIMIZACIÓN DE MEMORIA ***********
+        #endif
         
-        // Construir URI completa con el protocolo correcto
+        ESP_LOGI(TAG, "Memoria libre después de limpieza: %ld bytes", esp_get_free_heap_size());
+        
+        // *********** CONFIGURACIÓN MQTT CON SSL SIN VERIFICACIÓN ***********
+        
+        // Construir URI completa
         char uri[256];
         if (ctx->use_ssl) {
             snprintf(uri, sizeof(uri), "mqtts://%s:%d", ctx->broker_url, ctx->port);
@@ -506,14 +465,15 @@ esp_err_t mqtt_manager_connect(void) {
         }
         
         ESP_LOGI(TAG, "MQTT URI: %s", uri);
+        ESP_LOGI(TAG, "Configuring SSL for MQTT connection");
         
-        // Configurar cliente MQTT (actualizado para ESP-IDF v5.4.1)
+        // Configurar cliente MQTT (ESP-IDF v5.4.1)
         esp_mqtt_client_config_t mqtt_cfg = {0};
         
-        // Configuración de broker con URI completa
+        // Configuración de broker
         mqtt_cfg.broker.address.uri = uri;
         
-        // Configuración de credenciales - IMPORTANTE: Usuario y contraseña son iguales al ESP32_ID
+        // Configuración de credenciales - EXACTAMENTE COMO MICROPYTHON
         mqtt_cfg.credentials.client_id = ctx->client_id;
         mqtt_cfg.credentials.username = ctx->username;
         mqtt_cfg.credentials.authentication.password = ctx->password;
@@ -522,64 +482,41 @@ esp_err_t mqtt_manager_connect(void) {
         mqtt_cfg.session.keepalive = DEFAULT_KEEPALIVE;
         mqtt_cfg.session.disable_clean_session = false;
         
-        // Actualizar mensaje LWT con timestamp actual
+        // Last Will Testament con timestamp actual
         if (time_manager_is_synchronized()) {
             char timestamp_str[32];
             time_manager_get_timestamp(timestamp_str, sizeof(timestamp_str));
             
-            // Construir mensaje LWT sin usar cJSON
             snprintf(ctx->lwt_message, sizeof(ctx->lwt_message),
                     "{\"esp32_id\":\"%s\",\"status\":\"OFFLINE\",\"type\":\"lwt\",\"timestamp\":%s}",
                     ctx->esp32_id, timestamp_str);
         }
         
-        // Last Will
         mqtt_cfg.session.last_will.topic = ctx->lwt_topic;
         mqtt_cfg.session.last_will.msg = ctx->lwt_message;
         mqtt_cfg.session.last_will.msg_len = strlen(ctx->lwt_message);
         mqtt_cfg.session.last_will.qos = ctx->lwt_qos;
         mqtt_cfg.session.last_will.retain = ctx->lwt_retain;
         
-        // Configuración de red
-        mqtt_cfg.network.reconnect_timeout_ms = DEFAULT_RECONNECT_TIMEOUT_MS;
-        mqtt_cfg.network.timeout_ms = DEFAULT_NETWORK_TIMEOUT_MS;
-        
-        // Configuración de buffer
-        mqtt_cfg.buffer.size = DEFAULT_BUFFER_SIZE;
-        
-        // *********** INICIO DE OPTIMIZACIÓN DE STACK SIZE ***********
-        // Aumentar stack size para evitar stack overflow
-        mqtt_cfg.task.stack_size = 6144;  // Aumentado de 5120 a 6144
-        mqtt_cfg.task.priority = 5;       // Prioridad media
-        // *********** FIN DE OPTIMIZACIÓN DE STACK SIZE ***********
-        
-        // *********** INICIO DE OPTIMIZACIÓN DE SSL ***********
-        // Configuración SSL específica para coincidir con la implementación MicroPython
+        // *********** APLICAR CONFIGURACIÓN SSL CERT_NONE ***********
         if (ctx->use_ssl) {
-            ESP_LOGI(TAG, "Configuring SSL for MQTT connection");
-            
-            // Usar crt_bundle pero con verificación simplificada
-            mqtt_cfg.broker.verification.crt_bundle_attach = esp_crt_bundle_attach;
-            
-            // No verificar el nombre común del certificado (como en MicroPython)
-            mqtt_cfg.broker.verification.skip_cert_common_name_check = true;
-            
-            // Configuración equivalente a cert_reqs=ssl.CERT_NONE de MicroPython
-            mqtt_cfg.broker.verification.certificate = NULL;
-            mqtt_cfg.broker.verification.certificate_len = 0;
-            
-            // Minimizar requisitos de memoria SSL
-            mqtt_cfg.broker.verification.skip_validity_check = true;
+            esp_err_t ssl_ret = mqtt_ssl_setup_minimal_config(&mqtt_cfg);
+            if (ssl_ret != ESP_OK) {
+                ctx->state = MQTT_MANAGER_STATE_ERROR;
+                xEventGroupSetBits(ctx->event_group, MQTT_ERROR_BIT);
+                xSemaphoreGive(ctx->mutex);
+                ESP_LOGE(TAG, "Failed to configure SSL: %s", esp_err_to_name(ssl_ret));
+                return ssl_ret;
+            }
         }
-        // *********** FIN DE OPTIMIZACIÓN DE SSL ***********
         
-        // Mostrar información de depuración
+        // Mostrar información de configuración
         ESP_LOGI(TAG, "MQTT Config - Client ID: %s", mqtt_cfg.credentials.client_id);
         ESP_LOGI(TAG, "MQTT Config - Username: %s", mqtt_cfg.credentials.username);
         ESP_LOGI(TAG, "MQTT Config - Password: %s", ctx->password);
         ESP_LOGI(TAG, "MQTT Config - LWT Topic: %s", mqtt_cfg.session.last_will.topic);
         
-        // Verificar memoria antes de crear cliente MQTT
+        // Verificar memoria antes de crear cliente
         ESP_LOGI(TAG, "Free memory before MQTT client init: %ld bytes", esp_get_free_heap_size());
         
         // Crear cliente MQTT
@@ -601,11 +538,6 @@ esp_err_t mqtt_manager_connect(void) {
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "Failed to start MQTT client: %s (error code 0x%x)", esp_err_to_name(ret), ret);
             
-            // Obtener más información sobre errores SSL si aplicable
-            if (ret == ESP_FAIL) {
-                ESP_LOGE(TAG, "Possible TLS connection issue - check certificates and server settings");
-            }
-            
             esp_mqtt_client_destroy(ctx->client);
             ctx->client = NULL;
             ctx->state = MQTT_MANAGER_STATE_ERROR;
@@ -626,10 +558,10 @@ esp_err_t mqtt_manager_connect(void) {
         ctx->state_callback(ctx->state, ctx->state_user_data);
     }
     
-    // Esperar conexión con timeout (reducido para evitar bloqueo prolongado)
+    // Esperar conexión con timeout
     EventBits_t bits = xEventGroupWaitBits(ctx->event_group,
                                           MQTT_CONNECTED_BIT | MQTT_ERROR_BIT,
-                                          pdFALSE, pdFALSE, pdMS_TO_TICKS(15000)); // Reducido a 15 segundos
+                                          pdFALSE, pdFALSE, pdMS_TO_TICKS(15000)); // 15 segundos
     
     if (bits & MQTT_CONNECTED_BIT) {
         ESP_LOGI(TAG, "Successfully connected to MQTT broker");
@@ -994,28 +926,51 @@ esp_err_t mqtt_manager_send_network_info(void) {
         char time_str[32];
         time_manager_get_lima_time_str(time_str, sizeof(time_str));
         ESP_LOGI(TAG, "Using synchronized time: %s", time_str);
+        
+        // Construir JSON directamente sin cJSON, incluyendo el tiempo formateado
+        int len = snprintf(json_buffer, sizeof(json_buffer),
+                          "{\"esp32_id\":\"%s\",\"MAC\":\"%s\",\"IP\":\"%s\","
+                          "\"status\":\"ONLINE\",\"timestamp\":%s,\"time\":\"%s\"}",
+                          ctx->esp32_id,
+                          ctx->mac_address,
+                          ip_address,
+                          timestamp_str,
+                          time_str);
+                          
+        if (len < 0 || len >= sizeof(json_buffer)) {
+            ESP_LOGE(TAG, "JSON buffer too small");
+            return ESP_ERR_NO_MEM;
+        }
     } else {
         // Usar el timestamp del sistema como fallback
         snprintf(timestamp_str, sizeof(timestamp_str), "%lld", (long long)(esp_timer_get_time() / 1000));
         ESP_LOGW(TAG, "Time not synchronized, using system timestamp");
-    }
-    
-    // Construir JSON directamente sin cJSON
-    int len = snprintf(json_buffer, sizeof(json_buffer),
-                      "{\"esp32_id\":\"%s\",\"MAC\":\"%s\",\"IP\":\"%s\","
-                      "\"status\":\"ONLINE\",\"timestamp\":%s}",
-                      ctx->esp32_id,
-                      ctx->mac_address,
-                      ip_address,
-                      timestamp_str);
-    
-    if (len < 0 || len >= sizeof(json_buffer)) {
-        ESP_LOGE(TAG, "JSON buffer too small");
-        return ESP_ERR_NO_MEM;
+        
+        // Generar fecha/hora actual del sistema aunque no esté sincronizada
+        time_t now = time(NULL);
+        struct tm timeinfo;
+        localtime_r(&now, &timeinfo);
+        char sys_time_str[32];
+        strftime(sys_time_str, sizeof(sys_time_str), "%d/%m/%Y, %H:%M:%S", &timeinfo);
+        
+        // Construir JSON INCLUYENDO el campo time aunque no esté sincronizado
+        int len = snprintf(json_buffer, sizeof(json_buffer),
+                        "{\"esp32_id\":\"%s\",\"MAC\":\"%s\",\"IP\":\"%s\","
+                        "\"status\":\"ONLINE\",\"timestamp\":%s,\"time\":\"%s\"}",
+                        ctx->esp32_id,
+                        ctx->mac_address,
+                        ip_address,
+                        timestamp_str,
+                        sys_time_str);
+                          
+        if (len < 0 || len >= sizeof(json_buffer)) {
+            ESP_LOGE(TAG, "JSON buffer too small");
+            return ESP_ERR_NO_MEM;
+        }
     }
     
     // Publicar con QoS 0 para reducir overhead
-    return mqtt_manager_publish("esp32/network_info", json_buffer, len, 0, false);
+    return mqtt_manager_publish("esp32/network_info", json_buffer, strlen(json_buffer), 0, false);
 }
 
 // Envía un heartbeat al broker (VERSIÓN OPTIMIZADA Y ACTUALIZADA CON TIMESTAMP REAL)
@@ -1050,7 +1005,7 @@ esp_err_t mqtt_manager_send_heartbeat(void) {
     
     // Obtener timestamp real
     char timestamp_str[32];
-    char time_str[64] = {0}; // Para mostrar en logs
+    char time_str[64] = {0}; // Para mostrar en logs y añadir al mensaje
     
     if (time_manager_is_synchronized()) {
         // Usar tiempo real
@@ -1067,42 +1022,53 @@ esp_err_t mqtt_manager_send_heartbeat(void) {
     int len;
     
     if (strlen(ctx->client_panel_id) > 0 && strlen(ctx->panel_id) > 0) {
-        len = snprintf(json_buffer, sizeof(json_buffer),
-                      "{\"esp32_id\":\"%s\",\"status\":\"ONLINE\","
-                      "\"timestamp\":%s,\"type\":\"heartbeat\","
-                      "\"message_id\":\"%s\",\"client_id\":\"%s\","
-                      "\"panel_id\":\"%s\"",
-                      ctx->esp32_id,
-                      timestamp_str,
-                      message_id,
-                      ctx->client_panel_id,
-                      ctx->panel_id);
-        
-        // Añadir información de tiempo si está disponible
+        // Si tenemos tiempo sincronizado, incluir campo 'time'
         if (time_str[0] != 0) {
-            len += snprintf(json_buffer + len, sizeof(json_buffer) - len,
-                           ",\"time\":\"%s\"", time_str);
+            len = snprintf(json_buffer, sizeof(json_buffer),
+                          "{\"esp32_id\":\"%s\",\"status\":\"ONLINE\","
+                          "\"timestamp\":%s,\"type\":\"heartbeat\","
+                          "\"message_id\":\"%s\",\"client_id\":\"%s\","
+                          "\"panel_id\":\"%s\",\"time\":\"%s\"}",
+                          ctx->esp32_id,
+                          timestamp_str,
+                          message_id,
+                          ctx->client_panel_id,
+                          ctx->panel_id,
+                          time_str);
+        } else {
+            // Sin campo 'time' si no hay tiempo sincronizado
+            len = snprintf(json_buffer, sizeof(json_buffer),
+                          "{\"esp32_id\":\"%s\",\"status\":\"ONLINE\","
+                          "\"timestamp\":%s,\"type\":\"heartbeat\","
+                          "\"message_id\":\"%s\",\"client_id\":\"%s\","
+                          "\"panel_id\":\"%s\"}",
+                          ctx->esp32_id,
+                          timestamp_str,
+                          message_id,
+                          ctx->client_panel_id,
+                          ctx->panel_id);
         }
-        
-        // Cerrar JSON
-        len += snprintf(json_buffer + len, sizeof(json_buffer) - len, "}");
     } else {
-        len = snprintf(json_buffer, sizeof(json_buffer),
-                      "{\"esp32_id\":\"%s\",\"status\":\"ONLINE\","
-                      "\"timestamp\":%s,\"type\":\"heartbeat\","
-                      "\"message_id\":\"%s\"",
-                      ctx->esp32_id,
-                      timestamp_str,
-                      message_id);
-        
-        // Añadir información de tiempo si está disponible
+        // Si tenemos tiempo sincronizado, incluir campo 'time'
         if (time_str[0] != 0) {
-            len += snprintf(json_buffer + len, sizeof(json_buffer) - len,
-                           ",\"time\":\"%s\"", time_str);
+            len = snprintf(json_buffer, sizeof(json_buffer),
+                          "{\"esp32_id\":\"%s\",\"status\":\"ONLINE\","
+                          "\"timestamp\":%s,\"type\":\"heartbeat\","
+                          "\"message_id\":\"%s\",\"time\":\"%s\"}",
+                          ctx->esp32_id,
+                          timestamp_str,
+                          message_id,
+                          time_str);
+        } else {
+            // Sin campo 'time' si no hay tiempo sincronizado
+            len = snprintf(json_buffer, sizeof(json_buffer),
+                          "{\"esp32_id\":\"%s\",\"status\":\"ONLINE\","
+                          "\"timestamp\":%s,\"type\":\"heartbeat\","
+                          "\"message_id\":\"%s\"}",
+                          ctx->esp32_id,
+                          timestamp_str,
+                          message_id);
         }
-        
-        // Cerrar JSON
-        len += snprintf(json_buffer + len, sizeof(json_buffer) - len, "}");
     }
     
     if (len < 0 || len >= sizeof(json_buffer)) {

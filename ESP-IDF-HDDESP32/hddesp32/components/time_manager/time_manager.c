@@ -45,7 +45,13 @@ static time_manager_context_t s_time_manager_ctx = {0};
 static void sntp_sync_callback(struct timeval *tv)
 {
     time_manager_context_t *ctx = &s_time_manager_ctx;
-    ESP_LOGI(TAG, "NTP time synchronized!");
+    
+    // Añadir logs llamativos
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "=================================================");
+    ESP_LOGI(TAG, "************* ÉXITO: NTP SINCRONIZADO! **********");
+    ESP_LOGI(TAG, "=================================================");
+    ESP_LOGI(TAG, "");
     
     // Adquirir mutex
     if (xSemaphoreTake(ctx->mutex, portMAX_DELAY) == pdTRUE) {
@@ -64,7 +70,23 @@ static void sntp_sync_callback(struct timeval *tv)
     // Mostrar la hora actualizada
     char time_str[64];
     time_manager_get_lima_time_str(time_str, sizeof(time_str));
-    ESP_LOGI(TAG, "Current Lima time: %s", time_str);
+    ESP_LOGI(TAG, "Hora actual en Lima, Perú: %s", time_str);
+    
+    // Añadir más información de debug
+    time_t now = time(NULL);
+    char iso_time[64];
+    time_manager_get_iso8601(iso_time, sizeof(iso_time));
+    ESP_LOGI(TAG, "ISO8601: %s", iso_time);
+    ESP_LOGI(TAG, "Epoch timestamp: %ld", (long)now);
+    
+    // Ver si podemos publicar un mensaje MQTT inmediatamente
+    ESP_LOGI(TAG, "Verificando si podemos informar a MQTT sobre la sincronización...");
+    if (wifi_manager_is_connected()) {
+        ESP_LOGI(TAG, "WiFi conectado ✓");
+        // Aquí podrías añadir una llamada a mqtt si quisieras
+    } else {
+        ESP_LOGW(TAG, "WiFi no conectado ✗ - No se puede informar al servidor MQTT");
+    }
 }
 
 // Inicialización del Time Manager
@@ -135,6 +157,9 @@ static esp_err_t init_sntp(void)
     // Establecer callback de sincronización
     esp_sntp_set_time_sync_notification_cb(sntp_sync_callback);
     
+    // Añadir este log antes de iniciar SNTP
+    ESP_LOGI(TAG, "Configurados servidores NTP. Iniciando cliente SNTP...");
+    
     // Iniciar SNTP
     esp_sntp_init();
     ctx->sntp_initialized = true;
@@ -159,7 +184,13 @@ esp_err_t time_manager_sync_time(void)
         return ESP_ERR_INVALID_STATE;
     }
     
-    ESP_LOGI(TAG, "Synchronizing time with NTP servers");
+    // Añadir estos logs
+    ESP_LOGI(TAG, "=============================================");
+    ESP_LOGI(TAG, "INICIANDO SINCRONIZACIÓN NTP CON SERVIDORES:");
+    ESP_LOGI(TAG, "1. %s", NTP_SERVER_PRIMARY);
+    ESP_LOGI(TAG, "2. %s", NTP_SERVER_SECONDARY);
+    ESP_LOGI(TAG, "3. %s", NTP_SERVER_FALLBACK);
+    ESP_LOGI(TAG, "=============================================");
     
     // Adquirir mutex
     if (xSemaphoreTake(ctx->mutex, portMAX_DELAY) == pdTRUE) {
@@ -171,22 +202,26 @@ esp_err_t time_manager_sync_time(void)
                 ESP_LOGE(TAG, "Failed to initialize SNTP: %s", esp_err_to_name(ret));
                 return ret;
             }
+            // Añadir este log tras la inicialización
+            ESP_LOGI(TAG, "SNTP inicializado correctamente, esperando sincronización...");
         }
         
         // Liberar mutex
         xSemaphoreGive(ctx->mutex);
     }
     
-    // Esperar sincronización con timeout (reducido para evitar bloqueo)
+    // Esperando sincronización con timeout
+    ESP_LOGI(TAG, "Esperando respuesta de los servidores NTP (timeout: 30s)...");
     EventBits_t bits = xEventGroupWaitBits(ctx->event_group,
                                            TIME_SYNC_BIT,
                                            pdFALSE, pdFALSE, pdMS_TO_TICKS(30000));
     
     if (bits & TIME_SYNC_BIT) {
-        ESP_LOGI(TAG, "Time synchronized successfully");
+        ESP_LOGI(TAG, "✓ Time synchronized successfully");
         return ESP_OK;
     } else {
-        ESP_LOGW(TAG, "Timeout waiting for time synchronization");
+        ESP_LOGW(TAG, "✗ Timeout waiting for time synchronization");
+        ESP_LOGW(TAG, "Posibles problemas: Firewall bloqueando NTP, DNS no funciona, o servidores NTP no disponibles");
         return ESP_ERR_TIMEOUT;
     }
 }

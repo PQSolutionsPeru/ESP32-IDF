@@ -1,3 +1,1 @@
-está enviando demasiados mensajes de heartbeat; no es posible que sea pasivo y que el broker detecte con el LWT cuando un ESP32 no está online?
-
-ahora, quiero corregir el limite de memoria que está establecido actualmente en mi ESP32, entiendo que el tamaño total son 4MB, pero está limitado a 2MB; qué archivos necesitas ver? establecer a la mitad de su capacidad puede ocasionar stackoverflow 
+DEBERIA DETECTAR CUANDO LA CONTRASEÑA ES INCORRECTA Y AVISAR AL USUARIO Y LANZAR DE NUEVO EL MODO AP/STA COMO AL COMIENZO, ESTO EN VEZ DE REINICIARSE A CADA RATO; SI LA CONTRASEÑA ES CORRECTA PERO LA RED NO ESTÁ DISPONIBLE DEBERÁ LANZAR DE IGUAL MANERA EL MODO AP/STA COMO AL COMIENZO
