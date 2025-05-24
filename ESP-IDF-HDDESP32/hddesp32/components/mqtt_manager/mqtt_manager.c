@@ -162,9 +162,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 vTaskDelay(pdMS_TO_TICKS(50));
             }
             
-            // Enviar network info
-            vTaskDelay(pdMS_TO_TICKS(500));
-            mqtt_manager_send_network_info();
+            // ✅ ELIMINADO - Ya no enviar network_info desde aquí
+            // El mensaje se enviará automáticamente después de sincronizar NTP
+            ESP_LOGI(TAG, "MQTT connected. Network info will be sent after time synchronization.");
             break;
             
         case MQTT_EVENT_DISCONNECTED:
@@ -896,7 +896,7 @@ mqtt_manager_state_t mqtt_manager_get_state(void) {
     return ctx->state;
 }
 
-// Envia información de red y estado del dispositivo (VERSIÓN OPTIMIZADA Y ACTUALIZADA)
+// Envia información de red y estado del dispositivo (VERSIÓN CORREGIDA CON TIEMPO REAL)
 esp_err_t mqtt_manager_send_network_info(void) {
     mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
     
@@ -916,58 +916,62 @@ esp_err_t mqtt_manager_send_network_info(void) {
     
     wifi_manager_get_ip(ip_address, sizeof(ip_address));
     
-    // Obtener timestamp real en formato adecuado
+    // **USAR SIEMPRE TIEMPO REAL SI ESTÁ DISPONIBLE**
     char timestamp_str[32];
+    char time_str[64];
+    
+    // Intentar obtener tiempo real directamente
     if (time_manager_is_synchronized()) {
-        // Usar tiempo real si está sincronizado
+        ESP_LOGI(TAG, "Usando tiempo sincronizado para network_info");
         time_manager_get_timestamp(timestamp_str, sizeof(timestamp_str));
-        
-        // También obtener un timestamp legible para registros
-        char time_str[32];
         time_manager_get_lima_time_str(time_str, sizeof(time_str));
-        ESP_LOGI(TAG, "Using synchronized time: %s", time_str);
-        
-        // Construir JSON directamente sin cJSON, incluyendo el tiempo formateado
-        int len = snprintf(json_buffer, sizeof(json_buffer),
-                          "{\"esp32_id\":\"%s\",\"MAC\":\"%s\",\"IP\":\"%s\","
-                          "\"status\":\"ONLINE\",\"timestamp\":%s,\"time\":\"%s\"}",
-                          ctx->esp32_id,
-                          ctx->mac_address,
-                          ip_address,
-                          timestamp_str,
-                          time_str);
-                          
-        if (len < 0 || len >= sizeof(json_buffer)) {
-            ESP_LOGE(TAG, "JSON buffer too small");
-            return ESP_ERR_NO_MEM;
-        }
     } else {
-        // Usar el timestamp del sistema como fallback
-        snprintf(timestamp_str, sizeof(timestamp_str), "%lld", (long long)(esp_timer_get_time() / 1000));
-        ESP_LOGW(TAG, "Time not synchronized, using system timestamp");
-        
-        // Generar fecha/hora actual del sistema aunque no esté sincronizada
+        // Verificar si time() retorna algo razonable (> año 2020)
         time_t now = time(NULL);
-        struct tm timeinfo;
-        localtime_r(&now, &timeinfo);
-        char sys_time_str[32];
-        strftime(sys_time_str, sizeof(sys_time_str), "%d/%m/%Y, %H:%M:%S", &timeinfo);
-        
-        // Construir JSON INCLUYENDO el campo time aunque no esté sincronizado
-        int len = snprintf(json_buffer, sizeof(json_buffer),
-                        "{\"esp32_id\":\"%s\",\"MAC\":\"%s\",\"IP\":\"%s\","
-                        "\"status\":\"ONLINE\",\"timestamp\":%s,\"time\":\"%s\"}",
-                        ctx->esp32_id,
-                        ctx->mac_address,
-                        ip_address,
-                        timestamp_str,
-                        sys_time_str);
-                          
-        if (len < 0 || len >= sizeof(json_buffer)) {
-            ESP_LOGE(TAG, "JSON buffer too small");
-            return ESP_ERR_NO_MEM;
+        if (now > 1577836800) {  // 1 enero 2020 en timestamp Unix
+            // time() tiene valor razonable, usar tiempo del sistema
+            ESP_LOGI(TAG, "Time manager no sincronizado pero time() válido, usando tiempo del sistema");
+            snprintf(timestamp_str, sizeof(timestamp_str), "%ld", (long)now);
+            
+            // Formatear tiempo con zona horaria de Perú (UTC-5)
+            struct tm *timeinfo = gmtime(&now);
+            if (timeinfo) {
+                // Ajustar a hora de Perú (UTC-5)
+                time_t peru_time = now - (5 * 3600);  // Restar 5 horas para UTC-5
+                struct tm *peru_timeinfo = gmtime(&peru_time);
+                
+                if (peru_timeinfo) {
+                    strftime(time_str, sizeof(time_str), "%d/%m/%Y, %H:%M:%S", peru_timeinfo);
+                } else {
+                    snprintf(time_str, sizeof(time_str), "Tiempo no disponible");
+                }
+            } else {
+                snprintf(time_str, sizeof(time_str), "Tiempo no disponible");
+            }
+        } else {
+            // time() no válido, usar timestamp del sistema pero indicar claramente
+            ESP_LOGW(TAG, "Tiempo no sincronizado, usando timestamp del sistema");
+            snprintf(timestamp_str, sizeof(timestamp_str), "%lld", (long long)(esp_timer_get_time() / 1000));
+            snprintf(time_str, sizeof(time_str), "Sistema: %lld ms", (long long)(esp_timer_get_time() / 1000));
         }
     }
+    
+    // Construir JSON con timestamp correcto (sin timezone)
+    int len = snprintf(json_buffer, sizeof(json_buffer),
+                      "{\"esp32_id\":\"%s\",\"MAC\":\"%s\",\"IP\":\"%s\","
+                      "\"status\":\"ONLINE\",\"timestamp\":%s,\"time\":\"%s\"}",
+                      ctx->esp32_id,
+                      ctx->mac_address,
+                      ip_address,
+                      timestamp_str,
+                      time_str);
+    
+    if (len < 0 || len >= sizeof(json_buffer)) {
+        ESP_LOGE(TAG, "JSON buffer too small");
+        return ESP_ERR_NO_MEM;
+    }
+    
+    ESP_LOGI(TAG, "Enviando network info: timestamp=%s, time=%s", timestamp_str, time_str);
     
     // Publicar con QoS 0 para reducir overhead
     return mqtt_manager_publish("esp32/network_info", json_buffer, strlen(json_buffer), 0, false);

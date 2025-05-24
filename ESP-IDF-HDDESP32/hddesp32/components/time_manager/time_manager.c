@@ -9,6 +9,7 @@
 #include "freertos/semphr.h"
 #include "esp_netif.h"
 #include "wifi_manager.h"
+#include "mqtt_manager.h"
 #include <string.h>
 
 static const char *TAG = "TIME_MGR";
@@ -67,6 +68,11 @@ static void sntp_sync_callback(struct timeval *tv)
         xSemaphoreGive(ctx->mutex);
     }
     
+    // Debug temporal
+    time_t raw_utc = time(NULL);
+    ESP_LOGI(TAG, "DEBUG: Tiempo UTC recibido: %ld", (long)raw_utc);
+    ESP_LOGI(TAG, "DEBUG: Esto corresponde a: %s", ctime(&raw_utc));
+    
     // Mostrar la hora actualizada
     char time_str[64];
     time_manager_get_lima_time_str(time_str, sizeof(time_str));
@@ -83,7 +89,15 @@ static void sntp_sync_callback(struct timeval *tv)
     ESP_LOGI(TAG, "Verificando si podemos informar a MQTT sobre la sincronización...");
     if (wifi_manager_is_connected()) {
         ESP_LOGI(TAG, "WiFi conectado ✓");
-        // Aquí podrías añadir una llamada a mqtt si quisieras
+        
+        // **NUEVA FUNCIONALIDAD: Reenviar network_info con tiempo correcto**
+        ESP_LOGI(TAG, "Reenviando network_info con tiempo sincronizado...");
+        esp_err_t ret = mqtt_manager_send_network_info();
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "✓ Network info actualizado enviado con tiempo correcto");
+        } else {
+            ESP_LOGW(TAG, "✗ Error enviando network info actualizado: %s", esp_err_to_name(ret));
+        }
     } else {
         ESP_LOGW(TAG, "WiFi no conectado ✗ - No se puede informar al servidor MQTT");
     }
@@ -125,7 +139,7 @@ esp_err_t time_manager_init(void)
     ctx->sntp_initialized = false;
     
     // Configurar zona horaria para Lima, Perú (UTC-5)
-    setenv("TZ", "UTC-5", 1);
+    setenv("TZ", "PET5", 1);
     tzset();
     ESP_LOGI(TAG, "Timezone set to Lima, Peru (UTC-5)");
     

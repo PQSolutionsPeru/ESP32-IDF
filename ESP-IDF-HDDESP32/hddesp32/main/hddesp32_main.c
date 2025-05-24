@@ -45,10 +45,8 @@ static void mqtt_state_callback(mqtt_manager_state_t state, void *user_data) {
         case MQTT_MANAGER_STATE_CONNECTED:
             ESP_LOGI(TAG, "MQTT state: CONNECTED");
             
-            // Cuando MQTT está conectado, enviar información de red
-            ESP_LOGI(TAG, "Before network_info - Free heap: %" PRIu32, esp_get_free_heap_size());
-            mqtt_manager_send_network_info();
-            ESP_LOGI(TAG, "After network_info - Free heap: %" PRIu32, esp_get_free_heap_size());
+            // ✅ SOLO LOG - El mensaje se enviará automáticamente después de NTP sync
+            ESP_LOGI(TAG, "MQTT connected. Network info will be sent after time synchronization.");
             break;
         case MQTT_MANAGER_STATE_RECONNECTING:
             ESP_LOGI(TAG, "MQTT state: RECONNECTING");
