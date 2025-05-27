@@ -8,7 +8,10 @@ idf_component_register(
         "include"
     REQUIRES 
         wifi_manager 
+        esp32_id_manager
         esp_http_server 
         lwip 
         json
+        esp_wifi
+        esp_netif
 )

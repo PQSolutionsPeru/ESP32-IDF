@@ -4,8 +4,43 @@
 #include <stdbool.h>
 #include "esp_err.h"
 
-// Define el tamaño del ESP32_ID 
-#define ESP32_ID_LENGTH 8   // 8 caracteres según especificación original
+// ESP32 ID Configuration - Inherited from esp32_id_manager.h
+#ifndef ESP32_ID_LENGTH
+#define ESP32_ID_LENGTH 8
+#endif
+#define ESP32_ID_BUFFER_SIZE (ESP32_ID_LENGTH + 1)  // +1 for null terminator
+
+// MAC Address Configuration - Use esp32_id_manager format (12 chars without separators)
+#ifndef ESP32_MAC_STR_LENGTH  
+#define ESP32_MAC_STR_LENGTH 12  // 12 characters for MAC string without separators
+#endif
+#define ESP32_MAC_BUFFER_SIZE (ESP32_MAC_STR_LENGTH + 1)  // +1 for null terminator
+
+// MQTT Buffer Size Constants - Generous sizes to avoid format-truncation warnings
+// These sizes provide significant safety margins for GCC strict checking
+
+// Topic lengths: Extended safety margin for all topic variations
+#define MQTT_TOPIC_MAX_LENGTH 256
+
+// Broker URL: Generous buffer for any broker URL
+#define MQTT_BROKER_MAX_LENGTH 128
+
+// Client ID, Username, Password: Generous buffers for credentials
+#define MQTT_CLIENT_ID_MAX_LENGTH 64
+#define MQTT_USERNAME_MAX_LENGTH 64
+#define MQTT_PASSWORD_MAX_LENGTH 64
+
+// LWT Message: Large buffer for JSON LWT messages
+#define MQTT_LWT_MESSAGE_MAX_LENGTH 512
+
+// URI: Large buffer for complete MQTT URIs
+#define MQTT_URI_MAX_LENGTH 256
+
+// Timestamp: Generous buffer for timestamp strings
+#define MQTT_TIMESTAMP_MAX_LENGTH 64
+
+// JSON Buffer: Large buffer for complex JSON messages
+#define MQTT_JSON_BUFFER_MAX_LENGTH 1024
 
 /**
  * @brief Estados del MQTT Manager

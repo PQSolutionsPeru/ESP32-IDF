@@ -6741,10 +6741,7 @@
                         "help": "After the panic handler executes, you can specify a number of seconds to\nwait before the device reboots.",
                         "id": "ESP_SYSTEM_PANIC_REBOOT_DELAY_SECONDS",
                         "name": "ESP_SYSTEM_PANIC_REBOOT_DELAY_SECONDS",
-                        "range": [
-                            0,
-                            99
-                        ],
+                        "range": null,
                         "title": "Panic reboot delay (Seconds)",
                         "type": "int"
                     },
@@ -7235,10 +7232,7 @@
                                         "help": "Timeout period configuration for the Task Watchdog Timer in seconds.\nThis is also configurable at run time (see Task Watchdog Timer API Reference)",
                                         "id": "ESP_TASK_WDT_TIMEOUT_S",
                                         "name": "ESP_TASK_WDT_TIMEOUT_S",
-                                        "range": [
-                                            1,
-                                            60
-                                        ],
+                                        "range": null,
                                         "title": "Task Watchdog timeout period (seconds)",
                                         "type": "int"
                                     },

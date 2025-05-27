@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <inttypes.h>  // Añadido para PRIu32
+#include <inttypes.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_system.h"
@@ -10,328 +10,563 @@
 #include "wifi_manager.h"
 #include "wifi_captive_portal.h"
 #include "mqtt_manager.h"
-#include "time_manager.h" // Añadido Time Manager
-#include "esp_heap_caps.h"  // Añadido para heap_caps_get_largest_free_block
+#include "time_manager.h"
+#include "watchdog_manager.h"
+#include "esp_heap_caps.h"
+#include "esp_task_wdt.h"
 
 static const char *TAG = "HDDESP32";
 
-// Función para monitorear el uso de memoria - Movida ANTES de ser usada
+// Variables globales para control del estado del sistema
+static bool g_system_initialized = false;
+static bool g_wifi_connected = false;
+static bool g_mqtt_connected = false;
+static bool g_watchdog_available = false;  // Nueva variable para tracking del watchdog
+
+// Optimizado para ESP32 4MB - menos logs verbosos - VERSION CORREGIDA
 static void print_memory_info(void) {
-    ESP_LOGI(TAG, "=== Memory Status ===");
-    ESP_LOGI(TAG, "Free heap: %ld bytes", (long)esp_get_free_heap_size());
-    ESP_LOGI(TAG, "Minimum free heap: %ld bytes", (long)esp_get_minimum_free_heap_size());
-    ESP_LOGI(TAG, "Largest free block: %ld bytes", (long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    size_t free_heap = esp_get_free_heap_size();
+    size_t min_heap = esp_get_minimum_free_heap_size();
+    size_t largest_block = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
     
-    // Información de tareas (opcional - comentar si no se necesita)
-    #ifdef CONFIG_FREERTOS_USE_TRACE_FACILITY
-    char buffer[1024];
-    vTaskList(buffer);
-    ESP_LOGI(TAG, "Task List:\n%s", buffer);
-    #endif
+    ESP_LOGI(TAG, "=== Memory Status ===");
+    ESP_LOGI(TAG, "Free heap: %zu bytes", free_heap);
+    ESP_LOGI(TAG, "Minimum free heap: %zu bytes", min_heap);
+    ESP_LOGI(TAG, "Largest free block: %zu bytes", largest_block);
+    
+    // Reportar actividad de memoria al watchdog (solo si está disponible)
+    if (g_watchdog_available) {
+        esp_err_t ret = watchdog_manager_report_activity(WATCHDOG_CHECK_MEMORY);
+        if (ret != ESP_OK) {
+            ESP_LOGD(TAG, "Could not report memory activity to watchdog");
+        }
+    }
+    
+    if (free_heap < 50000) {
+        ESP_LOGW(TAG, "Low memory warning: %zu bytes", free_heap);
+        // Cambiar a modo crítico si la memoria es muy baja (solo si watchdog está disponible)
+        if (free_heap < 30000 && g_watchdog_available) {
+            esp_err_t mode_ret = watchdog_manager_set_mode(WATCHDOG_MODE_CRITICAL);
+            if (mode_ret != ESP_OK) {
+                ESP_LOGD(TAG, "Could not set watchdog to critical mode");
+            }
+        }
+    }
 }
 
-// Callback para manejar los cambios de estado del MQTT
+// Callback del watchdog para eventos críticos - VERSION CORREGIDA
+static void watchdog_event_callback(watchdog_health_status_t status, watchdog_check_type_t check_type, void *user_data) {
+    const char* status_str = "UNKNOWN";
+    const char* check_str = "UNKNOWN";
+    
+    switch (status) {
+        case WATCHDOG_HEALTH_GOOD: status_str = "GOOD"; break;
+        case WATCHDOG_HEALTH_WARNING: status_str = "WARNING"; break;
+        case WATCHDOG_HEALTH_CRITICAL: status_str = "CRITICAL"; break;
+        case WATCHDOG_HEALTH_ERROR: status_str = "ERROR"; break;
+    }
+    
+    switch (check_type) {
+        case WATCHDOG_CHECK_MEMORY: check_str = "MEMORY"; break;
+        case WATCHDOG_CHECK_WIFI: check_str = "WIFI"; break;
+        case WATCHDOG_CHECK_MQTT: check_str = "MQTT"; break;
+        case WATCHDOG_CHECK_TASKS: check_str = "TASKS"; break;
+    }
+    
+    ESP_LOGW(TAG, "Watchdog event: %s - %s", check_str, status_str);
+    
+    // Tomar acciones según el evento
+    if (status == WATCHDOG_HEALTH_CRITICAL) {
+        switch (check_type) {
+            case WATCHDOG_CHECK_MEMORY:
+                ESP_LOGE(TAG, "Critical memory situation detected");
+                // Intentar liberación de memoria de emergencia
+                // Forzar recolección de basura si hay algún subsistema que lo soporte
+                break;
+                
+            case WATCHDOG_CHECK_WIFI:
+                ESP_LOGE(TAG, "Critical WiFi failure detected");
+                // Intentar reconexión de emergencia
+                if (!wifi_manager_is_connected()) {
+                    char ap_ssid[33];
+                    esp_err_t ret = wifi_manager_generate_ap_ssid(ap_ssid, sizeof(ap_ssid), "FirePanel");
+                    if (ret == ESP_OK) {
+                        ESP_LOGI(TAG, "Starting emergency AP mode: %s", ap_ssid);
+                        wifi_manager_start_ap_mode(ap_ssid, "firepanel");
+                    }
+                }
+                break;
+                
+            case WATCHDOG_CHECK_MQTT:
+                ESP_LOGE(TAG, "Critical MQTT failure detected");
+                // Intentar reconexión MQTT
+                char esp32_id[ESP32_ID_LENGTH + 1];
+                if (esp32_id_manager_get_id(esp32_id, sizeof(esp32_id)) == ESP_OK) {
+                    mqtt_manager_set_esp32_id(esp32_id);
+                    mqtt_manager_connect();
+                }
+                break;
+                
+            case WATCHDOG_CHECK_TASKS:
+                ESP_LOGE(TAG, "Critical task failure detected");
+                // Los tasks críticos no responden, el sistema se reseteará automáticamente
+                break;
+        }
+    } else if (status == WATCHDOG_HEALTH_WARNING) {
+        // Para advertencias, solo log adicional
+        ESP_LOGW(TAG, "System degradation detected in %s subsystem", check_str);
+    }
+}
+
+// Callback MQTT simplificado - VERSION CORREGIDA
 static void mqtt_state_callback(mqtt_manager_state_t state, void *user_data) {
     switch (state) {
-        case MQTT_MANAGER_STATE_INIT:
-            ESP_LOGI(TAG, "MQTT state: INIT");
-            break;
-        case MQTT_MANAGER_STATE_DISCONNECTED:
-            ESP_LOGI(TAG, "MQTT state: DISCONNECTED");
-            break;
-        case MQTT_MANAGER_STATE_CONNECTING:
-            ESP_LOGI(TAG, "MQTT state: CONNECTING");
-            break;
         case MQTT_MANAGER_STATE_CONNECTED:
-            ESP_LOGI(TAG, "MQTT state: CONNECTED");
+            ESP_LOGI(TAG, "MQTT connected");
+            g_mqtt_connected = true;
             
-            // ✅ SOLO LOG - El mensaje se enviará automáticamente después de NTP sync
-            ESP_LOGI(TAG, "MQTT connected. Network info will be sent after time synchronization.");
+            // Reportar actividad MQTT (solo si watchdog está disponible)
+            if (g_watchdog_available) {
+                watchdog_manager_report_activity(WATCHDOG_CHECK_MQTT);
+                
+                // Cambiar a modo running cuando MQTT esté conectado
+                if (g_wifi_connected && g_mqtt_connected) {
+                    watchdog_manager_set_mode(WATCHDOG_MODE_RUNNING);
+                }
+            }
             break;
-        case MQTT_MANAGER_STATE_RECONNECTING:
-            ESP_LOGI(TAG, "MQTT state: RECONNECTING");
+            
+        case MQTT_MANAGER_STATE_DISCONNECTED:
+            ESP_LOGI(TAG, "MQTT disconnected");
+            g_mqtt_connected = false;
+            
+            // Volver a modo config si perdemos MQTT (solo si watchdog está disponible)
+            if (g_watchdog_available) {
+                esp_err_t ret = watchdog_manager_set_mode(WATCHDOG_MODE_CONFIG);
+                if (ret != ESP_OK) {
+                    ESP_LOGD(TAG, "Could not set watchdog to config mode");
+                }
+            }
             break;
+            
         case MQTT_MANAGER_STATE_ERROR:
-            ESP_LOGI(TAG, "MQTT state: ERROR");
+            ESP_LOGW(TAG, "MQTT error");
+            g_mqtt_connected = false;
             break;
+            
         default:
-            ESP_LOGI(TAG, "MQTT state: UNKNOWN");
             break;
     }
 }
 
-// Callback para manejar los mensajes MQTT recibidos
+// Callback mensajes MQTT simplificado - VERSION CORREGIDA
 static void mqtt_message_callback(const char *topic, const char *data, int data_len, void *user_data) {
-    ESP_LOGI(TAG, "MQTT message received on topic: %s", topic);
-    ESP_LOGI(TAG, "Message data (%d bytes): %.*s", data_len, data_len, data);
+    ESP_LOGI(TAG, "MQTT message: %s (%d bytes)", topic, data_len);
     
-    // Aquí podríamos procesar mensajes específicos como actualizaciones de configuración,
-    // comandos de reset, etc.
+    // Reportar actividad MQTT (solo si watchdog está disponible)
+    if (g_watchdog_available) {
+        esp_err_t ret = watchdog_manager_report_activity(WATCHDOG_CHECK_MQTT);
+        if (ret != ESP_OK) {
+            ESP_LOGD(TAG, "Could not report MQTT activity to watchdog");
+        }
+    }
 }
 
-// WiFi callback ULTRA-OPTIMIZADO para ESP32 4MB
+// WiFi callback con integración de watchdog - VERSION CORREGIDA
 static void wifi_state_callback(wifi_manager_state_t state, void *user_data) {
-    static bool mqtt_setup_done = false;  // Flag para evitar setup múltiple
+    char esp32_id[ESP32_ID_LENGTH + 1];
     
     switch (state) {
-        case WIFI_MANAGER_STATE_INIT:
-            ESP_LOGI(TAG, "WiFi: INIT");
-            mqtt_setup_done = false;
-            break;
-        case WIFI_MANAGER_STATE_DISCONNECTED:
-            ESP_LOGI(TAG, "WiFi: DISCONNECTED");
-            mqtt_setup_done = false;
-            break;
-        case WIFI_MANAGER_STATE_CONNECTING:
-            ESP_LOGI(TAG, "WiFi: CONNECTING");
-            break;
         case WIFI_MANAGER_STATE_CONNECTED:
-            ESP_LOGI(TAG, "WiFi: CONNECTED");
+            ESP_LOGI(TAG, "WiFi connected");
+            g_wifi_connected = true;
             
-            // Información básica sin arrays grandes
-            char ip[16];
-            if (wifi_manager_get_ip(ip, sizeof(ip)) == ESP_OK) {
-                ESP_LOGI(TAG, "IP: %s", ip);
+            // Reportar actividad WiFi (solo si watchdog está disponible)
+            if (g_watchdog_available) {
+                watchdog_manager_report_activity(WATCHDOG_CHECK_WIFI);
             }
             
-            int8_t rssi;
-            if (wifi_manager_get_rssi(&rssi) == ESP_OK) {
-                ESP_LOGI(TAG, "Signal: %d dBm", rssi);
-            }
+            // Sincronizar tiempo
+            time_manager_sync_time();
             
-            // Setup MQTT una sola vez
-            if (!mqtt_setup_done) {
-                mqtt_setup_done = true;
-                
-                // Sincronizar tiempo
-                ESP_LOGI(TAG, "Synchronizing time");
-                time_manager_sync_time();
-                
-                // Cambiar a modo STA si es necesario
-                wifi_mode_t mode;
-                if (esp_wifi_get_mode(&mode) == ESP_OK && mode == WIFI_MODE_APSTA) {
-                    ESP_LOGI(TAG, "Switching to STA-only mode");
-                    esp_err_t ret = esp_wifi_set_mode(WIFI_MODE_STA);
-                    if (ret != ESP_OK) {
-                        ESP_LOGE(TAG, "Failed to switch mode: %s", esp_err_to_name(ret));
-                    }
-                }
-                
-                // Setup MQTT minimalista
-                mqtt_manager_state_t mqtt_state = mqtt_manager_get_state();
-                if (mqtt_state != MQTT_MANAGER_STATE_CONNECTED && 
-                    mqtt_state != MQTT_MANAGER_STATE_CONNECTING) {
-                    
-                    char esp32_id[ESP32_ID_LENGTH + 1];
-                    if (esp32_id_manager_get_id(esp32_id, sizeof(esp32_id)) == ESP_OK) {
-                        ESP_LOGI(TAG, "Configuring MQTT with ID: %s", esp32_id);
-                        if (mqtt_manager_set_esp32_id(esp32_id) == ESP_OK) {
-                            ESP_LOGI(TAG, "Attempting MQTT connection...");
-                            esp_err_t result = mqtt_manager_connect();
-                            if (result != ESP_OK) {
-                                ESP_LOGE(TAG, "MQTT connection failed: %s", esp_err_to_name(result));
-                            } else {
-                                ESP_LOGI(TAG, "MQTT connection started");
-                            }
-                        } else {
-                            ESP_LOGE(TAG, "Failed to set ESP32 ID");
-                        }
-                    } else {
-                        ESP_LOGE(TAG, "Failed to get ESP32 ID");
-                    }
-                } else {
-                    ESP_LOGI(TAG, "MQTT already in progress, state: %d", mqtt_state);
+            // Setup MQTT minimalista
+            if (esp32_id_manager_get_id(esp32_id, sizeof(esp32_id)) == ESP_OK) {
+                if (mqtt_manager_set_esp32_id(esp32_id) == ESP_OK) {
+                    mqtt_manager_connect();
                 }
             }
             break;
+            
+        case WIFI_MANAGER_STATE_DISCONNECTED:
+            ESP_LOGI(TAG, "WiFi disconnected");
+            g_wifi_connected = false;
+            g_mqtt_connected = false;
+            
+            // Volver a modo config al perder WiFi (solo si watchdog está disponible)
+            if (g_watchdog_available) {
+                esp_err_t ret = watchdog_manager_set_mode(WATCHDOG_MODE_CONFIG);
+                if (ret != ESP_OK) {
+                    ESP_LOGD(TAG, "Could not set watchdog to config mode");
+                }
+            }
+            break;
+            
         case WIFI_MANAGER_STATE_AP_MODE:
-            ESP_LOGI(TAG, "WiFi: AP_MODE");
-            mqtt_setup_done = false;
+            ESP_LOGI(TAG, "WiFi AP mode active");
+            g_wifi_connected = false;
             
-            char ap_ip[16];
-            if (wifi_manager_get_ap_ip(ap_ip, sizeof(ap_ip)) == ESP_OK) {
-                ESP_LOGI(TAG, "AP IP: %s", ap_ip);
+            // Permanecer en modo config (solo si watchdog está disponible)
+            if (g_watchdog_available) {
+                esp_err_t ret = watchdog_manager_set_mode(WATCHDOG_MODE_CONFIG);
+                if (ret != ESP_OK) {
+                    ESP_LOGD(TAG, "Could not set watchdog to config mode");
+                }
             }
             break;
-        case WIFI_MANAGER_STATE_STA_AP_MODE:
-            ESP_LOGI(TAG, "WiFi: STA_AP_MODE");
-            break;
-        case WIFI_MANAGER_STATE_ERROR:
-            ESP_LOGI(TAG, "WiFi: ERROR");
-            mqtt_setup_done = false;
-            break;
+            
         default:
-            ESP_LOGI(TAG, "WiFi: UNKNOWN");
             break;
     }
 }
 
-// Callback cuando el usuario configura WiFi a través del portal cautivo
+// Callback portal cautivo simplificado
 static void on_wifi_connect_callback(void *user_data) {
-    ESP_LOGI(TAG, "WiFi configured successfully via captive portal!");
+    ESP_LOGI(TAG, "WiFi configured via captive portal");
     
-    // Detener el portal cautivo 
     if (wifi_captive_portal_is_active()) {
         wifi_captive_portal_stop();
-        
-        // Una vez conectado al WiFi del cliente, cambiar a modo STATION solamente
-        // Esto desactiva el AP del ESP32 y solo mantiene la conexión al router
-        esp_err_t ret = esp_wifi_set_mode(WIFI_MODE_STA);
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to switch to station-only mode: %s", esp_err_to_name(ret));
-        } else {
-            ESP_LOGI(TAG, "Successfully switched to station-only mode");
-        }
+        esp_wifi_set_mode(WIFI_MODE_STA);
     }
 }
 
-void app_main(void)
-{
-    ESP_LOGI(TAG, "Initializing HDD ESP32 Monitor...");
-
-    // Inicializar el gestor de configuración
-    ESP_ERROR_CHECK(config_manager_init());
-    ESP_LOGI(TAG, "Configuration manager initialized successfully");
+// Task para monitoreo del sistema - VERSION CORREGIDA
+static void system_monitor_task(void *pvParameters) {
+    ESP_LOGI(TAG, "System monitor task started");
     
-    // Inicializar el gestor de ID de ESP32
-    ESP_ERROR_CHECK(esp32_id_manager_init());
+    // Variable para saber si el watchdog manager está disponible para este task
+    bool task_watchdog_available = false;
     
-    // Obtener y mostrar el ID de ESP32
-    char esp32_id[ESP32_ID_LENGTH + 1];
-    ESP_ERROR_CHECK(esp32_id_manager_get_id(esp32_id, sizeof(esp32_id)));
-    ESP_LOGI(TAG, "ESP32 ID: %s", esp32_id);
-    
-    // Obtener y mostrar la dirección MAC
-    char mac_address[ESP32_MAC_STR_LENGTH + 1];
-    ESP_ERROR_CHECK(esp32_id_manager_get_mac(mac_address, sizeof(mac_address)));
-    ESP_LOGI(TAG, "MAC Address: %s", mac_address);
-    
-    // Inicializar WiFi Manager
-    ESP_ERROR_CHECK(wifi_manager_init());
-    ESP_LOGI(TAG, "WiFi Manager initialized successfully");
-    
-    // Registrar callback para recibir cambios de estado WiFi
-    ESP_ERROR_CHECK(wifi_manager_set_state_callback(wifi_state_callback, NULL));
-    
-    // Inicializar Time Manager
-    ESP_ERROR_CHECK(time_manager_init());
-    ESP_LOGI(TAG, "Time Manager initialized successfully");
-    
-    // Inicializar MQTT Manager
-    ESP_ERROR_CHECK(mqtt_manager_init());
-    ESP_LOGI(TAG, "MQTT Manager initialized successfully");
-    
-    // Registrar callbacks para MQTT
-    ESP_ERROR_CHECK(mqtt_manager_set_state_callback(mqtt_state_callback, NULL));
-    ESP_ERROR_CHECK(mqtt_manager_set_message_callback(mqtt_message_callback, NULL));
-    
-    // Configurar MQTT con el ID del ESP32
-    ESP_ERROR_CHECK(mqtt_manager_set_esp32_id(esp32_id));
-    
-    // Intentar conectar con credenciales guardadas
-    esp_err_t ret = wifi_manager_connect_saved();
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "No saved credentials or connection failed");
-        
-        // Generar SSID único para el AP basado en el ID del ESP32
-        char ap_ssid[33];
-        ESP_ERROR_CHECK(wifi_manager_generate_ap_ssid(ap_ssid, sizeof(ap_ssid), "FirePanel"));
-        
-        // Iniciar portal cautivo para configuración
-        ESP_LOGI(TAG, "Starting captive portal with SSID: %s", ap_ssid);
-        ESP_ERROR_CHECK(wifi_captive_portal_start(ap_ssid, "firepanel"));
-        
-        // Registrar callback para cuando se configure el WiFi
-        ESP_ERROR_CHECK(wifi_captive_portal_set_on_connect_callback(on_wifi_connect_callback, NULL));
-    } else {
-        // Si WiFi está conectado, iniciar MQTT
-        if (wifi_manager_is_connected()) {
-            ESP_LOGI(TAG, "WiFi connected, starting MQTT connection");
-            // Intentar sincronizar hora primero
-            time_manager_sync_time();
-            mqtt_manager_connect();
+    // Registrar este task en el watchdog (si está disponible)
+    if (g_watchdog_available) {
+        esp_err_t wd_ret = watchdog_manager_register_task(NULL, "sys_monitor");
+        if (wd_ret == ESP_OK) {
+            ESP_LOGI(TAG, "System monitor task registered in watchdog manager");
+            task_watchdog_available = true;
+        } else {
+            ESP_LOGW(TAG, "Failed to register in watchdog manager: %s", esp_err_to_name(wd_ret));
         }
     }
     
-    // Bucle principal ULTRA-OPTIMIZADO para ESP32 4MB
-    int counter = 0;
-    int last_memory_check = 0;
-    int last_mqtt_retry = 0;
-
+    // Si no se pudo registrar en watchdog manager, intentar con TWDT por defecto
+    if (!task_watchdog_available) {
+        ESP_LOGW(TAG, "Watchdog manager not available, using default ESP-IDF TWDT");
+        esp_err_t twdt_ret = esp_task_wdt_add(NULL);
+        if (twdt_ret == ESP_OK) {
+            ESP_LOGI(TAG, "System monitor task registered in default TWDT");
+        } else {
+            ESP_LOGW(TAG, "Failed to register in default TWDT: %s", esp_err_to_name(twdt_ret));
+        }
+    }
+    
+    uint32_t cycle_count = 0;
+    
     while (1) {
-        counter++;
-
-        // Reporte de memoria solo cada 10 minutos para reducir overhead
-        if (counter - last_memory_check >= 120) {  // 120 * 5s = 10 minutos
+        // Alimentar watchdog (usar el disponible)
+        if (task_watchdog_available) {
+            watchdog_manager_feed();
+        } else {
+            // Alimentar el TWDT por defecto
+            esp_task_wdt_reset();
+        }
+        
+        cycle_count++;
+        
+        // Memoria cada 10 minutos (reduce overhead)
+        if (cycle_count % 120 == 0) {
             print_memory_info();
-            last_memory_check = counter;
         }
         
-        // Verificar tiempo de forma minimalista
-        if (wifi_manager_is_connected() && !time_manager_is_synchronized()) {
-            time_manager_check_sync();
-        }
+        bool wifi_connected = wifi_manager_is_connected();
+        bool mqtt_connected = mqtt_manager_is_connected();
         
-        // Estados simples sin variables complejas
-        bool wifi_ok = wifi_manager_is_connected();
-        mqtt_manager_state_t mqtt_state = mqtt_manager_get_state();
-        bool mqtt_ok = (mqtt_state == MQTT_MANAGER_STATE_CONNECTED);
+        // Actualizar estado global
+        g_wifi_connected = wifi_connected;
+        g_mqtt_connected = mqtt_connected;
         
-        if (wifi_ok) {
-            // Cambio de modo WiFi minimalista
+        if (wifi_connected) {
+            // Reportar actividad WiFi (solo si watchdog está disponible)
+            if (g_watchdog_available) {
+                watchdog_manager_report_activity(WATCHDOG_CHECK_WIFI);
+            }
+            
+            // Cambiar a modo STA si es necesario
             wifi_mode_t mode;
             if (esp_wifi_get_mode(&mode) == ESP_OK && mode == WIFI_MODE_APSTA) {
-                ESP_LOGI(TAG, "Still in AP+STA mode, switching to STA only");
                 esp_wifi_set_mode(WIFI_MODE_STA);
+            }
+            
+            // Verificar tiempo
+            if (!time_manager_is_synchronized()) {
+                time_manager_check_sync();
             }
             
             // Procesar MQTT
             mqtt_manager_loop(0);
             
-            if (mqtt_ok) {
-                // Log cada 2 minutos cuando todo funciona
-                if (counter % 24 == 0) {  // 24 * 5s = 2 minutos
-                    if (time_manager_is_synchronized()) {
-                        char time_str[32];
-                        time_manager_get_lima_time_str(time_str, sizeof(time_str));
+            if (mqtt_connected) {
+                // Reportar actividad MQTT (solo si watchdog está disponible)
+                if (g_watchdog_available) {
+                    watchdog_manager_report_activity(WATCHDOG_CHECK_MQTT);
+                }
+                
+                // Log cada 2 minutos cuando todo OK
+                if (cycle_count % 24 == 0) {
+                    char time_str[32];
+                    if (time_manager_get_lima_time_str(time_str, sizeof(time_str)) == ESP_OK) {
                         ESP_LOGI(TAG, "System OK - WiFi+MQTT connected, Time: %s", time_str);
                     } else {
                         ESP_LOGI(TAG, "System OK - WiFi+MQTT connected");
                     }
                 }
             } else {
-                // Log cada minuto cuando MQTT falla
-                if (counter % 12 == 0) {  // 12 * 5s = 1 minuto
-                    ESP_LOGI(TAG, "WiFi OK, MQTT: %s", 
-                            mqtt_state == MQTT_MANAGER_STATE_CONNECTING ? "CONNECTING" :
-                            mqtt_state == MQTT_MANAGER_STATE_RECONNECTING ? "RECONNECTING" :
-                            mqtt_state == MQTT_MANAGER_STATE_ERROR ? "ERROR" : "DISCONNECTED");
-                }
-                
                 // Reintentar MQTT cada 2 minutos
-                if ((counter - last_mqtt_retry) >= 24 && 
-                    mqtt_state != MQTT_MANAGER_STATE_CONNECTING) {
-                    
-                    ESP_LOGI(TAG, "Retrying MQTT connection (state: %d)", mqtt_state);
-                    char esp32_id_local[ESP32_ID_LENGTH + 1];
-                    if (esp32_id_manager_get_id(esp32_id_local, sizeof(esp32_id_local)) == ESP_OK) {
-                        mqtt_manager_set_esp32_id(esp32_id_local);
+                if (cycle_count % 24 == 0) {
+                    ESP_LOGI(TAG, "Retrying MQTT connection");
+                    char esp32_id[ESP32_ID_LENGTH + 1];
+                    if (esp32_id_manager_get_id(esp32_id, sizeof(esp32_id)) == ESP_OK) {
+                        mqtt_manager_set_esp32_id(esp32_id);
                         mqtt_manager_connect();
                     }
-                    last_mqtt_retry = counter;
                 }
             }
         } else {
-            // WiFi desconectado - log cada minuto
-            if (counter % 12 == 0) {
-                ESP_LOGI(TAG, "System running - WiFi DISCONNECTED");
+            // WiFi desconectado - intentar reconexión
+            if (cycle_count % 12 == 0) {
+                ESP_LOGI(TAG, "WiFi disconnected - attempting recovery");
+                wifi_manager_handle_disconnection("FirePanel", "firepanel", 3);
             }
-            
-            // Manejo simple de desconexión
-            wifi_manager_handle_disconnection("FirePanel", "firepanel", 3);  // Menos reintentos
         }
         
-        // Pausa eficiente
+        // Verificar salud del sistema (solo si watchdog está disponible)
+        if (g_watchdog_available) {
+            watchdog_health_status_t health = watchdog_manager_check_system_health();
+            if (health > WATCHDOG_HEALTH_WARNING) {
+                ESP_LOGW(TAG, "System health degraded: %d", health);
+            }
+        }
+        
+        // Pausa optimizada
+        vTaskDelay(pdMS_TO_TICKS(5000));
+    }
+}
+
+void app_main(void)
+{
+    ESP_LOGI(TAG, "Starting HDD ESP32 Monitor v2.0 (ESP-IDF v5.4.1)");
+
+    // === FASE 1: Inicialización básica ===
+    ESP_LOGI(TAG, "Phase 1: Basic initialization");
+    
+    // Inicializar watchdog con manejo robusto de errores
+    esp_err_t watchdog_ret = watchdog_manager_init();
+    if (watchdog_ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize watchdog manager: %s", esp_err_to_name(watchdog_ret));
+        
+        // Si falla la inicialización del watchdog, intentar una vez más después de delay
+        ESP_LOGW(TAG, "Retrying watchdog initialization after delay...");
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        
+        watchdog_ret = watchdog_manager_init();
+        if (watchdog_ret != ESP_OK) {
+            ESP_LOGE(TAG, "Watchdog initialization failed twice, continuing without custom watchdog manager");
+            ESP_LOGI(TAG, "System will use default ESP-IDF TWDT");
+            g_watchdog_available = false;
+        } else {
+            ESP_LOGI(TAG, "Watchdog manager initialized on second attempt");
+            g_watchdog_available = true;
+            
+            // Configurar callback del watchdog
+            watchdog_manager_set_event_callback(watchdog_event_callback, NULL);
+            
+            // Registrar task principal
+            esp_err_t reg_ret = watchdog_manager_register_task(NULL, "app_main");
+            if (reg_ret != ESP_OK) {
+                ESP_LOGW(TAG, "Failed to register main task in watchdog: %s", esp_err_to_name(reg_ret));
+            }
+        }
+    } else {
+        ESP_LOGI(TAG, "Watchdog manager initialized successfully");
+        g_watchdog_available = true;
+        
+        // Configurar callback del watchdog
+        watchdog_manager_set_event_callback(watchdog_event_callback, NULL);
+        
+        // Registrar task principal
+        esp_err_t reg_ret = watchdog_manager_register_task(NULL, "app_main");
+        if (reg_ret != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to register main task in watchdog: %s", esp_err_to_name(reg_ret));
+        }
+    }
+    
+    // Alimentar watchdog inicialmente (solo si se inicializó correctamente)
+    if (g_watchdog_available) {
+        watchdog_manager_feed();
+    }
+    
+    // Continuar con el resto de la inicialización...
+    ESP_ERROR_CHECK(config_manager_init());
+    if (g_watchdog_available) {
+        watchdog_manager_feed();
+    }
+    
+    ESP_ERROR_CHECK(esp32_id_manager_init());
+    if (g_watchdog_available) {
+        watchdog_manager_feed();
+    }
+    
+    char esp32_id[ESP32_ID_LENGTH + 1];
+    ESP_ERROR_CHECK(esp32_id_manager_get_id(esp32_id, sizeof(esp32_id)));
+    ESP_LOGI(TAG, "ESP32 ID: %s", esp32_id);
+    
+    char mac_address[ESP32_MAC_STR_LENGTH + 1];
+    ESP_ERROR_CHECK(esp32_id_manager_get_mac(mac_address, sizeof(mac_address)));
+    ESP_LOGI(TAG, "MAC: %s", mac_address);
+    
+    if (g_watchdog_available) {
+        watchdog_manager_feed();
+    }
+    
+    // === FASE 2: Inicialización de managers ===
+    ESP_LOGI(TAG, "Phase 2: Manager initialization");
+    
+    ESP_ERROR_CHECK(wifi_manager_init());
+    if (g_watchdog_available) {
+        watchdog_manager_feed();
+    }
+    
+    ESP_ERROR_CHECK(time_manager_init());
+    if (g_watchdog_available) {
+        watchdog_manager_feed();
+    }
+    
+    ESP_ERROR_CHECK(mqtt_manager_init());
+    if (g_watchdog_available) {
+        watchdog_manager_feed();
+    }
+    
+    // === FASE 3: Configuración de callbacks ===
+    ESP_LOGI(TAG, "Phase 3: Callback configuration");
+    
+    ESP_ERROR_CHECK(wifi_manager_set_state_callback(wifi_state_callback, NULL));
+    ESP_ERROR_CHECK(mqtt_manager_set_state_callback(mqtt_state_callback, NULL));
+    ESP_ERROR_CHECK(mqtt_manager_set_message_callback(mqtt_message_callback, NULL));
+    ESP_ERROR_CHECK(mqtt_manager_set_esp32_id(esp32_id));
+    
+    if (g_watchdog_available) {
+        watchdog_manager_feed();
+    }
+    
+    // === FASE 4: Conexión WiFi ===
+    ESP_LOGI(TAG, "Phase 4: WiFi connection");
+    
+    // Intentar conexión WiFi guardada
+    esp_err_t wifi_ret = wifi_manager_connect_saved();
+    if (wifi_ret != ESP_OK) {
+        // Iniciar portal cautivo
+        char ap_ssid[33];
+        ESP_ERROR_CHECK(wifi_manager_generate_ap_ssid(ap_ssid, sizeof(ap_ssid), "FirePanel"));
+        
+        ESP_LOGI(TAG, "Starting captive portal: %s", ap_ssid);
+        ESP_ERROR_CHECK(wifi_captive_portal_start(ap_ssid, "firepanel"));
+        ESP_ERROR_CHECK(wifi_captive_portal_set_on_connect_callback(on_wifi_connect_callback, NULL));
+        
+        // Permanecer en modo config
+        if (g_watchdog_available) {
+            watchdog_manager_set_mode(WATCHDOG_MODE_CONFIG);
+        }
+    } else {
+        // WiFi conectado, iniciar servicios
+        if (wifi_manager_is_connected()) {
+            g_wifi_connected = true;
+            time_manager_sync_time();
+            mqtt_manager_connect();
+        }
+    }
+    
+    if (g_watchdog_available) {
+        watchdog_manager_feed();
+    }
+    
+    // === FASE 5: Crear task de monitoreo ===
+    ESP_LOGI(TAG, "Phase 5: Creating system monitor task");
+    
+    BaseType_t xReturned = xTaskCreate(
+        system_monitor_task,
+        "sys_monitor",
+        8192,  // Stack size
+        NULL,
+        5,     // Priority
+        NULL
+    );
+    
+    if (xReturned != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create system monitor task");
+        if (g_watchdog_available) {
+            watchdog_manager_force_reset("task_creation_failed");
+        } else {
+            esp_restart();
+        }
+    }
+    
+    g_system_initialized = true;
+    ESP_LOGI(TAG, "System initialization completed successfully");
+    
+    // === LOOP PRINCIPAL SIMPLIFICADO ===
+    // El task principal ahora solo maneja el watchdog y tareas críticas
+    uint32_t main_cycle = 0;
+    
+    while (1) {
+        // Alimentar watchdog del task principal (solo si está inicializado)
+        if (g_watchdog_available) {
+            watchdog_manager_feed();
+        } else {
+            // Usar TWDT por defecto si está disponible
+            esp_task_wdt_reset();
+        }
+        
+        main_cycle++;
+        
+        // Verificaciones críticas cada minuto
+        if (main_cycle % 12 == 0) {
+            // Verificar salud del watchdog (solo si está inicializado)
+            if (g_watchdog_available) {
+                uint32_t feed_count, error_count;
+                const char *last_reset_reason;
+                
+                if (watchdog_manager_get_stats(&feed_count, &error_count, &last_reset_reason) == ESP_OK) {
+                    if (error_count > 0) {
+                        ESP_LOGW(TAG, "Watchdog errors detected: %lu (last reset: %s)", 
+                                error_count, last_reset_reason ? last_reset_reason : "none");
+                    }
+                }
+                
+                // Verificar modo del watchdog
+                watchdog_mode_t current_mode = watchdog_manager_get_mode();
+                if (current_mode == WATCHDOG_MODE_CRITICAL) {
+                    ESP_LOGW(TAG, "System running in CRITICAL mode");
+                }
+            }
+        }
+        
+        // Verificación de memoria cada 5 minutos
+        if (main_cycle % 60 == 0) {
+            size_t free_heap = esp_get_free_heap_size();
+            if (free_heap < 30000) {
+                ESP_LOGW(TAG, "Main task: Low memory detected: %zu bytes", free_heap);
+            }
+        }
+        
+        // El task principal ahora tiene un ciclo más rápido para mejor responsividad del watchdog
         vTaskDelay(pdMS_TO_TICKS(5000));
     }
 }

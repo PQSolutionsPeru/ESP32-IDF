@@ -1,5 +1,16 @@
-# Name,   Type, SubType, Offset,  Size, Flags
-nvs,      data, nvs,     0x9000,  0x6000,
-phy_init, data, phy,     0xf000,  0x1000,
-factory,  app,  factory, 0x10000, 1M,
-storage,  data, nvs,     0x110000, 0x10000,
+# ESP32 4MB Flash Partition Table - Optimized for ESP-IDF v5.4.1 with OTA
+# Name,     Type, SubType, Offset,   Size,     Flags
+# Total usable: ~4032KB (4MB - bootloader - partition table)
+
+# System partitions
+nvs,        data, nvs,     0x9000,   0x6000,   
+phy_init,   data, phy,     0xf000,   0x1000,   
+
+# OTA partitions (NO factory - solo OTA)
+ota_0,      app,  ota_0,   0x10000,  0x1E0000, 
+ota_1,      app,  ota_1,   0x1F0000, 0x1E0000, 
+ota_data,   data, ota,     0x3D0000, 0x2000,   
+
+# Storage partitions
+nvs_config, data, nvs,     0x3D2000, 0x6000,   
+storage,    data, spiffs,  0x3D8000, 0x28000,

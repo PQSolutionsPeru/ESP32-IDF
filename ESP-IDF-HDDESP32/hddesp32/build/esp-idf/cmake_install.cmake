@@ -579,6 +579,11 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
+  include("E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/watchdog_manager/cmake_install.cmake")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
   include("E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/main/cmake_install.cmake")
 endif()
 
