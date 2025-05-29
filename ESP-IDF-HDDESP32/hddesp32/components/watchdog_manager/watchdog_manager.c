@@ -49,7 +49,7 @@ typedef struct {
 // Contexto del Watchdog Manager
 typedef struct {
     bool initialized;
-    bool twdt_already_initialized; // Flag para saber si TWDT ya estaba inicializado
+    bool twdt_available; // Simplificado: solo saber si está disponible
     watchdog_mode_t current_mode;
     watchdog_health_status_t health_status;
     
@@ -157,7 +157,7 @@ static void feed_timer_callback(TimerHandle_t xTimer) {
     watchdog_manager_feed();
 }
 
-// Verificar salud de memoria
+// Verificar salud de memoria - CORREGIDO
 static watchdog_health_status_t check_memory_health(void) {
     watchdog_manager_context_t *ctx = &s_watchdog_ctx;
     watchdog_config_t *config = &ctx->configs[ctx->current_mode];
@@ -168,11 +168,30 @@ static watchdog_health_status_t check_memory_health(void) {
     
     size_t free_heap = esp_get_free_heap_size();
     
-    if (free_heap < config->memory_threshold_bytes / 2) {
-        ESP_LOGE(TAG, "Critical memory: %zu bytes", free_heap);
-        return WATCHDOG_HEALTH_CRITICAL;
-    } else if (free_heap < config->memory_threshold_bytes) {
-        ESP_LOGW(TAG, "Low memory: %zu bytes", free_heap);
+    // Umbrales más estrictos
+    uint32_t critical_threshold = config->memory_threshold_bytes / 3;  // 33% del umbral
+    uint32_t warning_threshold = config->memory_threshold_bytes / 2;   // 50% del umbral
+    
+    if (free_heap < critical_threshold) {
+        ESP_LOGE(TAG, "CRITICAL memory: %zu bytes (threshold: %lu)", free_heap, critical_threshold);
+        
+        // Limpieza de emergencia
+        ESP_LOGW(TAG, "Performing emergency memory recovery");
+        mqtt_manager_emergency_memory_cleanup();
+        
+        // Verificar si la limpieza ayudó
+        size_t free_after = esp_get_free_heap_size();
+        ESP_LOGI(TAG, "Memory after cleanup: %zu bytes (recovered: %d)", 
+                free_after, (int)(free_after - free_heap));
+        
+        if (free_after < critical_threshold) {
+            return WATCHDOG_HEALTH_CRITICAL;
+        } else {
+            return WATCHDOG_HEALTH_WARNING;
+        }
+        
+    } else if (free_heap < warning_threshold) {
+        ESP_LOGW(TAG, "Low memory: %zu bytes (threshold: %lu)", free_heap, warning_threshold);
         return WATCHDOG_HEALTH_WARNING;
     }
     
@@ -240,44 +259,36 @@ static watchdog_health_status_t check_tasks_health(void) {
     return WATCHDOG_HEALTH_GOOD;
 }
 
-// NUEVA FUNCIÓN: Verificar si TWDT ya está inicializado
-static bool is_twdt_already_initialized(void) {
-    // Intentar obtener el estado del TWDT
-    // Si obtenemos ESP_OK, está inicializado
-    // Si obtenemos ESP_ERR_INVALID_STATE, no está inicializado
+// SIMPLIFICADO: Verificar si TWDT está disponible
+static bool check_twdt_available(void) {
     esp_err_t ret = esp_task_wdt_status(NULL);
     return (ret != ESP_ERR_INVALID_STATE);
 }
 
-// NUEVA FUNCIÓN: Configurar o reconfigurar TWDT
-static esp_err_t configure_twdt(watchdog_manager_context_t *ctx) {
+// SIMPLIFICADO: Configurar TWDT
+static esp_err_t setup_twdt(watchdog_manager_context_t *ctx) {
     esp_task_wdt_config_t twdt_config = {
         .timeout_ms = ctx->configs[ctx->current_mode].timeout_ms,
-        .idle_core_mask = (1 << CONFIG_FREERTOS_NUMBER_OF_CORES) - 1, // Monitor idle tasks
-        .trigger_panic = false  // No pánico automático, manejamos nosotros
+        .idle_core_mask = (1 << CONFIG_FREERTOS_NUMBER_OF_CORES) - 1,
+        .trigger_panic = false
     };
     
-    if (ctx->twdt_already_initialized) {
-        // Si ya está inicializado, solo reconfigurarlo
-        ESP_LOGI(TAG, "TWDT already initialized, reconfiguring...");
-        esp_err_t ret = esp_task_wdt_reconfigure(&twdt_config);
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to reconfigure TWDT: %s", esp_err_to_name(ret));
-            return ret;
-        }
+    // Intentar reconfigurar primero
+    esp_err_t ret = esp_task_wdt_reconfigure(&twdt_config);
+    if (ret == ESP_OK) {
         ESP_LOGI(TAG, "TWDT reconfigured successfully");
-    } else {
-        // Si no está inicializado, inicializarlo
-        ESP_LOGI(TAG, "Initializing TWDT...");
-        esp_err_t ret = esp_task_wdt_init(&twdt_config);
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to initialize TWDT: %s", esp_err_to_name(ret));
-            return ret;
-        }
-        ESP_LOGI(TAG, "TWDT initialized successfully");
+        return ESP_OK;
     }
     
-    return ESP_OK;
+    // Si falla, intentar inicializar
+    ret = esp_task_wdt_init(&twdt_config);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "TWDT initialized successfully");
+        return ESP_OK;
+    }
+    
+    ESP_LOGW(TAG, "Could not configure TWDT: %s", esp_err_to_name(ret));
+    return ret;
 }
 
 // Implementación de funciones públicas
@@ -294,13 +305,9 @@ esp_err_t watchdog_manager_init(void) {
     // Limpiar contexto
     memset(ctx, 0, sizeof(watchdog_manager_context_t));
     
-    // Verificar si TWDT ya está inicializado (típico en ESP-IDF v5.4.1)
-    ctx->twdt_already_initialized = is_twdt_already_initialized();
-    if (ctx->twdt_already_initialized) {
-        ESP_LOGI(TAG, "TWDT was already initialized by system");
-    } else {
-        ESP_LOGI(TAG, "TWDT not initialized, will initialize it");
-    }
+    // Verificar si TWDT está disponible
+    ctx->twdt_available = check_twdt_available();
+    ESP_LOGI(TAG, "TWDT available: %s", ctx->twdt_available ? "YES" : "NO");
     
     // Crear mutex
     ctx->mutex = xSemaphoreCreateMutex();
@@ -314,18 +321,20 @@ esp_err_t watchdog_manager_init(void) {
     ctx->current_mode = WATCHDOG_MODE_CONFIG;
     ctx->health_status = WATCHDOG_HEALTH_GOOD;
     
-    // Configurar TWDT (inicializar o reconfigurar según sea necesario)
-    esp_err_t ret = configure_twdt(ctx);
-    if (ret != ESP_OK) {
-        vSemaphoreDelete(ctx->mutex);
-        return ret;
+    // Configurar TWDT si está disponible
+    if (ctx->twdt_available) {
+        esp_err_t ret = setup_twdt(ctx);
+        if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "TWDT setup failed, continuing without it");
+            ctx->twdt_available = false;
+        }
     }
     
     // Crear timers
     ctx->health_check_timer = xTimerCreate(
         "health_check",
         pdMS_TO_TICKS(ctx->configs[ctx->current_mode].health_check_interval_ms),
-        pdTRUE,  // Auto-reload
+        pdTRUE,
         NULL,
         health_check_timer_callback
     );
@@ -333,25 +342,17 @@ esp_err_t watchdog_manager_init(void) {
     ctx->feed_timer = xTimerCreate(
         "feed_timer",
         pdMS_TO_TICKS(ctx->configs[ctx->current_mode].feed_interval_ms),
-        pdTRUE,  // Auto-reload
+        pdTRUE,
         NULL,
         feed_timer_callback
     );
     
     if (ctx->health_check_timer == NULL || ctx->feed_timer == NULL) {
         ESP_LOGE(TAG, "Failed to create timers");
-        if (!ctx->twdt_already_initialized) {
-            esp_task_wdt_deinit();
+        if (ctx->mutex) {
+            vSemaphoreDelete(ctx->mutex);
         }
-        vSemaphoreDelete(ctx->mutex);
         return ESP_ERR_NO_MEM;
-    }
-    
-    // Registrar task principal (app_main) si no está ya registrado
-    ret = watchdog_manager_register_task(NULL, "app_main");
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Main task may already be registered in TWDT");
-        // No fallar por esto, continuar
     }
     
     // Inicializar marcas de tiempo
@@ -397,14 +398,9 @@ esp_err_t watchdog_manager_deinit(void) {
     
     // Desregistrar todos los tasks
     for (int i = 0; i < ctx->registered_task_count; i++) {
-        if (ctx->registered_tasks[i].is_active) {
+        if (ctx->registered_tasks[i].is_active && ctx->twdt_available) {
             esp_task_wdt_delete(ctx->registered_tasks[i].handle);
         }
-    }
-    
-    // Solo deinicializar TWDT si nosotros lo inicializamos
-    if (!ctx->twdt_already_initialized) {
-        esp_task_wdt_deinit();
     }
     
     // Liberar mutex
@@ -436,14 +432,16 @@ esp_err_t watchdog_manager_set_mode(watchdog_mode_t mode) {
             
             ctx->current_mode = mode;
             
-            // Reconfigurar TWDT con nuevo timeout
-            esp_task_wdt_config_t twdt_config = {
-                .timeout_ms = ctx->configs[mode].timeout_ms,
-                .idle_core_mask = (1 << CONFIG_FREERTOS_NUMBER_OF_CORES) - 1,
-                .trigger_panic = false
-            };
-            
-            esp_task_wdt_reconfigure(&twdt_config);
+            // Reconfigurar TWDT si está disponible
+            if (ctx->twdt_available) {
+                esp_task_wdt_config_t twdt_config = {
+                    .timeout_ms = ctx->configs[mode].timeout_ms,
+                    .idle_core_mask = (1 << CONFIG_FREERTOS_NUMBER_OF_CORES) - 1,
+                    .trigger_panic = false
+                };
+                
+                esp_task_wdt_reconfigure(&twdt_config);
+            }
             
             // Actualizar intervalos de timers
             xTimerChangePeriod(ctx->health_check_timer,
@@ -502,16 +500,12 @@ esp_err_t watchdog_manager_register_task(TaskHandle_t task_handle, const char *t
             return ESP_ERR_NO_MEM;
         }
         
-        // Registrar en TWDT
-        esp_err_t ret = esp_task_wdt_add(task_handle);
-        if (ret != ESP_OK) {
-            xSemaphoreGive(ctx->mutex);
-            ESP_LOGW(TAG, "Task may already be registered in TWDT: %s", esp_err_to_name(ret));
-            // No fallar si el task ya está registrado, solo advertir
-            if (ret == ESP_ERR_INVALID_ARG) {
-                // Task ya registrado, continuar sin error
-                ret = ESP_OK;
-            } else {
+        // Registrar en TWDT si está disponible
+        if (ctx->twdt_available) {
+            esp_err_t ret = esp_task_wdt_add(task_handle);
+            if (ret != ESP_OK && ret != ESP_ERR_INVALID_ARG) {
+                xSemaphoreGive(ctx->mutex);
+                ESP_LOGW(TAG, "Failed to register task in TWDT: %s", esp_err_to_name(ret));
                 return ret;
             }
         }
@@ -550,8 +544,10 @@ esp_err_t watchdog_manager_unregister_task(TaskHandle_t task_handle) {
         // Buscar el task
         for (int i = 0; i < ctx->registered_task_count; i++) {
             if (ctx->registered_tasks[i].handle == task_handle) {
-                // Desregistrar del TWDT
-                esp_task_wdt_delete(task_handle);
+                // Desregistrar del TWDT si está disponible
+                if (ctx->twdt_available) {
+                    esp_task_wdt_delete(task_handle);
+                }
                 
                 // Marcar como inactivo
                 ctx->registered_tasks[i].is_active = false;
@@ -578,44 +574,23 @@ esp_err_t watchdog_manager_feed(void) {
     }
     
     TaskHandle_t current_task = xTaskGetCurrentTaskHandle();
-    bool task_is_registered = false;
     
-    // Verificar si el task actual está registrado en nuestro sistema
-    for (int i = 0; i < ctx->registered_task_count; i++) {
-        if (ctx->registered_tasks[i].handle == current_task && ctx->registered_tasks[i].is_active) {
-            task_is_registered = true;
-            break;
-        }
-    }
-    
-    // Solo intentar alimentar el TWDT si el task está registrado
-    if (task_is_registered) {
-        esp_err_t ret = esp_task_wdt_reset();
-        if (ret != ESP_OK) {
-            ESP_LOGW(TAG, "Failed to feed TWDT: %s", esp_err_to_name(ret));
-            
-            // Si el task no está registrado en TWDT pero debería estarlo, intentar registrarlo
-            if (ret == ESP_ERR_NOT_FOUND) {
-                ESP_LOGW(TAG, "Task not found in TWDT, attempting to re-register");
-                ret = esp_task_wdt_add(current_task);
-                if (ret == ESP_OK) {
-                    ESP_LOGI(TAG, "Task re-registered in TWDT successfully");
-                    // Intentar alimentar nuevamente
-                    ret = esp_task_wdt_reset();
-                    if (ret != ESP_OK) {
-                        ESP_LOGE(TAG, "Failed to feed TWDT after re-registration: %s", esp_err_to_name(ret));
-                        return ret;
-                    }
-                } else {
-                    ESP_LOGE(TAG, "Failed to re-register task in TWDT: %s", esp_err_to_name(ret));
-                    return ret;
-                }
-            } else {
-                return ret;
+    // Solo alimentar TWDT si está disponible y el task está registrado
+    if (ctx->twdt_available) {
+        bool task_is_registered = false;
+        for (int i = 0; i < ctx->registered_task_count; i++) {
+            if (ctx->registered_tasks[i].handle == current_task && ctx->registered_tasks[i].is_active) {
+                task_is_registered = true;
+                break;
             }
         }
-    } else {
-        ESP_LOGD(TAG, "Task not registered in watchdog manager, skipping TWDT feed");
+        
+        if (task_is_registered) {
+            esp_err_t ret = esp_task_wdt_reset();
+            if (ret != ESP_OK) {
+                ESP_LOGD(TAG, "Failed to feed TWDT: %s", esp_err_to_name(ret));
+            }
+        }
     }
     
     // Actualizar estadísticas

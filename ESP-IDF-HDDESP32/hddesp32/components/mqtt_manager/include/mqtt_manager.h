@@ -4,6 +4,10 @@
 #include <stdbool.h>
 #include "esp_err.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // ESP32 ID Configuration - Inherited from esp32_id_manager.h
 #ifndef ESP32_ID_LENGTH
 #define ESP32_ID_LENGTH 8
@@ -186,5 +190,20 @@ esp_err_t mqtt_manager_send_network_info(void);
  * @return ESP_OK si el heartbeat se envió correctamente, de lo contrario un código de error
  */
 esp_err_t mqtt_manager_send_heartbeat(void);
+
+/**
+ * @brief Realiza limpieza de emergencia de memoria MQTT
+ * 
+ * Esta función limpia recursos MQTT no esenciales para liberar memoria
+ * en situaciones críticas. Es llamada automáticamente por el watchdog
+ * cuando se detecta memoria baja.
+ * 
+ * @return ESP_OK si la limpieza se realizó correctamente, de lo contrario un código de error
+ */
+esp_err_t mqtt_manager_emergency_memory_cleanup(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* MQTT_MANAGER_H */

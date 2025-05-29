@@ -4,6 +4,10 @@
 #include <inttypes.h>
 #include <errno.h>
 #include <time.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <lwip/netdb.h>
+#include <lwip/sockets.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
@@ -35,11 +39,11 @@
 #define DEFAULT_KEEPALIVE 120
 #define DEFAULT_RECONNECT_TIMEOUT_MS 10000
 #define DEFAULT_MAX_RETRIES 3
-#define DEFAULT_BUFFER_SIZE 512  
+#define DEFAULT_BUFFER_SIZE 512
 #define DEFAULT_MAX_QUEUE_SIZE 5  
 #define DEFAULT_STATUS_INTERVAL_MS 300000  // 5 minutes
 
-// Pending message structure - using header-defined constants
+// Pending message structure
 typedef struct {
     char topic[MQTT_TOPIC_MAX_LENGTH];
     char data[DEFAULT_BUFFER_SIZE];
@@ -48,7 +52,7 @@ typedef struct {
     bool retain;
 } mqtt_pending_message_t;
 
-// MQTT Manager context - PRODUCTION READY with explicit buffer sizes
+// MQTT Manager context
 typedef struct {
     mqtt_manager_state_t state;
     esp_mqtt_client_handle_t client;
@@ -67,8 +71,8 @@ typedef struct {
     int lwt_qos;
     bool lwt_retain;
     
-    char esp32_id[ESP32_ID_BUFFER_SIZE];      // Using defined constant (16 bytes)
-    char mac_address[ESP32_MAC_BUFFER_SIZE];  // Using defined constant (32 bytes)
+    char esp32_id[ESP32_ID_BUFFER_SIZE];
+    char mac_address[ESP32_MAC_BUFFER_SIZE];
     
     bool was_connected;
     int reconnect_attempts;
@@ -89,7 +93,7 @@ typedef struct {
 
 static mqtt_manager_context_t s_mqtt_manager_ctx = {0};
 
-// Input validation function - PRODUCTION SAFETY
+// Input validation function
 static esp_err_t validate_esp32_id(const char *esp32_id) {
     if (esp32_id == NULL) {
         ESP_LOGE(TAG, "ESP32 ID is NULL");
@@ -107,7 +111,6 @@ static esp_err_t validate_esp32_id(const char *esp32_id) {
         return ESP_ERR_INVALID_ARG;
     }
     
-    // Validate characters (alphanumeric only for safety)
     for (size_t i = 0; i < len; i++) {
         char c = esp32_id[i];
         if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'))) {
@@ -119,13 +122,13 @@ static esp_err_t validate_esp32_id(const char *esp32_id) {
     return ESP_OK;
 }
 
-// Generate message ID - simplified
+// Generate message ID
 static void generate_message_id(char *buffer, size_t size) {
     uint32_t random = esp_random();
     snprintf(buffer, size, "msg_%" PRIu32, random);
 }
 
-// MQTT event handler - PRODUCTION READY
+// MQTT event handler
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data) {
     esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
     mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
@@ -150,12 +153,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 ctx->state_callback(ctx->state, ctx->state_user_data);
             }
             
-            // Subscribe to config topic - SAFE with calculated buffer sizes
+            // Subscribe to config topic
             if (strlen(ctx->esp32_id) > 0) {
-                // Construct topic: "esp32/config/" + esp32_id = 13 + 8 = 21 chars max
-                // Reset topic: "esp32/config/" + esp32_id + "/reset" = 13 + 8 + 6 = 27 chars max
-                // Both fit comfortably in MQTT_TOPIC_MAX_LENGTH (128)
-                
                 snprintf(ctx->config_topic, sizeof(ctx->config_topic), "esp32/config/%s", ctx->esp32_id);
                 mqtt_manager_subscribe(ctx->config_topic, 0);
                 
@@ -164,7 +163,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 mqtt_manager_subscribe(reset_topic, 0);
             }
             
-            // Send pending messages (max 3)
+            // Send pending messages
             mqtt_pending_message_t pending_msg;
             int pending_count = 0;
             while (xQueueReceive(ctx->pending_messages, &pending_msg, 0) == pdTRUE && pending_count < 3) {
@@ -196,7 +195,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             break;
             
         case MQTT_EVENT_PUBLISHED:
-            // Just update timestamp
             break;
             
         case MQTT_EVENT_DATA:
@@ -235,7 +233,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     }
 }
 
-// Initialize MQTT Manager - optimized
+// Initialize MQTT Manager
 esp_err_t mqtt_manager_init(void) {
     mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
     
@@ -296,7 +294,7 @@ esp_err_t mqtt_manager_init(void) {
     return ESP_OK;
 }
 
-// Set ESP32 ID - PRODUCTION READY with validation
+// Set ESP32 ID
 esp_err_t mqtt_manager_set_esp32_id(const char *esp32_id) {
     mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
     
@@ -305,7 +303,6 @@ esp_err_t mqtt_manager_set_esp32_id(const char *esp32_id) {
         return ESP_ERR_INVALID_STATE;
     }
     
-    // PRODUCTION: Validate input thoroughly
     esp_err_t validation_result = validate_esp32_id(esp32_id);
     if (validation_result != ESP_OK) {
         return validation_result;
@@ -314,7 +311,6 @@ esp_err_t mqtt_manager_set_esp32_id(const char *esp32_id) {
     ESP_LOGI(TAG, "Setting credentials for ESP32 ID: %s", esp32_id);
     
     if (xSemaphoreTake(ctx->mutex, portMAX_DELAY) == pdTRUE) {
-        // Set credentials - using safe strncpy with validated input
         strncpy(ctx->esp32_id, esp32_id, sizeof(ctx->esp32_id) - 1);
         ctx->esp32_id[sizeof(ctx->esp32_id) - 1] = '\0';
         
@@ -330,7 +326,6 @@ esp_err_t mqtt_manager_set_esp32_id(const char *esp32_id) {
         ctx->password[sizeof(ctx->password) - 1] = '\0';
         
         // Set LWT topic and message
-        // Topic: "system/status/" + esp32_id = 14 + 8 = 22 chars max (fits in 128)
         snprintf(ctx->lwt_topic, sizeof(ctx->lwt_topic), "system/status/%s", esp32_id);
         
         char timestamp_str[MQTT_TIMESTAMP_MAX_LENGTH];
@@ -340,7 +335,6 @@ esp_err_t mqtt_manager_set_esp32_id(const char *esp32_id) {
             snprintf(timestamp_str, sizeof(timestamp_str), "%lld", (long long)(esp_timer_get_time() / 1000));
         }
         
-        // LWT Message: ~80 chars max (fits comfortably in 256)
         snprintf(ctx->lwt_message, sizeof(ctx->lwt_message),
                 "{\"esp32_id\":\"%.8s\",\"status\":\"OFFLINE\",\"timestamp\":%.32s}",
                 esp32_id, timestamp_str);
@@ -352,7 +346,7 @@ esp_err_t mqtt_manager_set_esp32_id(const char *esp32_id) {
     return ESP_OK;
 }
 
-// Connect to MQTT broker - PRODUCTION READY
+// Connect to MQTT broker - CORRECTED VERSION
 esp_err_t mqtt_manager_connect(void) {
     mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
     
@@ -388,7 +382,7 @@ esp_err_t mqtt_manager_connect(void) {
             ctx->client = NULL;
         }
         
-        // Memory cleanup for SSL
+        // Memory cleanup
         for (int i = 0; i < 3; i++) {
             heap_caps_check_integrity_all(true);
             vTaskDelay(pdMS_TO_TICKS(100));
@@ -398,10 +392,60 @@ esp_err_t mqtt_manager_connect(void) {
         esp_task_wdt_reset();
         #endif
         
-        // Build URI - calculated size: "mqtts://" + broker + ":" + port
-        // "mqtts://node02.myqtthub.com:8883" = 31 chars (fits in 128)
+        // Clean broker URL - remove any invalid characters
+        char cleaned_broker[MQTT_BROKER_MAX_LENGTH];
+        strncpy(cleaned_broker, ctx->broker_url, sizeof(cleaned_broker) - 1);
+        cleaned_broker[sizeof(cleaned_broker) - 1] = '\0';
+        
+        // Remove any leading invalid characters
+        char *clean_start = cleaned_broker;
+        while (*clean_start && (*clean_start == ':' || *clean_start == '/' || *clean_start <= ' ')) {
+            clean_start++;
+        }
+        
+        if (strlen(clean_start) == 0) {
+            ESP_LOGE(TAG, "Broker URL is empty after cleaning");
+            ctx->state = MQTT_MANAGER_STATE_ERROR;
+            xEventGroupSetBits(ctx->event_group, MQTT_ERROR_BIT);
+            xSemaphoreGive(ctx->mutex);
+            return ESP_ERR_INVALID_ARG;
+        }
+        
+        // Test DNS resolution before creating MQTT client
+        struct addrinfo hints, *result;
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_STREAM;
+        
+        ESP_LOGI(TAG, "Testing DNS resolution for: %s", clean_start);
+        int dns_result = getaddrinfo(clean_start, NULL, &hints, &result);
+        if (dns_result != 0) {
+            ESP_LOGE(TAG, "DNS resolution failed for %s: error %d", clean_start, dns_result);
+            ctx->state = MQTT_MANAGER_STATE_ERROR;
+            xEventGroupSetBits(ctx->event_group, MQTT_ERROR_BIT);
+            xSemaphoreGive(ctx->mutex);
+            return ESP_FAIL;
+        } else {
+            ESP_LOGI(TAG, "DNS resolution successful for %s", clean_start);
+            freeaddrinfo(result);
+        }
+        
+        // Build URI
         char uri[MQTT_URI_MAX_LENGTH];
-        snprintf(uri, sizeof(uri), "%s://%s:%d", ctx->use_ssl ? "mqtts" : "mqtt", ctx->broker_url, ctx->port);
+        int uri_len = snprintf(uri, sizeof(uri), "%s://%s:%d", 
+                              ctx->use_ssl ? "mqtts" : "mqtt", 
+                              clean_start, 
+                              ctx->port);
+        
+        if (uri_len < 0 || uri_len >= sizeof(uri)) {
+            ESP_LOGE(TAG, "URI too long or formatting error");
+            ctx->state = MQTT_MANAGER_STATE_ERROR;
+            xEventGroupSetBits(ctx->event_group, MQTT_ERROR_BIT);
+            xSemaphoreGive(ctx->mutex);
+            return ESP_ERR_INVALID_SIZE;
+        }
+        
+        ESP_LOGI(TAG, "Connecting to URI: %s", uri);
         
         // Configure MQTT client
         esp_mqtt_client_config_t mqtt_cfg = {0};
@@ -412,7 +456,11 @@ esp_err_t mqtt_manager_connect(void) {
         mqtt_cfg.session.keepalive = DEFAULT_KEEPALIVE;
         mqtt_cfg.session.disable_clean_session = false;
         
-        // Last Will Testament - Update with current timestamp
+        // Longer timeouts to avoid connection issues
+        mqtt_cfg.network.timeout_ms = 60000;
+        mqtt_cfg.network.reconnect_timeout_ms = 30000;
+        
+        // Last Will Testament
         if (time_manager_is_synchronized()) {
             char timestamp_str[MQTT_TIMESTAMP_MAX_LENGTH];
             time_manager_get_timestamp(timestamp_str, sizeof(timestamp_str));
@@ -471,10 +519,10 @@ esp_err_t mqtt_manager_connect(void) {
         ctx->state_callback(ctx->state, ctx->state_user_data);
     }
     
-    // Wait for connection
+    // Wait for connection with longer timeout
     EventBits_t bits = xEventGroupWaitBits(ctx->event_group,
                                           MQTT_CONNECTED_BIT | MQTT_ERROR_BIT,
-                                          pdFALSE, pdFALSE, pdMS_TO_TICKS(15000));
+                                          pdFALSE, pdFALSE, pdMS_TO_TICKS(60000));
     
     if (bits & MQTT_CONNECTED_BIT) {
         ESP_LOGI(TAG, "MQTT connected successfully");
@@ -729,7 +777,7 @@ mqtt_manager_state_t mqtt_manager_get_state(void) {
     return ctx->state;
 }
 
-// Send network info - PRODUCTION READY with calculated buffer sizes
+// Send network info
 esp_err_t mqtt_manager_send_network_info(void) {
     mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
     
@@ -737,20 +785,26 @@ esp_err_t mqtt_manager_send_network_info(void) {
         return ESP_ERR_INVALID_STATE;
     }
     
-    char json_buffer[MQTT_JSON_BUFFER_MAX_LENGTH];
+    size_t free_heap = esp_get_free_heap_size();
+    if (free_heap < 30000) {
+        ESP_LOGW(TAG, "Insufficient memory for network info: %zu bytes", free_heap);
+        return ESP_ERR_NO_MEM;
+    }
+    
+    static char json_buffer[512];
     char ip_address[16] = "0.0.0.0";
     
     wifi_manager_get_ip(ip_address, sizeof(ip_address));
     
-    char timestamp_str[MQTT_TIMESTAMP_MAX_LENGTH];
-    char time_str[64]; 
+    char timestamp_str[32];
+    char time_str[32];
     
     if (time_manager_is_synchronized()) {
         time_manager_get_timestamp(timestamp_str, sizeof(timestamp_str));
         time_manager_get_lima_time_str(time_str, sizeof(time_str));
     } else {
         time_t now = time(NULL);
-        if (now > 1577836800) {  // Valid time
+        if (now > 1577836800) {
             snprintf(timestamp_str, sizeof(timestamp_str), "%ld", (long)now);
             
             struct tm *timeinfo = gmtime(&now);
@@ -771,20 +825,26 @@ esp_err_t mqtt_manager_send_network_info(void) {
         }
     }
     
-    // Calculated JSON size: ~150 chars max - fits comfortably in 512 bytes
     int len = snprintf(json_buffer, sizeof(json_buffer),
-                      "{\"esp32_id\":\"%s\",\"MAC\":\"%s\",\"IP\":\"%s\","
-                      "\"status\":\"ONLINE\",\"timestamp\":%s,\"time\":\"%s\"}",
+                      "{\"esp32_id\":\"%.8s\",\"MAC\":\"%.12s\",\"IP\":\"%.15s\","
+                      "\"status\":\"ONLINE\",\"timestamp\":%.20s,\"time\":\"%.31s\"}",
                       ctx->esp32_id, ctx->mac_address, ip_address, timestamp_str, time_str);
     
     if (len < 0 || len >= sizeof(json_buffer)) {
+        ESP_LOGE(TAG, "JSON buffer overflow in network info");
         return ESP_ERR_NO_MEM;
     }
     
-    return mqtt_manager_publish("esp32/network_info", json_buffer, strlen(json_buffer), 0, false);
+    esp_err_t ret = mqtt_manager_publish("esp32/network_info", json_buffer, len, 0, false);
+    
+    if (ret == ESP_OK) {
+        vTaskDelay(pdMS_TO_TICKS(10)); 
+    }
+    
+    return ret;
 }
 
-// Send heartbeat - PRODUCTION READY with calculated buffer sizes
+// Send heartbeat
 esp_err_t mqtt_manager_send_heartbeat(void) {
     mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
     
@@ -796,16 +856,22 @@ esp_err_t mqtt_manager_send_heartbeat(void) {
         return ESP_FAIL;
     }
     
-    char json_buffer[MQTT_JSON_BUFFER_MAX_LENGTH];
-    char message_id[32];
+    size_t free_heap = esp_get_free_heap_size();
+    if (free_heap < 25000) {
+        ESP_LOGW(TAG, "Insufficient memory for heartbeat: %zu bytes", free_heap);
+        return ESP_ERR_NO_MEM;
+    }
+    
+    static char json_buffer[384];
+    char message_id[16];
     
     generate_message_id(message_id, sizeof(message_id));
     
-    char topic[MQTT_TOPIC_MAX_LENGTH];
-    snprintf(topic, sizeof(topic), "system/status/%s", ctx->esp32_id);
+    char topic[64];
+    snprintf(topic, sizeof(topic), "system/status/%.8s", ctx->esp32_id);
     
-    char timestamp_str[MQTT_TIMESTAMP_MAX_LENGTH];
-    char time_str[64] = {0};
+    char timestamp_str[20];
+    char time_str[32] = {0};
     
     if (time_manager_is_synchronized()) {
         time_manager_get_timestamp(timestamp_str, sizeof(timestamp_str));
@@ -817,40 +883,40 @@ esp_err_t mqtt_manager_send_heartbeat(void) {
     int len;
     if (strlen(ctx->client_panel_id) > 0 && strlen(ctx->panel_id) > 0) {
         if (time_str[0] != 0) {
-            // Calculated JSON size: ~200 chars max - fits comfortably in 512 bytes  
             len = snprintf(json_buffer, sizeof(json_buffer),
-                          "{\"esp32_id\":\"%s\",\"status\":\"ONLINE\","
-                          "\"timestamp\":%s,\"type\":\"heartbeat\","
-                          "\"message_id\":\"%s\",\"client_id\":\"%s\","
-                          "\"panel_id\":\"%s\",\"time\":\"%s\"}",
+                          "{\"esp32_id\":\"%.8s\",\"status\":\"ONLINE\","
+                          "\"timestamp\":%.15s,\"type\":\"heartbeat\","
+                          "\"message_id\":\"%.15s\",\"client_id\":\"%.31s\","
+                          "\"panel_id\":\"%.31s\",\"time\":\"%.31s\"}",
                           ctx->esp32_id, timestamp_str, message_id,
                           ctx->client_panel_id, ctx->panel_id, time_str);
         } else {
             len = snprintf(json_buffer, sizeof(json_buffer),
-                          "{\"esp32_id\":\"%s\",\"status\":\"ONLINE\","
-                          "\"timestamp\":%s,\"type\":\"heartbeat\","
-                          "\"message_id\":\"%s\",\"client_id\":\"%s\","
-                          "\"panel_id\":\"%s\"}",
+                          "{\"esp32_id\":\"%.8s\",\"status\":\"ONLINE\","
+                          "\"timestamp\":%.15s,\"type\":\"heartbeat\","
+                          "\"message_id\":\"%.15s\",\"client_id\":\"%.31s\","
+                          "\"panel_id\":\"%.31s\"}",
                           ctx->esp32_id, timestamp_str, message_id,
                           ctx->client_panel_id, ctx->panel_id);
         }
     } else {
         if (time_str[0] != 0) {
             len = snprintf(json_buffer, sizeof(json_buffer),
-                          "{\"esp32_id\":\"%s\",\"status\":\"ONLINE\","
-                          "\"timestamp\":%s,\"type\":\"heartbeat\","
-                          "\"message_id\":\"%s\",\"time\":\"%s\"}",
+                          "{\"esp32_id\":\"%.8s\",\"status\":\"ONLINE\","
+                          "\"timestamp\":%.15s,\"type\":\"heartbeat\","
+                          "\"message_id\":\"%.15s\",\"time\":\"%.31s\"}",
                           ctx->esp32_id, timestamp_str, message_id, time_str);
         } else {
             len = snprintf(json_buffer, sizeof(json_buffer),
-                          "{\"esp32_id\":\"%s\",\"status\":\"ONLINE\","
-                          "\"timestamp\":%s,\"type\":\"heartbeat\","
-                          "\"message_id\":\"%s\"}",
+                          "{\"esp32_id\":\"%.8s\",\"status\":\"ONLINE\","
+                          "\"timestamp\":%.15s,\"type\":\"heartbeat\","
+                          "\"message_id\":\"%.15s\"}",
                           ctx->esp32_id, timestamp_str, message_id);
         }
     }
     
     if (len < 0 || len >= sizeof(json_buffer)) {
+        ESP_LOGE(TAG, "JSON buffer overflow in heartbeat");
         return ESP_ERR_NO_MEM;
     }
     
@@ -858,7 +924,38 @@ esp_err_t mqtt_manager_send_heartbeat(void) {
     
     if (ret == ESP_OK) {
         ctx->last_heartbeat_time = esp_timer_get_time() / 1000;
+        vTaskDelay(pdMS_TO_TICKS(5));
     }
     
     return ret;
+}
+
+// Emergency memory cleanup
+esp_err_t mqtt_manager_emergency_memory_cleanup(void) {
+    mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
+    
+    if (ctx->event_group == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    ESP_LOGW(TAG, "Performing emergency MQTT memory cleanup");
+    
+    // Clear pending message queue
+    if (ctx->pending_messages) {
+        mqtt_pending_message_t dummy_msg;
+        int cleared = 0;
+        while (xQueueReceive(ctx->pending_messages, &dummy_msg, 0) == pdTRUE) {
+            cleared++;
+        }
+        if (cleared > 0) {
+            ESP_LOGI(TAG, "Cleared %d pending messages", cleared);
+        }
+    }
+    
+    vTaskDelay(pdMS_TO_TICKS(50));
+    
+    size_t free_after = esp_get_free_heap_size();
+    ESP_LOGI(TAG, "Memory after MQTT cleanup: %zu bytes", free_after);
+    
+    return ESP_OK;
 }

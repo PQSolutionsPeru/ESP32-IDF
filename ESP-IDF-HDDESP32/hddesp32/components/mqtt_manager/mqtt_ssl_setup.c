@@ -2,7 +2,7 @@
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "esp_tls.h"
-#include "esp_crt_bundle.h"  // Ahora disponible con certificate bundle habilitado
+#include "esp_crt_bundle.h"
 #include <inttypes.h>
 
 #define TAG "MQTT_SSL"
@@ -26,36 +26,26 @@ esp_err_t mqtt_ssl_setup_minimal_config(esp_mqtt_client_config_t *mqtt_cfg) {
         ESP_LOGW(TAG, "Low memory before SSL setup (%" PRIu32 " bytes), may cause issues", free_heap);
     }
     
-    // ********** CONFIGURACIÓN ORIGINAL QUE FUNCIONABA **********
-    
-    // 1. USAR certificate bundle pero sin verificar (como el código original)
+    // Configuración SSL mínima - NO verificar certificados
     mqtt_cfg->broker.verification.crt_bundle_attach = esp_crt_bundle_attach;
-    
-    // 2. NO verificar el nombre común del certificado (equivalente a CERT_NONE)
     mqtt_cfg->broker.verification.skip_cert_common_name_check = true;
-    
-    // 3. NO usar certificados personalizados
     mqtt_cfg->broker.verification.certificate = NULL;
     mqtt_cfg->broker.verification.certificate_len = 0;
-    
-    // 4. NO usar el store global de CA
     mqtt_cfg->broker.verification.use_global_ca_store = false;
-    
-    // 5. Configuración adicional de TLS para compatibilidad
     mqtt_cfg->broker.verification.alpn_protos = NULL;
     
-    // ********** CONFIGURACIÓN DE RED OPTIMIZADA **********
+    // Configuración de red con timeouts más largos
     mqtt_cfg->network.disable_auto_reconnect = false;
-    mqtt_cfg->network.reconnect_timeout_ms = 30000; // 30 segundos
-    mqtt_cfg->network.timeout_ms = 30000;          // 30 segundos
+    mqtt_cfg->network.reconnect_timeout_ms = 60000;
+    mqtt_cfg->network.timeout_ms = 60000;
     
-    // ********** CONFIGURACIÓN DE TAREA OPTIMIZADA **********
-    mqtt_cfg->task.stack_size = 8192;  // Stack adecuado para SSL con bundle
+    // Configuración de tarea optimizada
+    mqtt_cfg->task.stack_size = 6144;
     mqtt_cfg->task.priority = 5;
     
-    // ********** CONFIGURACIÓN DE BUFFER OPTIMIZADA **********
-    mqtt_cfg->buffer.size = 1024;      // Buffer moderado
-    mqtt_cfg->buffer.out_size = 1024;  // Buffer de salida
+    // Configuración de buffer
+    mqtt_cfg->buffer.size = 1024;
+    mqtt_cfg->buffer.out_size = 1024;
     
     ESP_LOGI(TAG, "CERT_NONE SSL configuration applied successfully (with certificate bundle)");
     

@@ -44,6 +44,19 @@ esp_err_t time_manager_epoch_to_iso8601(time_t epoch, char *iso_out, size_t max_
 // Utilidades específicas para el formato Lima, Perú
 esp_err_t time_manager_get_lima_time_str(char *time_out, size_t max_len);
 
+// ← NUEVAS FUNCIONES PARA MANEJO SEGURO DE NETWORK INFO
+/**
+ * @brief Verifica si hay que enviar network info después de sincronización NTP
+ * 
+ * @return true si hay que enviar, false si no
+ */
+bool time_manager_should_send_network_info(void);
+
+/**
+ * @brief Marca network info como enviado (limpiar flag)
+ */
+void time_manager_mark_network_info_sent(void);
+
 #ifdef __cplusplus
 }
 #endif

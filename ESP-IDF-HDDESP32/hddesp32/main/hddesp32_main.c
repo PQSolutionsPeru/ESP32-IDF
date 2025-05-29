@@ -81,7 +81,7 @@ static void watchdog_event_callback(watchdog_health_status_t status, watchdog_ch
             case WATCHDOG_CHECK_MEMORY:
                 ESP_LOGE(TAG, "Critical memory situation detected");
                 // Intentar liberación de memoria de emergencia
-                // Forzar recolección de basura si hay algún subsistema que lo soporte
+                mqtt_manager_emergency_memory_cleanup();
                 break;
                 
             case WATCHDOG_CHECK_WIFI:
@@ -239,7 +239,7 @@ static void on_wifi_connect_callback(void *user_data) {
     }
 }
 
-// Task para monitoreo del sistema - VERSION CORREGIDA
+// Task para monitoreo del sistema - VERSION CORREGIDA SIN wifi_manager_is_connecting()
 static void system_monitor_task(void *pvParameters) {
     ESP_LOGI(TAG, "System monitor task started");
     
@@ -281,6 +281,40 @@ static void system_monitor_task(void *pvParameters) {
         
         cycle_count++;
         
+        // Manejar network info pendiente después de NTP sync
+        if (time_manager_should_send_network_info()) {
+            ESP_LOGI(TAG, "Sending network info after NTP synchronization");
+            esp_err_t ret = mqtt_manager_send_network_info();
+            if (ret == ESP_OK) {
+                ESP_LOGI(TAG, "Network info sent successfully");
+                time_manager_mark_network_info_sent();
+            } else {
+                ESP_LOGW(TAG, "Failed to send network info: %s", esp_err_to_name(ret));
+                // Reintentar en el siguiente ciclo
+            }
+        }
+        
+        // Limpieza agresiva de memoria si está baja
+        size_t free_heap = esp_get_free_heap_size();
+        if (free_heap < 40000) {  // Umbral más alto para prevención
+            ESP_LOGW(TAG, "Low memory detected: %zu bytes - Performing emergency cleanup", free_heap);
+            
+            // Limpiar colas MQTT si es posible
+            if (mqtt_manager_is_connected()) {
+                ESP_LOGI(TAG, "Triggering MQTT memory cleanup");
+                mqtt_manager_emergency_memory_cleanup();
+            }
+            
+            // Forzar garbage collection si hubiera
+            for (int i = 0; i < 5; i++) {
+                vTaskDelay(pdMS_TO_TICKS(10));
+            }
+            
+            size_t free_after = esp_get_free_heap_size();
+            ESP_LOGI(TAG, "Memory after cleanup: %zu bytes (recovered: %d bytes)", 
+                    free_after, (int)(free_after - free_heap));
+        }
+        
         // Memoria cada 10 minutos (reduce overhead)
         if (cycle_count % 120 == 0) {
             print_memory_info();
@@ -305,13 +339,23 @@ static void system_monitor_task(void *pvParameters) {
                 esp_wifi_set_mode(WIFI_MODE_STA);
             }
             
-            // Verificar tiempo
+            // Verificar tiempo - CON MANEJO DE ERRORES MEJORADO
             if (!time_manager_is_synchronized()) {
-                time_manager_check_sync();
+                esp_err_t time_ret = time_manager_check_sync();
+                if (time_ret != ESP_OK && time_ret != ESP_ERR_NOT_FINISHED) {
+                    ESP_LOGD(TAG, "Time sync check result: %s", esp_err_to_name(time_ret));
+                }
             }
             
-            // Procesar MQTT
-            mqtt_manager_loop(0);
+            // Procesar MQTT - CON VERIFICACIÓN DE MEMORIA
+            if (free_heap > 30000) {  // Solo procesar MQTT si hay suficiente memoria
+                esp_err_t mqtt_ret = mqtt_manager_loop(0);
+                if (mqtt_ret != ESP_OK) {
+                    ESP_LOGD(TAG, "MQTT loop result: %s", esp_err_to_name(mqtt_ret));
+                }
+            } else {
+                ESP_LOGW(TAG, "Skipping MQTT loop due to low memory: %zu bytes", free_heap);
+            }
             
             if (mqtt_connected) {
                 // Reportar actividad MQTT (solo si watchdog está disponible)
@@ -329,18 +373,20 @@ static void system_monitor_task(void *pvParameters) {
                     }
                 }
             } else {
-                // Reintentar MQTT cada 2 minutos
-                if (cycle_count % 24 == 0) {
+                // Reintentar MQTT cada 2 minutos - SOLO SI HAY SUFICIENTE MEMORIA
+                if (cycle_count % 24 == 0 && free_heap > 50000) {
                     ESP_LOGI(TAG, "Retrying MQTT connection");
                     char esp32_id[ESP32_ID_LENGTH + 1];
                     if (esp32_id_manager_get_id(esp32_id, sizeof(esp32_id)) == ESP_OK) {
                         mqtt_manager_set_esp32_id(esp32_id);
                         mqtt_manager_connect();
                     }
+                } else if (free_heap <= 50000) {
+                    ESP_LOGW(TAG, "Skipping MQTT reconnect due to low memory: %zu bytes", free_heap);
                 }
             }
         } else {
-            // WiFi desconectado - intentar reconexión
+            // ← CORRECCIÓN CRÍTICA: WiFi desconectado - verificar recovery SIN wifi_manager_is_connecting()
             if (cycle_count % 12 == 0) {
                 ESP_LOGI(TAG, "WiFi disconnected - attempting recovery");
                 wifi_manager_handle_disconnection("FirePanel", "firepanel", 3);

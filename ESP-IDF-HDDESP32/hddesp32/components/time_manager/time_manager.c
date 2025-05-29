@@ -17,6 +17,7 @@ static const char *TAG = "TIME_MGR";
 // Event group bits
 #define TIME_SYNC_BIT BIT0
 #define TIME_UNSYNC_BIT BIT1
+#define TIME_SEND_NETWORK_INFO_BIT BIT2  // ← NUEVO BIT PARA SEÑALAR ENVÍO
 
 // Constants optimized for 4MB ESP32
 #define NTP_SERVER_PRIMARY "pool.ntp.org"
@@ -37,24 +38,26 @@ typedef struct {
     int64_t last_sync_time;
     int sync_retry_count;
     bool sntp_initialized;
+    bool network_info_pending;  // ← NUEVO FLAG
 } time_manager_context_t;
 
 static time_manager_context_t s_time_manager_ctx = {0};
 
-// SNTP callback - ULTRA-SIMPLIFIED for 4MB ESP32
+// SNTP callback - CORREGIDO: NO llamar MQTT desde aquí
 static void sntp_sync_callback(struct timeval *tv)
 {
     time_manager_context_t *ctx = &s_time_manager_ctx;
     
     ESP_LOGI(TAG, "NTP synchronized successfully");
     
-    if (xSemaphoreTake(ctx->mutex, portMAX_DELAY) == pdTRUE) {
+    if (xSemaphoreTake(ctx->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         ctx->state = TIME_MANAGER_STATE_SYNCHRONIZED;
         ctx->last_sync_time = esp_timer_get_time() / 1000;
         ctx->sync_retry_count = 0;
+        ctx->network_info_pending = true;  // ← MARCAR COMO PENDIENTE
         
         xEventGroupClearBits(ctx->event_group, TIME_UNSYNC_BIT);
-        xEventGroupSetBits(ctx->event_group, TIME_SYNC_BIT);
+        xEventGroupSetBits(ctx->event_group, TIME_SYNC_BIT | TIME_SEND_NETWORK_INFO_BIT);
         xSemaphoreGive(ctx->mutex);
     }
     
@@ -64,11 +67,30 @@ static void sntp_sync_callback(struct timeval *tv)
         ESP_LOGI(TAG, "Lima time: %s", time_str);
     }
     
-    // Send updated network info if WiFi connected
-    if (wifi_manager_is_connected()) {
-        esp_err_t ret = mqtt_manager_send_network_info();
-        if (ret == ESP_OK) {
-            ESP_LOGI(TAG, "Network info updated with synchronized time");
+    // NO LLAMAR MQTT DESDE AQUÍ - será manejado por el task principal
+}
+
+// NUEVA FUNCIÓN: Verificar si hay que enviar network info
+bool time_manager_should_send_network_info(void) {
+    time_manager_context_t *ctx = &s_time_manager_ctx;
+    
+    if (ctx->event_group == NULL) {
+        return false;
+    }
+    
+    EventBits_t bits = xEventGroupGetBits(ctx->event_group);
+    return (bits & TIME_SEND_NETWORK_INFO_BIT) != 0;
+}
+
+// NUEVA FUNCIÓN: Marcar network info como enviado
+void time_manager_mark_network_info_sent(void) {
+    time_manager_context_t *ctx = &s_time_manager_ctx;
+    
+    if (ctx->event_group != NULL) {
+        if (xSemaphoreTake(ctx->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+            ctx->network_info_pending = false;
+            xEventGroupClearBits(ctx->event_group, TIME_SEND_NETWORK_INFO_BIT);
+            xSemaphoreGive(ctx->mutex);
         }
     }
 }
@@ -106,6 +128,7 @@ esp_err_t time_manager_init(void)
     ctx->last_sync_time = 0;
     ctx->sync_retry_count = 0;
     ctx->sntp_initialized = false;
+    ctx->network_info_pending = false;  // ← INICIALIZAR NUEVO FLAG
     
     // Set timezone for Lima, Peru (UTC-5)
     setenv("TZ", "PET5", 1);
