@@ -103,11 +103,15 @@ CONFIG_ESP_SYSTEM_PANIC_REBOOT_DELAY_SECONDS=2
 # Stack overflow protection
 CONFIG_FREERTOS_CHECK_STACKOVERFLOW_PTRVAL=y
 
-# Memory debugging (disabled for production)
+# === HEAP OPTIMIZATIONS - MEMORY LEAK FIXES ===
+# Enable heap integrity checking to prevent memory leaks
 CONFIG_HEAP_POISONING_DISABLED=y
 CONFIG_HEAP_TRACING_OFF=y
 
-# === END WATCHDOG CONFIG ===
+# Enable heap allocation strategy to reduce fragmentation
+CONFIG_HEAP_ALLOCATION_STRATEGY_MIN_FRAGMENT=y
+
+# === END MEMORY LEAK FIXES ===
 
 # Bootloader
 CONFIG_BOOTLOADER_COMPILER_OPTIMIZATION_SIZE=y

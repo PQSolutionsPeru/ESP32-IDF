@@ -94,13 +94,61 @@ static esp_err_t handle_status_api(int sock) {
     return send_response(sock, "200 OK", "application/json", resp_str, strlen(resp_str));
 }
 
+// Reemplazar la función handle_scan_api() en simple_http_server.c (alrededor de línea 60):
+
 // Función para manejar peticiones a la API de escaneo WiFi
 static esp_err_t handle_scan_api(int sock) {
-    // Iniciar escaneo
-    wifi_manager_start_scan();
+    ESP_LOGI(TAG, "Starting WiFi scan request");
     
-    // Esperar a que termine
-    vTaskDelay(pdMS_TO_TICKS(2000));
+    // Iniciar escaneo
+    esp_err_t scan_ret = wifi_manager_start_scan();
+    if (scan_ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start WiFi scan: %s", esp_err_to_name(scan_ret));
+        
+        // Enviar respuesta de error
+        cJSON *error_root = cJSON_CreateObject();
+        cJSON_AddBoolToObject(error_root, "success", false);
+        cJSON_AddStringToObject(error_root, "error", "Failed to start WiFi scan");
+        cJSON_AddItemToObject(error_root, "networks", cJSON_CreateArray());
+        
+        char *error_json = cJSON_Print(error_root);
+        esp_err_t ret = send_response(sock, "500 Internal Server Error", "application/json", error_json, strlen(error_json));
+        
+        cJSON_Delete(error_root);
+        free(error_json);
+        return ret;
+    }
+    
+    // Esperar a que termine - aumentar tiempo de espera para modo switching
+    ESP_LOGI(TAG, "Waiting for scan completion...");
+    
+    // Esperar hasta 8 segundos para que termine el scan (incluye tiempo de cambio de modo)
+    int max_wait_cycles = 40; // 40 * 200ms = 8 segundos
+    int wait_cycles = 0;
+    
+    while (wait_cycles < max_wait_cycles) {
+        vTaskDelay(pdMS_TO_TICKS(200));
+        wait_cycles++;
+        
+        // Verificar si el scan terminó
+        wifi_scan_result_t test_networks[1];
+        size_t test_num = 0;
+        esp_err_t test_ret = wifi_manager_get_scan_results(test_networks, 1, &test_num);
+        
+        if (test_ret == ESP_OK || test_ret == ESP_ERR_NOT_FOUND) {
+            // El scan terminó (con o sin resultados)
+            break;
+        } else if (test_ret != ESP_ERR_TIMEOUT) {
+            // Error real, no timeout
+            ESP_LOGE(TAG, "Error getting scan results: %s", esp_err_to_name(test_ret));
+            break;
+        }
+        // Si es timeout, continuar esperando
+    }
+    
+    if (wait_cycles >= max_wait_cycles) {
+        ESP_LOGW(TAG, "Scan timeout after %d seconds", max_wait_cycles * 200 / 1000);
+    }
     
     // Obtener resultados del escaneo
     wifi_scan_result_t networks[20];
@@ -112,13 +160,53 @@ static esp_err_t handle_scan_api(int sock) {
     cJSON *nets_array = cJSON_CreateArray();
     
     if (ret == ESP_OK && num_networks > 0) {
+        ESP_LOGI(TAG, "Scan completed successfully, found %zu networks", num_networks);
+        
         for (size_t i = 0; i < num_networks; i++) {
-            cJSON *network = cJSON_CreateObject();
-            cJSON_AddStringToObject(network, "ssid", networks[i].ssid);
-            cJSON_AddNumberToObject(network, "rssi", networks[i].rssi);
-            cJSON_AddNumberToObject(network, "auth", networks[i].auth_mode);
-            cJSON_AddItemToArray(nets_array, network);
+            // Filtrar SSIDs vacíos o muy cortos
+            if (strlen(networks[i].ssid) > 0) {
+                cJSON *network = cJSON_CreateObject();
+                cJSON_AddStringToObject(network, "ssid", networks[i].ssid);
+                cJSON_AddNumberToObject(network, "rssi", networks[i].rssi);
+                cJSON_AddNumberToObject(network, "auth", networks[i].auth_mode);
+                
+                // Agregar información de seguridad legible
+                const char* security = "Open";
+                switch (networks[i].auth_mode) {
+                    case WIFI_AUTH_WEP:
+                        security = "WEP";
+                        break;
+                    case WIFI_AUTH_WPA_PSK:
+                        security = "WPA";
+                        break;
+                    case WIFI_AUTH_WPA2_PSK:
+                        security = "WPA2";
+                        break;
+                    case WIFI_AUTH_WPA_WPA2_PSK:
+                        security = "WPA/WPA2";
+                        break;
+                    case WIFI_AUTH_WPA3_PSK:
+                        security = "WPA3";
+                        break;
+                    default:
+                        security = "Unknown";
+                        break;
+                }
+                cJSON_AddStringToObject(network, "security", security);
+                
+                cJSON_AddItemToArray(nets_array, network);
+            }
         }
+        
+        cJSON_AddBoolToObject(root, "success", true);
+    } else if (ret == ESP_ERR_NOT_FOUND || num_networks == 0) {
+        ESP_LOGW(TAG, "Scan completed but no networks found");
+        cJSON_AddBoolToObject(root, "success", true);
+        cJSON_AddStringToObject(root, "message", "No networks found");
+    } else {
+        ESP_LOGE(TAG, "Scan failed: %s", esp_err_to_name(ret));
+        cJSON_AddBoolToObject(root, "success", false);
+        cJSON_AddStringToObject(root, "error", "Scan failed or timed out");
     }
     
     cJSON_AddItemToObject(root, "networks", nets_array);

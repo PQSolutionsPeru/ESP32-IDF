@@ -53,6 +53,7 @@ typedef struct {
     uint16_t scan_ap_count;
     wifi_ap_record_t *scan_ap_list;
     bool scan_in_progress;
+    bool temporary_apsta_mode;  // NUEVO: indica si cambiamos temporalmente a AP+STA para scan
     void (*state_callback)(wifi_manager_state_t state, void *user_data);
     void *user_data;
 } wifi_manager_context_t;
@@ -162,7 +163,6 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                 
             case WIFI_EVENT_SCAN_DONE: {
                 wifi_event_sta_scan_done_t *scan_done = (wifi_event_sta_scan_done_t*) event_data;
-                // Usar %d en lugar de %" PRIi32" para evitar problemas de formato
                 ESP_LOGI(TAG, "WiFi scan completed, status: %d, found APs: %u",
                          (int)scan_done->status, (unsigned int)scan_done->number);
                 
@@ -183,19 +183,41 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                             ESP_LOGE(TAG, "Failed to allocate memory for scan results");
                             ctx->scan_ap_count = 0;
                         } else {
-                            // Obtener la lista de APs encontrados
-                            ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&ctx->scan_ap_count, ctx->scan_ap_list));
-                            
-                            // Ordenar por RSSI (de más fuerte a más débil)
-                            for (int i = 0; i < ctx->scan_ap_count - 1; i++) {
-                                for (int j = i + 1; j < ctx->scan_ap_count; j++) {
-                                    if (ctx->scan_ap_list[j].rssi > ctx->scan_ap_list[i].rssi) {
-                                        wifi_ap_record_t temp = ctx->scan_ap_list[i];
-                                        ctx->scan_ap_list[i] = ctx->scan_ap_list[j];
-                                        ctx->scan_ap_list[j] = temp;
+                            // IMPORTANTE: Obtener resultados ANTES de cambiar modo
+                            esp_err_t get_ret = esp_wifi_scan_get_ap_records(&ctx->scan_ap_count, ctx->scan_ap_list);
+                            if (get_ret == ESP_OK) {
+                                ESP_LOGI(TAG, "Successfully retrieved %u scan results", ctx->scan_ap_count);
+                                
+                                // Ordenar por RSSI (de más fuerte a más débil)
+                                for (int i = 0; i < ctx->scan_ap_count - 1; i++) {
+                                    for (int j = i + 1; j < ctx->scan_ap_count; j++) {
+                                        if (ctx->scan_ap_list[j].rssi > ctx->scan_ap_list[i].rssi) {
+                                            wifi_ap_record_t temp = ctx->scan_ap_list[i];
+                                            ctx->scan_ap_list[i] = ctx->scan_ap_list[j];
+                                            ctx->scan_ap_list[j] = temp;
+                                        }
                                     }
                                 }
+                            } else {
+                                ESP_LOGE(TAG, "Failed to get scan records: %s", esp_err_to_name(get_ret));
+                                free(ctx->scan_ap_list);
+                                ctx->scan_ap_list = NULL;
+                                ctx->scan_ap_count = 0;
                             }
+                        }
+                    }
+                }
+                
+                // AHORA SÍ cambiar modo después de obtener resultados
+                if (ctx->temporary_apsta_mode) {
+                    ESP_LOGI(TAG, "Reverting to AP mode after scan completion");
+                    ctx->temporary_apsta_mode = false;
+                    
+                    // Solo volver a AP si no estamos conectados como STA
+                    if (!wifi_manager_is_connected()) {
+                        esp_err_t mode_ret = esp_wifi_set_mode(WIFI_MODE_AP);
+                        if (mode_ret != ESP_OK) {
+                            ESP_LOGE(TAG, "Failed to revert to AP mode: %s", esp_err_to_name(mode_ret));
                         }
                     }
                 }
@@ -275,6 +297,7 @@ esp_err_t wifi_manager_init(void)
     // Inicializar estado
     ctx->state = WIFI_MANAGER_STATE_INIT;
     ctx->scan_in_progress = false;
+    ctx->temporary_apsta_mode = false;  // NUEVO: inicializar flag de modo temporal
     ctx->event_group = xEventGroupCreate();
     if (ctx->event_group == NULL) {
         ESP_LOGE(TAG, "Failed to create event group");
@@ -996,7 +1019,7 @@ esp_err_t wifi_manager_forget_network(void)
     return ESP_OK;
 }
 
-// Iniciar escaneo de redes WiFi
+// Iniciar escaneo de redes WiFi - FUNCIÓN CORREGIDA
 esp_err_t wifi_manager_start_scan(void)
 {
     wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
@@ -1008,6 +1031,37 @@ esp_err_t wifi_manager_start_scan(void)
     
     ESP_LOGI(TAG, "Starting WiFi scan");
     
+    // Verificar si ya hay un scan en progreso
+    if (ctx->scan_in_progress) {
+        ESP_LOGW(TAG, "Scan already in progress");
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    // Verificar modo WiFi actual
+    wifi_mode_t current_mode;
+    esp_err_t ret = esp_wifi_get_mode(&current_mode);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get WiFi mode: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    
+    // Si estamos en modo AP puro, necesitamos cambiar a AP+STA temporalmente
+    if (current_mode == WIFI_MODE_AP) {
+        ESP_LOGI(TAG, "Switching from AP to AP+STA mode for scanning");
+        ret = esp_wifi_set_mode(WIFI_MODE_APSTA);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to switch to AP+STA mode: %s", esp_err_to_name(ret));
+            return ret;
+        }
+        
+        ctx->temporary_apsta_mode = true;
+        
+        // Dar tiempo para que se configure el modo
+        vTaskDelay(pdMS_TO_TICKS(500));
+    } else {
+        ctx->temporary_apsta_mode = false;
+    }
+    
     // Limpiar bits de escaneo previo
     xEventGroupClearBits(ctx->event_group, WIFI_SCAN_DONE_BIT);
     
@@ -1015,8 +1069,25 @@ esp_err_t wifi_manager_start_scan(void)
     ctx->scan_in_progress = true;
     
     // Iniciar escaneo
-    ESP_ERROR_CHECK(esp_wifi_scan_start(&ctx->scan_config, false));
+    ret = esp_wifi_scan_start(&ctx->scan_config, false);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start WiFi scan: %s", esp_err_to_name(ret));
+        ctx->scan_in_progress = false;
+        
+        // Si cambiamos el modo, intentar volver al modo AP
+        if (ctx->temporary_apsta_mode) {
+            ESP_LOGW(TAG, "Reverting to AP mode after scan failure");
+            ctx->temporary_apsta_mode = false;
+            esp_err_t revert_ret = esp_wifi_set_mode(WIFI_MODE_AP);
+            if (revert_ret != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to revert to AP mode: %s", esp_err_to_name(revert_ret));
+            }
+        }
+        
+        return ret;
+    }
     
+    ESP_LOGI(TAG, "WiFi scan started successfully");
     return ESP_OK;
 }
 
@@ -1035,11 +1106,8 @@ esp_err_t wifi_manager_get_scan_results(wifi_scan_result_t *results, size_t max_
         return ESP_ERR_INVALID_ARG;
     }
     
-    // Verificar si hay un escaneo en curso
-    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ctx->scan_ap_count));
-    bool scan_done = !ctx->scan_in_progress;
-    
-    if (!scan_done) {
+    // Si hay un escaneo en progreso, esperar a que termine
+    if (ctx->scan_in_progress) {
         ESP_LOGI(TAG, "Waiting for scan to complete");
         
         // Esperar a que termine el escaneo
@@ -1070,6 +1138,7 @@ esp_err_t wifi_manager_get_scan_results(wifi_scan_result_t *results, size_t max_
     }
     
     *num_networks = count;
+    ESP_LOGI(TAG, "Returning %zu scan results", count);
     return ESP_OK;
 }
 

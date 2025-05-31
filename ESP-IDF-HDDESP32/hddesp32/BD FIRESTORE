@@ -1,0 +1,838 @@
+Colección: hdd-monitor
+Documento: accounts
+  Subcolección: admins
+    Documento: NWTzas13BAsmo2ZqPC58
+      password: adminadmin
+      name: Hernán
+      email: admin1@hdd.com
+      fcmToken: cJNfJeqKQhWCSjqRj5JKRZ:APA91bH35neTqnZw0oAPGVQyxHI2WoDkL62xRd5vRhqY8-b9hst8Wqbj5pY8wWFKWwv5fXWKp3AKqwVA82PkXGnAsdyMeZaUrA7aAuOqTlydwUvNAAKTHjs
+      role: admin
+    Documento: admin_ADMI66MR
+      phone: +51938198404
+      fcmToken: None
+      clientDocName: 
+      documentName: admin_ADMI66MR
+      role: admin
+      email: admin2@hdd.com       
+      name: admin2
+  Subcolección: clients
+    Documento: client_1
+      name: Boticas MiSalud
+      Subcolección: events
+        Documento: event_EVEN90A6_client_1
+          type: INSTALACION
+          finishedAt: 19-03-2025 19:12
+          lastUpdate: 19-03-2025 19:12
+          status: FINALIZADO
+          acceptedByAccountId: Mm7beIpUbPdboKFuCWMP
+          date_time: 16-03-2025 15:30
+          text: test
+          createdByAccountId: NWTzas13BAsmo2ZqPC58
+          finishedByAccountId: Mm7beIpUbPdboKFuCWMP
+          isRead: False
+          acceptedAt: 16-03-2025 14:31
+          needsApproval: True
+          title: Test
+          createdByAccountRole: admin
+      Subcolección: notifications
+        Documento: notif_OFFL08AC08_client_1
+          date_time: 29/03/2025, 15:14
+          message: El panel "P1" está OFFLINE
+          panel_name: P1
+          lastUpdate: 2025-03-29 20:14:22.253712+00:00
+          documentName: notif_OFFL08AC08_client_1
+          isRead: True
+          timestamp: 1743279262253
+          readByAdmin: True
+        Documento: notif_OFFLA8ACA0_client_1
+          date_time: 20/04/2025, 18:12
+          message: El panel "Panel_P1" está OFFLINE
+          panel_name: Panel_P1
+          lastUpdate: 2025-04-20 23:12:06.160930+00:00
+          documentName: notif_OFFLA8ACA0_client_1
+          isRead: True
+          timestamp: 1745190726160
+          readByAdmin: True
+        Documento: notif_ONLA8ACA0_client_1
+          date_time: 20/04/2025, 18:10
+          message: El panel "Panel_P1" está nuevamente ONLINE
+          panel_name: Panel_P1
+          lastUpdate: 2025-04-20 23:10:32.405067+00:00
+          documentName: notif_ONLA8ACA0_client_1
+          isRead: True
+          timestamp: 1745190632405
+          readByAdmin: True
+        Documento: notification_client_1_1743479101962
+          type: event
+          panel_name: P1
+          event_type: CAPACITACION
+          lastUpdate: 2025-04-01 03:45:02.059000+00:00
+          event_id: event_EVENEJEW_client_1
+          client_name: Boticas MiSalud
+          status: FINALIZADO
+          readByAdmin: True
+          date_time: 31/03/2025, 22:45
+          message: admin2 ha finalizado el evento "fudnd" para el panel "P1"
+          documentName: notification_client_1_1743479101962
+          panel_id: panel_P1GI1P_client_1
+          title: fudnd
+          isRead: True
+          timestamp: 1743479101963
+          action: FINISH
+        Documento: notification_client_1_1743479106282
+          type: event
+          panel_name: P1
+          event_type: CAPACITACION
+          lastUpdate: 2025-04-01 03:45:06.361000+00:00
+          event_id: event_EVENEJEW_client_1
+          client_name: Boticas MiSalud
+          status: FINALIZADO
+          readByAdmin: True
+          date_time: 31/03/2025, 22:45
+          message: Se ha eliminado el evento "fudnd" para el panel "P1"
+          documentName: notification_client_1_1743479106282
+          panel_id: panel_P1GI1P_client_1
+          title: fudnd
+          isRead: True
+          timestamp: 1743479106282
+          action: DELETE
+        Documento: notification_client_1_1746216141447
+          type: event
+          panel_name: None
+          event_type: GARANTIA
+          lastUpdate: 2025-05-02 20:02:21.550000+00:00
+          status: PROGRAMADO
+          client_name: Boticas MiSalud
+          event_id: event_EVENUIME_client_1
+          readByAdmin: False
+          date_time: 02/05/2025, 15:02
+          message: Se ha eliminado el evento "Quixy" para el panel "panel_P1GI1P_client_1"
+          documentName: notification_client_1_1746216141447
+          panel_id: panel_P1GI1P_client_1
+          title: Quixy
+          isRead: True
+          timestamp: 1746216141448
+          action: DELETE
+        Documento: relay_client_1_panel_P1GI1P_client_1_Alarma_1743276504866
+          type: relay
+          panel_name: P1
+          lastUpdate: 2025-03-29 19:28:24.951000+00:00
+          relay: Alarma
+          client_id: client_1
+          old_status: OK
+          readByAdmin: True
+          date_time: 29/03/2025, 14:28
+          message: El relay Alarma del panel "P1" ha cambiado de OK a DISC
+          documentName: relay_client_1_panel_P1GI1P_client_1_Alarma_1743276504866
+          panel_id: panel_P1GI1P_client_1
+          isRead: True
+          state: DISC
+          timestamp: 1743276504867
+        Documento: relay_client_1_panel_P1GI1P_client_1_Alarma_1743276520299
+          type: relay
+          panel_name: P1
+          lastUpdate: 2025-03-29 19:28:40.373000+00:00
+          relay: Alarma
+          client_id: client_1
+          old_status: DISC
+          readByAdmin: True
+          date_time: 29/03/2025, 14:28
+          message: El relay Alarma del panel "P1" ha cambiado de DISC a OK
+          documentName: relay_client_1_panel_P1GI1P_client_1_Alarma_1743276520299
+          panel_id: panel_P1GI1P_client_1
+          isRead: True
+          state: OK
+          timestamp: 1743276520299
+        Documento: relay_client_1_panel_P1GI1P_client_1_Alarma_1743278012186
+          type: relay
+          panel_name: P1
+          lastUpdate: 2025-03-29 19:53:32.263000+00:00
+          relay: Alarma
+          client_id: client_1
+          old_status: OK
+          readByAdmin: True
+          date_time: 29/03/2025, 14:53
+          message: El relay Alarma del panel "P1" ha cambiado de OK a DISC
+          documentName: relay_client_1_panel_P1GI1P_client_1_Alarma_1743278012186
+          panel_id: panel_P1GI1P_client_1
+          isRead: True
+          state: DISC
+          timestamp: 1743278012186
+        Documento: relay_client_1_panel_P1GI1P_client_1_Alarma_1743278062348
+          type: relay
+          panel_name: P1
+          lastUpdate: 2025-03-29 19:54:22.431000+00:00
+          relay: Alarma
+          client_id: client_1
+          old_status: DISC
+          readByAdmin: True
+          date_time: 29/03/2025, 14:54
+          message: El relay Alarma del panel "P1" ha cambiado de DISC a OK
+          documentName: relay_client_1_panel_P1GI1P_client_1_Alarma_1743278062348
+          panel_id: panel_P1GI1P_client_1
+          isRead: True
+          state: OK
+          timestamp: 1743278062349
+        Documento: relay_client_1_panel_P1GI1P_client_1_Problema_1743275648701
+          type: relay
+          panel_name: P1
+          lastUpdate: 2025-03-29 19:14:08.780000+00:00
+          relay: Problema
+          client_id: client_1
+          old_status: OK
+          readByAdmin: True
+          date_time: 29/03/2025, 14:14
+          message: El relay Problema del panel "P1" ha cambiado de OK a DISC
+          documentName: relay_client_1_panel_P1GI1P_client_1_Problema_1743275648701
+          panel_id: panel_P1GI1P_client_1
+          isRead: True
+          state: DISC
+          timestamp: 1743275648702
+        Documento: relay_client_1_panel_P1GI1P_client_1_Problema_1743275650574
+          type: relay
+          panel_name: P1
+          lastUpdate: 2025-03-29 19:14:10.651000+00:00
+          relay: Problema
+          client_id: client_1
+          old_status: DISC
+          readByAdmin: True
+          date_time: 29/03/2025, 14:14
+          message: El relay Problema del panel "P1" ha cambiado de DISC a OK
+          documentName: relay_client_1_panel_P1GI1P_client_1_Problema_1743275650574
+          panel_id: panel_P1GI1P_client_1
+          isRead: True
+          state: OK
+          timestamp: 1743275650574
+        Documento: relay_client_1_panel_P1GI1P_client_1_Problema_1743276522205
+          type: relay
+          panel_name: P1
+          lastUpdate: 2025-03-29 19:28:42.286000+00:00
+          relay: Problema
+          client_id: client_1
+          old_status: OK
+          readByAdmin: True
+          date_time: 29/03/2025, 14:28
+          message: El relay Problema del panel "P1" ha cambiado de OK a DISC
+          documentName: relay_client_1_panel_P1GI1P_client_1_Problema_1743276522205
+          panel_id: panel_P1GI1P_client_1
+          isRead: True
+          state: DISC
+          timestamp: 1743276522205
+        Documento: relay_client_1_panel_P1GI1P_client_1_Problema_1743276524041
+          type: relay
+          panel_name: P1
+          lastUpdate: 2025-03-29 19:28:44.115000+00:00
+          relay: Problema
+          client_id: client_1
+          old_status: DISC
+          readByAdmin: True
+          date_time: 29/03/2025, 14:28
+          message: El relay Problema del panel "P1" ha cambiado de DISC a OK
+          documentName: relay_client_1_panel_P1GI1P_client_1_Problema_1743276524041
+          panel_id: panel_P1GI1P_client_1
+          isRead: True
+          state: OK
+          timestamp: 1743276524042
+        Documento: relay_client_1_panel_P1GI1P_client_1_Problema_1743276715389
+          type: relay
+          panel_name: P1
+          lastUpdate: 2025-03-29 19:31:55.465000+00:00
+          relay: Problema
+          client_id: client_1
+          old_status: OK
+          readByAdmin: True
+          date_time: 29/03/2025, 14:31
+          message: El relay Problema del panel "P1" ha cambiado de OK a DISC
+          documentName: relay_client_1_panel_P1GI1P_client_1_Problema_1743276715389
+          panel_id: panel_P1GI1P_client_1
+          isRead: True
+          state: DISC
+          timestamp: 1743276715390
+        Documento: relay_client_1_panel_P1GI1P_client_1_Problema_1743276732406
+          type: relay
+          panel_name: P1
+          lastUpdate: 2025-03-29 19:32:12.481000+00:00
+          relay: Problema
+          client_id: client_1
+          old_status: DISC
+          readByAdmin: True
+          date_time: 29/03/2025, 14:32
+          message: El relay Problema del panel "P1" ha cambiado de DISC a OK
+          documentName: relay_client_1_panel_P1GI1P_client_1_Problema_1743276732406
+          panel_id: panel_P1GI1P_client_1
+          isRead: True
+          state: OK
+          timestamp: 1743276732407
+        Documento: relay_client_1_panel_P1GI1P_client_1_Problema_1743276824078
+          type: relay
+          panel_name: P1
+          lastUpdate: 2025-03-29 19:33:44.673000+00:00
+          relay: Problema
+          client_id: client_1
+          old_status: OK
+          readByAdmin: True
+          date_time: 29/03/2025, 14:33
+          message: El relay Problema del panel "P1" ha cambiado de OK a DISC
+          documentName: relay_client_1_panel_P1GI1P_client_1_Problema_1743276824078
+          panel_id: panel_P1GI1P_client_1
+          isRead: True
+          state: DISC
+          timestamp: 1743276824078
+        Documento: relay_client_1_panel_P1GI1P_client_1_Problema_1743276863660
+          type: relay
+          panel_name: P1
+          lastUpdate: 2025-03-29 19:34:23.736000+00:00
+          relay: Problema
+          client_id: client_1
+          old_status: DISC
+          readByAdmin: True
+          date_time: 29/03/2025, 14:34
+          message: El relay Problema del panel "P1" ha cambiado de DISC a OK
+          documentName: relay_client_1_panel_P1GI1P_client_1_Problema_1743276863660
+          panel_id: panel_P1GI1P_client_1
+          isRead: True
+          state: OK
+          timestamp: 1743276863660
+        Documento: relay_client_1_panel_P1GI1P_client_1_Problema_1743278064248
+          type: relay
+          panel_name: P1
+          lastUpdate: 2025-03-29 19:54:24.325000+00:00
+          relay: Problema
+          client_id: client_1
+          old_status: OK
+          readByAdmin: True
+          date_time: 29/03/2025, 14:54
+          message: El relay Problema del panel "P1" ha cambiado de OK a DISC
+          documentName: relay_client_1_panel_P1GI1P_client_1_Problema_1743278064248
+          panel_id: panel_P1GI1P_client_1
+          isRead: True
+          state: DISC
+          timestamp: 1743278064249
+        Documento: relay_client_1_panel_P1GI1P_client_1_Problema_1743278066102
+          type: relay
+          panel_name: P1
+          lastUpdate: 2025-03-29 19:54:26.178000+00:00
+          relay: Problema
+          client_id: client_1
+          old_status: DISC
+          readByAdmin: True
+          date_time: 29/03/2025, 14:54
+          message: El relay Problema del panel "P1" ha cambiado de DISC a OK
+          documentName: relay_client_1_panel_P1GI1P_client_1_Problema_1743278066102
+          panel_id: panel_P1GI1P_client_1
+          isRead: True
+          state: OK
+          timestamp: 1743278066102
+      Subcolección: panels
+        Documento: panel_PANEXE4I_client_1
+          name: Panel 1
+          documentName: panel_PANEXE4I_client_1
+          clientName: client_1
+          esp32_id:
+          location: Sotano 3
+          lastUpdate: 1746216220326
+          Subcolección: relays
+            Documento: relay_1
+              date_time: None
+              isActive: True
+              contactType: NO
+              status: DISC
+              name: relay_1
+            Documento: relay_2
+              date_time: None
+              isActive: True
+              contactType: NO
+              status: DISC
+              name: relay_2
+            Documento: relay_3
+              date_time: None
+              isActive: True
+              contactType: NO
+              status: DISC
+              name: relay_3
+            Documento: relay_4
+              date_time: None
+              isActive: False
+              contactType: NO
+              status: DISC
+              name: relay_4
+            Documento: relay_5
+              date_time: None
+              isActive: False
+              contactType: NO
+              status: DISC
+              name: relay_5
+            Documento: relay_6
+              date_time: None
+              isActive: False
+              contactType: NO
+              status: DISC
+              name: relay_6
+      Subcolección: users
+        Documento: Mm7beIpUbPdboKFuCWMP
+          password: useruser
+          role: user
+          email: user1@hdd.com
+          phone: +51987456321
+          fcmToken: None
+          name: Frederik Fruk
+        Documento: user_QUIXKJ1B_client_CLIE0Y85
+          phone: 
+          fcmToken: dNQWxlj3QoO97WcHBvZDSO:APA91bHOS8DC7ZyJdARyZcX5PDdX76EMb6Y15Br1GACZzTNPBPX3M3swBnkgBYRKM0XF1qtjxund33I0DXB1KKnG44qvVZF2xtFVQ68m-DfIypzsPiwP004
+          clientDocName: client_1
+          documentName: user_QUIXKJ1B_client_CLIE0Y85
+          role: user
+          email: quixy@hdd.com
+          name: quixy
+    Documento: client_2
+      name: Amoladoras Slicer
+      Subcolección: notifications
+        Documento: notif_ELRE2PJ0_client_2
+          date_time: 01/03/2025, 01:36
+          message: El relay Sistema del panel "PANELAZO" ha cambiado de ONLINE a OFFLINE
+          relayName: Sistema
+          isRead: True
+          panelDocName: panel_client_2_20250202175137_GAKGS9
+          timestamp: 1740811005191
+          readByAdmin: True
+        Documento: notif_ELRE4VT3_client_2
+          date_time: 01/03/2025, 01:31
+          message: El relay Sistema del panel "PANELAZO" ha cambiado de ONLINE a OFFLINE
+          relayName: Sistema
+          isRead: True
+          panelDocName: panel_client_2_20250202175137_GAKGS9
+          timestamp: 1740810698758
+          readByAdmin: True
+        Documento: notif_ELREC7M6_client_2
+          date_time: 28/02/2025, 23:56
+          message: El relay Supervision del panel "PANELAZO" ha cambiado de OK a DISC
+          relayName: Supervision
+          isRead: True
+          panelDocName: panel_client_2_20250202175137_GAKGS9
+          timestamp: 1740805012349
+          readByAdmin: True
+        Documento: notif_ELREHXAP_client_2
+          date_time: 01/03/2025, 09:22
+          message: El relay Sistema del panel "PANELAZO" ha cambiado de ONLINE a OFFLINE
+          relayName: Sistema
+          isRead: True
+          panelDocName: panel_client_2_20250202175137_GAKGS9
+          timestamp: 1740838931668
+          readByAdmin: True
+        Documento: notif_ELREIYAY_client_2
+          date_time: 01/03/2025, 01:54
+          message: El relay Sistema del panel "PANELAZO" ha cambiado de ONLINE a OFFLINE
+          relayName: Sistema
+          isRead: True
+          panelDocName: panel_client_2_20250202175137_GAKGS9
+          timestamp: 1740812073810
+          readByAdmin: True
+        Documento: notif_ELREKIOI_client_2
+          date_time: 01/03/2025, 01:30
+          message: El relay Sistema del panel "PANELAZO" ha cambiado de ONLINE a OFFLINE
+          relayName: Sistema
+          isRead: True
+          panelDocName: panel_client_2_20250202175137_GAKGS9
+          timestamp: 1740810600587
+          readByAdmin: True
+        Documento: notif_ELREPRQW_client_2
+          date_time: 01/03/2025, 02:16
+          message: El relay Sistema del panel "PANELAZO" ha cambiado de ONLINE a OFFLINE
+          relayName: Sistema
+          isRead: True
+          panelDocName: panel_client_2_20250202175137_GAKGS9
+          timestamp: 1740813383697
+          readByAdmin: True
+        Documento: notif_OFFL94ACA8_client_2
+          date_time: 01/03/2025, 09:22
+          message: El panel "PANELAZO" está OFFLINE
+          panel_name: PANELAZO
+          lastUpdate: 2025-03-01 14:22:13.107514+00:00
+          documentName: notif_OFFL94ACA8_client_2
+          isRead: True
+          timestamp: 1740838933107
+          readByAdmin: True
+        Documento: notif_OFFLA8ACA0_client_2
+          date_time: 20/04/2025, 17:14
+          message: El panel "PANEL_P1" está OFFLINE
+          panel_name: PANEL_P1
+          lastUpdate: 2025-04-20 22:14:14.813010+00:00
+          documentName: notif_OFFLA8ACA0_client_2
+          isRead: True
+          timestamp: 1745187254813
+          readByAdmin: True
+        Documento: notif_OFFLB4ACA0_client_2
+          date_time: 29/03/2025, 09:44
+          message: El panel "PANEL-AS" está OFFLINE
+          panel_name: PANEL-AS
+          lastUpdate: 2025-03-29 14:44:23.428383+00:00
+          documentName: notif_OFFLB4ACA0_client_2
+          isRead: True
+          timestamp: 1743259463428
+          readByAdmin: True
+        Documento: notif_ONL94ACA8_client_2
+          date_time: 01/03/2025, 09:15
+          message: El panel "PANELAZO" está nuevamente ONLINE
+          panel_name: PANELAZO
+          lastUpdate: 2025-03-01 14:15:39.918814+00:00
+          documentName: notif_ONL94ACA8_client_2
+          isRead: True
+          timestamp: 1740838539918
+          readByAdmin: True
+        Documento: notif_ONLB4ACA0_client_2
+          date_time: 26/03/2025, 02:09
+          message: El panel "PANEL-AS" está nuevamente ONLINE
+          panel_name: PANEL-AS
+          lastUpdate: 2025-03-26 07:09:56.550254+00:00
+          documentName: notif_ONLB4ACA0_client_2
+          isRead: True
+          timestamp: 1742972996550
+          readByAdmin: False
+        Documento: relay_client_2_panel_client_2_20250202175137_GAKGS9_Supervision_1740805012008
+          type: relay
+          panel_name: PANELAZO
+          lastUpdate: 2025-03-01 04:56:52.100000+00:00
+          relay: Supervision
+          client_id: client_2
+          old_status: OK
+          readByAdmin: True
+          date_time: 28/02/2025, 23:56
+          message: El relay Supervision del panel "PANELAZO" ha cambiado de OK a DISC
+          documentName: relay_client_2_panel_client_2_20250202175137_GAKGS9_Supervision_1740805012008
+          panel_id: panel_client_2_20250202175137_GAKGS9
+          isRead: True
+          state: DISC
+          timestamp: 1740805012009
+        Documento: relay_client_2_panel_client_2_20250202175137_GAKGS9_Supervision_1740809083288
+          type: relay
+          panel_name: PANELAZO
+          lastUpdate: 2025-03-01 06:04:43.367000+00:00
+          relay: Supervision
+          client_id: client_2
+          old_status: DISC
+          readByAdmin: True
+          date_time: 01/03/2025, 01:04
+          message: El relay Supervision del panel "PANELAZO" ha cambiado de DISC a OK
+          documentName: relay_client_2_panel_client_2_20250202175137_GAKGS9_Supervision_1740809083288
+          panel_id: panel_client_2_20250202175137_GAKGS9
+          isRead: True
+          state: OK
+          timestamp: 1740809083289
+      Subcolección: users
+        Documento: 5iE8r9VLI74dQ4r11xkv
+          phone: +51999666888
+          fcmToken: None
+          clientDocName: client_2
+          documentName: 5iE8r9VLI74dQ4r11xkv
+          role: user
+          email: user2@hdd.com
+          name: Usuario2
+    Documento: client_AMIN1G3I
+      documentName: client_AMIN1G3I
+      name: taller 1 HDD
+      Subcolección: notifications
+        Documento: notif_ELRE68ZH_client_AMIN1G3I
+          date_time: 01/03/2025, 20:05
+          message: El relay Sistema del panel "PRUEBA1" ha cambiado de ONLINE a OFFLINE
+          relayName: Sistema
+          isRead: True
+          panelDocName: panel_PRUEYX78_client_AMIN1G3I
+          timestamp: 1740877510464
+          readByAdmin: True
+        Documento: notif_ELREMRWV_client_AMIN1G3I
+          date_time: 01/03/2025, 20:03
+          message: El relay Problema del panel "PRUEBA1" ha cambiado de OK a DISC
+          relayName: Problema
+          isRead: True
+          panelDocName: panel_PRUEYX78_client_AMIN1G3I
+          timestamp: 1740877385735
+          readByAdmin: True
+        Documento: notif_OFFLA8ACA0_client_AMIN1G3I
+          date_time: 29/03/2025, 12:45
+          message: El panel "PRUEBA1" está OFFLINE
+          panel_name: PRUEBA1
+          lastUpdate: 2025-03-29 17:45:33.241844+00:00
+          documentName: notif_OFFLA8ACA0_client_AMIN1G3I
+          isRead: True
+          timestamp: 1743270333241
+          readByAdmin: True
+        Documento: notif_ONLA8ACA0_client_AMIN1G3I
+          date_time: 29/03/2025, 12:11
+          message: El panel "PRUEBA1" está nuevamente ONLINE
+          panel_name: PRUEBA1
+          lastUpdate: 2025-03-29 17:11:02.835136+00:00
+          documentName: notif_ONLA8ACA0_client_AMIN1G3I
+          isRead: True
+          timestamp: 1743268262835
+          readByAdmin: True
+        Documento: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Alarma_1742242634422
+          type: relay
+          panel_name: PRUEBA1
+          lastUpdate: 2025-03-17 20:17:14.498000+00:00
+          relay: Alarma
+          client_id: client_AMIN1G3I
+          old_status: OK
+          readByAdmin: True
+          date_time: 17/03/2025, 15:17
+          message: El relay Alarma del panel "PRUEBA1" ha cambiado de OK a DISC
+          documentName: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Alarma_1742242634422
+          panel_id: panel_PRUEYX78_client_AMIN1G3I
+          isRead: True
+          state: DISC
+          timestamp: 1742242634423
+        Documento: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Alarma_1742242867547
+          type: relay
+          panel_name: PRUEBA1
+          lastUpdate: 2025-03-17 20:21:07.623000+00:00
+          relay: Alarma
+          client_id: client_AMIN1G3I
+          old_status: DISC
+          readByAdmin: True
+          date_time: 17/03/2025, 15:21
+          message: El relay Alarma del panel "PRUEBA1" ha cambiado de DISC a OK
+          documentName: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Alarma_1742242867547
+          panel_id: panel_PRUEYX78_client_AMIN1G3I
+          isRead: True
+          state: OK
+          timestamp: 1742242867547
+        Documento: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Alarma_1743269516023
+          type: relay
+          panel_name: PRUEBA1
+          lastUpdate: 2025-03-29 17:31:56.104000+00:00
+          relay: Alarma
+          client_id: client_AMIN1G3I
+          old_status: OK
+          readByAdmin: True
+          date_time: 29/03/2025, 12:31
+          message: El relay Alarma del panel "PRUEBA1" ha cambiado de OK a DISC
+          documentName: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Alarma_1743269516023
+          panel_id: panel_PRUEYX78_client_AMIN1G3I
+          isRead: True
+          state: DISC
+          timestamp: 1743269516024
+        Documento: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Alarma_1743269579666
+          type: relay
+          panel_name: PRUEBA1
+          lastUpdate: 2025-03-29 17:33:00.276000+00:00
+          relay: Alarma
+          client_id: client_AMIN1G3I
+          old_status: DISC
+          readByAdmin: True
+          date_time: 29/03/2025, 12:32
+          message: El relay Alarma del panel "PRUEBA1" ha cambiado de DISC a OK
+          documentName: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Alarma_1743269579666
+          panel_id: panel_PRUEYX78_client_AMIN1G3I
+          isRead: True
+          state: OK
+          timestamp: 1743269579666
+        Documento: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Alarma_1743269666229
+          type: relay
+          panel_name: PRUEBA1
+          lastUpdate: 2025-03-29 17:34:26.305000+00:00
+          relay: Alarma
+          client_id: client_AMIN1G3I
+          old_status: OK
+          readByAdmin: True
+          date_time: 29/03/2025, 12:34
+          message: El relay Alarma del panel "PRUEBA1" ha cambiado de OK a DISC
+          documentName: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Alarma_1743269666229
+          panel_id: panel_PRUEYX78_client_AMIN1G3I
+          isRead: True
+          state: DISC
+          timestamp: 1743269666230
+        Documento: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Alarma_1743269745908
+          type: relay
+          panel_name: PRUEBA1
+          lastUpdate: 2025-03-29 17:35:45.986000+00:00
+          relay: Alarma
+          client_id: client_AMIN1G3I
+          old_status: DISC
+          readByAdmin: True
+          date_time: 29/03/2025, 12:35
+          message: El relay Alarma del panel "PRUEBA1" ha cambiado de DISC a OK
+          documentName: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Alarma_1743269745908
+          panel_id: panel_PRUEYX78_client_AMIN1G3I
+          isRead: True
+          state: OK
+          timestamp: 1743269745909
+        Documento: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Problema_1740877346280
+          type: relay
+          panel_name: PRUEBA1
+          lastUpdate: 2025-03-02 01:02:26.362000+00:00
+          relay: Problema
+          client_id: client_AMIN1G3I
+          old_status: DISC
+          readByAdmin: True
+          date_time: 01/03/2025, 20:02
+          message: El relay Problema del panel "PRUEBA1" ha cambiado de DISC a OK
+          documentName: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Problema_1740877346280
+          panel_id: panel_PRUEYX78_client_AMIN1G3I
+          isRead: True
+          state: OK
+          timestamp: 1740877346281
+        Documento: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Problema_1740877386245
+          type: relay
+          panel_name: PRUEBA1
+          lastUpdate: 2025-03-02 01:03:06.326000+00:00
+          relay: Problema
+          client_id: client_AMIN1G3I
+          old_status: OK
+          readByAdmin: True
+          date_time: 01/03/2025, 20:03
+          message: El relay Problema del panel "PRUEBA1" ha cambiado de OK a DISC
+          documentName: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Problema_1740877386245
+          panel_id: panel_PRUEYX78_client_AMIN1G3I
+          isRead: True
+          state: DISC
+          timestamp: 1740877386246
+        Documento: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Problema_1742242454647
+          type: relay
+          panel_name: PRUEBA1
+          lastUpdate: 2025-03-17 20:14:14.723000+00:00
+          relay: Problema
+          client_id: client_AMIN1G3I
+          old_status: DISC
+          readByAdmin: True
+          date_time: 17/03/2025, 15:14
+          message: El relay Problema del panel "PRUEBA1" ha cambiado de DISC a OK
+          documentName: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Problema_1742242454647
+          panel_id: panel_PRUEYX78_client_AMIN1G3I
+          isRead: True
+          state: OK
+          timestamp: 1742242454648
+        Documento: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Problema_1742242870703
+          type: relay
+          panel_name: PRUEBA1
+          lastUpdate: 2025-03-17 20:21:10.778000+00:00
+          relay: Problema
+          client_id: client_AMIN1G3I
+          old_status: DISC
+          readByAdmin: True
+          date_time: 17/03/2025, 15:21
+          message: El relay Problema del panel "PRUEBA1" ha cambiado de DISC a OK
+          documentName: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Problema_1742242870703
+          panel_id: panel_PRUEYX78_client_AMIN1G3I
+          isRead: True
+          state: OK
+          timestamp: 1742242870703
+        Documento: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Problema_1742242910477
+          type: relay
+          panel_name: PRUEBA1
+          lastUpdate: 2025-03-17 20:21:50.554000+00:00
+          relay: Problema
+          client_id: client_AMIN1G3I
+          old_status: OK
+          readByAdmin: True
+          date_time: 17/03/2025, 15:21
+          message: El relay Problema del panel "PRUEBA1" ha cambiado de OK a DISC
+          documentName: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Problema_1742242910477
+          panel_id: panel_PRUEYX78_client_AMIN1G3I
+          isRead: True
+          state: DISC
+          timestamp: 1742242910477
+        Documento: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Problema_1743268267851
+          type: relay
+          panel_name: PRUEBA1
+          lastUpdate: 2025-03-29 17:11:07.924000+00:00
+          relay: Problema
+          client_id: client_AMIN1G3I
+          old_status: DISC
+          readByAdmin: True
+          date_time: 29/03/2025, 12:11
+          message: El relay Problema del panel "PRUEBA1" ha cambiado de DISC a OK
+          documentName: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Problema_1743268267851
+          panel_id: panel_PRUEYX78_client_AMIN1G3I
+          isRead: True
+          state: OK
+          timestamp: 1743268267852
+        Documento: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Problema_1743268273847
+          type: relay
+          panel_name: PRUEBA1
+          lastUpdate: 2025-03-29 17:11:13.920000+00:00
+          relay: Problema
+          client_id: client_AMIN1G3I
+          old_status: OK
+          readByAdmin: True
+          date_time: 29/03/2025, 12:11
+          message: El relay Problema del panel "PRUEBA1" ha cambiado de OK a DISC
+          documentName: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Problema_1743268273847
+          panel_id: panel_PRUEYX78_client_AMIN1G3I
+          isRead: True
+          state: DISC
+          timestamp: 1743268273848
+        Documento: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Problema_1743269330964
+          type: relay
+          panel_name: PRUEBA1
+          lastUpdate: 2025-03-29 17:28:51.046000+00:00
+          relay: Problema
+          client_id: client_AMIN1G3I
+          old_status: DISC
+          readByAdmin: True
+          date_time: 29/03/2025, 12:28
+          message: El relay Problema del panel "PRUEBA1" ha cambiado de DISC a OK
+          documentName: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Problema_1743269330964
+          panel_id: panel_PRUEYX78_client_AMIN1G3I
+          isRead: True
+          state: OK
+          timestamp: 1743269330964
+        Documento: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Problema_1743269582606
+          type: relay
+          panel_name: PRUEBA1
+          lastUpdate: 2025-03-29 17:33:02.681000+00:00
+          relay: Problema
+          client_id: client_AMIN1G3I
+          old_status: OK
+          readByAdmin: True
+          date_time: 29/03/2025, 12:33
+          message: El relay Problema del panel "PRUEBA1" ha cambiado de OK a DISC
+          documentName: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Problema_1743269582606
+          panel_id: panel_PRUEYX78_client_AMIN1G3I
+          isRead: True
+          state: DISC
+          timestamp: 1743269582606
+        Documento: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Problema_1743269584425
+          type: relay
+          panel_name: PRUEBA1
+          lastUpdate: 2025-03-29 17:33:04.505000+00:00
+          relay: Problema
+          client_id: client_AMIN1G3I
+          old_status: DISC
+          readByAdmin: True
+          date_time: 29/03/2025, 12:33
+          message: El relay Problema del panel "PRUEBA1" ha cambiado de DISC a OK
+          documentName: relay_client_AMIN1G3I_panel_PRUEYX78_client_AMIN1G3I_Problema_1743269584425
+          panel_id: panel_PRUEYX78_client_AMIN1G3I
+          isRead: True
+          state: OK
+          timestamp: 1743269584426
+      Subcolección: users
+        Documento: user_CUNNGZKM_client_AMIN1G3I
+          password: useruser
+          phone: +51964209846
+          fcmToken: d7S3XIWNRISdYL-LxMk-Mo:APA91bE4daQp470OUFWMjWEAjgMMUDaQWF8RkYrPdW9mj5vwJCWAVyJcCLi9KhEw-TZsWg3SkIwB73SyAkceQiuhiISL66WW_cpj_7Y4GSLHVeUl8_x3xlk
+          clientDocName: client_AMIN1G3I
+          documentName: user_CUNNGZKM_client_AMIN1G3I
+          role: user
+          email: user3@hdd.com
+          name: Cunningham
+        Documento: user_PRUEU8IJ_client_AMIN1G3I
+          password: prueba1
+          phone: +51965963844
+          fcmToken: f0YafSi-Qr62vjXdh4ajfI:APA91bFMIhG31v0mHP_bY95Ps_cN1IjjRNG84TZokBqQMzckIgtUIJrqJ5Mmy_HQ18lTgnXnFyo17UUFzUBv6QkQ_e_7z-8VVKCKX7nkUYhETl1JF_xzNBs
+          clientDocName: client_AMIN1G3I
+          documentName: user_PRUEU8IJ_client_AMIN1G3I
+          role: user
+          email: prueba1@hdd.com
+          name: prueba1
+Documento: esp32
+  Subcolección: registered
+    Documento: 42A8ACA0
+      lastNetworkUpdate: 2025-05-31 07:11:43.521000+00:00
+      lastDisconnect: 2025-05-27 03:42:36.797000+00:00
+      status: ONLINE
+      IP: 192.168.18.38
+      MAC: A0B7652842A8
+      lastUpdate: 2025-05-31 07:31:03.561000+00:00
+Documento: event_types
+  types: CAPACITACION,GARANTIA,INSTALACION,MANTENIMIENTO,PRUEBAS,REPARACION
+Documento: vm

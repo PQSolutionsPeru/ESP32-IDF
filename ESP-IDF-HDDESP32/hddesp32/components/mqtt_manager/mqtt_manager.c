@@ -25,6 +25,7 @@
 #include "wifi_manager.h"
 #include "time_manager.h"
 #include "esp_task_wdt.h"
+#include "esp_heap_caps.h"
 
 #define TAG "MQTT_MGR"
 
@@ -198,17 +199,28 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             break;
             
         case MQTT_EVENT_DATA:
+            // CORREGIDO: Usar buffers dinámicos en lugar de estáticos
             if (ctx->message_callback && event->topic_len < MQTT_TOPIC_MAX_LENGTH && event->data_len < DEFAULT_BUFFER_SIZE) {
-                static char topic_buf[MQTT_TOPIC_MAX_LENGTH];
-                static char data_buf[DEFAULT_BUFFER_SIZE];
+                char *topic_buf = heap_caps_malloc(MQTT_TOPIC_MAX_LENGTH, MALLOC_CAP_8BIT);
+                char *data_buf = heap_caps_malloc(DEFAULT_BUFFER_SIZE, MALLOC_CAP_8BIT);
                 
-                memcpy(topic_buf, event->topic, event->topic_len);
-                topic_buf[event->topic_len] = '\0';
+                if (topic_buf && data_buf) {
+                    memcpy(topic_buf, event->topic, event->topic_len);
+                    topic_buf[event->topic_len] = '\0';
+                    
+                    memcpy(data_buf, event->data, event->data_len);
+                    data_buf[event->data_len] = '\0';
+                    
+                    ctx->message_callback(topic_buf, data_buf, event->data_len, ctx->message_user_data);
+                }
                 
-                memcpy(data_buf, event->data, event->data_len);
-                data_buf[event->data_len] = '\0';
-                
-                ctx->message_callback(topic_buf, data_buf, event->data_len, ctx->message_user_data);
+                // Liberar inmediatamente
+                if (topic_buf) {
+                    free(topic_buf);
+                }
+                if (data_buf) {
+                    free(data_buf);
+                }
             }
             break;
             
@@ -346,7 +358,7 @@ esp_err_t mqtt_manager_set_esp32_id(const char *esp32_id) {
     return ESP_OK;
 }
 
-// Connect to MQTT broker - CORRECTED VERSION
+// Connect to MQTT broker
 esp_err_t mqtt_manager_connect(void) {
     mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
     
@@ -777,7 +789,7 @@ mqtt_manager_state_t mqtt_manager_get_state(void) {
     return ctx->state;
 }
 
-// Send network info
+// Send network info - CORREGIDO: Buffer dinámico
 esp_err_t mqtt_manager_send_network_info(void) {
     mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
     
@@ -791,9 +803,14 @@ esp_err_t mqtt_manager_send_network_info(void) {
         return ESP_ERR_NO_MEM;
     }
     
-    static char json_buffer[512];
-    char ip_address[16] = "0.0.0.0";
+    // Buffer dinámico en lugar de estático
+    char *json_buffer = heap_caps_malloc(512, MALLOC_CAP_8BIT);
+    if (!json_buffer) {
+        ESP_LOGE(TAG, "Failed to allocate network info buffer");
+        return ESP_ERR_NO_MEM;
+    }
     
+    char ip_address[16] = "0.0.0.0";
     wifi_manager_get_ip(ip_address, sizeof(ip_address));
     
     char timestamp_str[32];
@@ -825,26 +842,30 @@ esp_err_t mqtt_manager_send_network_info(void) {
         }
     }
     
-    int len = snprintf(json_buffer, sizeof(json_buffer),
+    int len = snprintf(json_buffer, 512,
                       "{\"esp32_id\":\"%.8s\",\"MAC\":\"%.12s\",\"IP\":\"%.15s\","
                       "\"status\":\"ONLINE\",\"timestamp\":%.20s,\"time\":\"%.31s\"}",
                       ctx->esp32_id, ctx->mac_address, ip_address, timestamp_str, time_str);
     
-    if (len < 0 || len >= sizeof(json_buffer)) {
+    esp_err_t ret = ESP_FAIL;
+    if (len > 0 && len < 512) {
+        ret = mqtt_manager_publish("esp32/network_info", json_buffer, len, 0, false);
+        
+        if (ret == ESP_OK) {
+            vTaskDelay(pdMS_TO_TICKS(10)); 
+        }
+    } else {
         ESP_LOGE(TAG, "JSON buffer overflow in network info");
-        return ESP_ERR_NO_MEM;
+        ret = ESP_ERR_NO_MEM;
     }
     
-    esp_err_t ret = mqtt_manager_publish("esp32/network_info", json_buffer, len, 0, false);
-    
-    if (ret == ESP_OK) {
-        vTaskDelay(pdMS_TO_TICKS(10)); 
-    }
+    // Liberar buffer
+    free(json_buffer);
     
     return ret;
 }
 
-// Send heartbeat
+// Send heartbeat - CORREGIDO: Buffer dinámico
 esp_err_t mqtt_manager_send_heartbeat(void) {
     mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
     
@@ -862,9 +883,14 @@ esp_err_t mqtt_manager_send_heartbeat(void) {
         return ESP_ERR_NO_MEM;
     }
     
-    static char json_buffer[384];
-    char message_id[16];
+    // Buffer dinámico en lugar de estático
+    char *json_buffer = heap_caps_malloc(384, MALLOC_CAP_8BIT);
+    if (!json_buffer) {
+        ESP_LOGE(TAG, "Failed to allocate heartbeat buffer");
+        return ESP_ERR_NO_MEM;
+    }
     
+    char message_id[16];
     generate_message_id(message_id, sizeof(message_id));
     
     char topic[64];
@@ -883,7 +909,7 @@ esp_err_t mqtt_manager_send_heartbeat(void) {
     int len;
     if (strlen(ctx->client_panel_id) > 0 && strlen(ctx->panel_id) > 0) {
         if (time_str[0] != 0) {
-            len = snprintf(json_buffer, sizeof(json_buffer),
+            len = snprintf(json_buffer, 384,
                           "{\"esp32_id\":\"%.8s\",\"status\":\"ONLINE\","
                           "\"timestamp\":%.15s,\"type\":\"heartbeat\","
                           "\"message_id\":\"%.15s\",\"client_id\":\"%.31s\","
@@ -891,7 +917,7 @@ esp_err_t mqtt_manager_send_heartbeat(void) {
                           ctx->esp32_id, timestamp_str, message_id,
                           ctx->client_panel_id, ctx->panel_id, time_str);
         } else {
-            len = snprintf(json_buffer, sizeof(json_buffer),
+            len = snprintf(json_buffer, 384,
                           "{\"esp32_id\":\"%.8s\",\"status\":\"ONLINE\","
                           "\"timestamp\":%.15s,\"type\":\"heartbeat\","
                           "\"message_id\":\"%.15s\",\"client_id\":\"%.31s\","
@@ -901,13 +927,13 @@ esp_err_t mqtt_manager_send_heartbeat(void) {
         }
     } else {
         if (time_str[0] != 0) {
-            len = snprintf(json_buffer, sizeof(json_buffer),
+            len = snprintf(json_buffer, 384,
                           "{\"esp32_id\":\"%.8s\",\"status\":\"ONLINE\","
                           "\"timestamp\":%.15s,\"type\":\"heartbeat\","
                           "\"message_id\":\"%.15s\",\"time\":\"%.31s\"}",
                           ctx->esp32_id, timestamp_str, message_id, time_str);
         } else {
-            len = snprintf(json_buffer, sizeof(json_buffer),
+            len = snprintf(json_buffer, 384,
                           "{\"esp32_id\":\"%.8s\",\"status\":\"ONLINE\","
                           "\"timestamp\":%.15s,\"type\":\"heartbeat\","
                           "\"message_id\":\"%.15s\"}",
@@ -915,22 +941,26 @@ esp_err_t mqtt_manager_send_heartbeat(void) {
         }
     }
     
-    if (len < 0 || len >= sizeof(json_buffer)) {
+    esp_err_t ret = ESP_FAIL;
+    if (len > 0 && len < 384) {
+        ret = mqtt_manager_publish(topic, json_buffer, len, 1, false);
+        
+        if (ret == ESP_OK) {
+            ctx->last_heartbeat_time = esp_timer_get_time() / 1000;
+            vTaskDelay(pdMS_TO_TICKS(5));
+        }
+    } else {
         ESP_LOGE(TAG, "JSON buffer overflow in heartbeat");
-        return ESP_ERR_NO_MEM;
+        ret = ESP_ERR_NO_MEM;
     }
     
-    esp_err_t ret = mqtt_manager_publish(topic, json_buffer, len, 1, false);
-    
-    if (ret == ESP_OK) {
-        ctx->last_heartbeat_time = esp_timer_get_time() / 1000;
-        vTaskDelay(pdMS_TO_TICKS(5));
-    }
+    // Liberar buffer
+    free(json_buffer);
     
     return ret;
 }
 
-// Emergency memory cleanup
+// Emergency memory cleanup - MEJORADO
 esp_err_t mqtt_manager_emergency_memory_cleanup(void) {
     mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
     
@@ -952,7 +982,11 @@ esp_err_t mqtt_manager_emergency_memory_cleanup(void) {
         }
     }
     
-    vTaskDelay(pdMS_TO_TICKS(50));
+    // Force heap integrity checks to compact memory
+    for (int i = 0; i < 5; i++) {
+        heap_caps_check_integrity_all(true);
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
     
     size_t free_after = esp_get_free_heap_size();
     ESP_LOGI(TAG, "Memory after MQTT cleanup: %zu bytes", free_after);

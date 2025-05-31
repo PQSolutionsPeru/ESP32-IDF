@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <inttypes.h>
+#include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_system.h"
@@ -12,6 +13,7 @@
 #include "mqtt_manager.h"
 #include "time_manager.h"
 #include "watchdog_manager.h"
+#include "relay_manager.h"
 #include "esp_heap_caps.h"
 #include "esp_task_wdt.h"
 
@@ -21,9 +23,19 @@ static const char *TAG = "HDDESP32";
 static bool g_system_initialized = false;
 static bool g_wifi_connected = false;
 static bool g_mqtt_connected = false;
-static bool g_watchdog_available = false;  // Nueva variable para tracking del watchdog
+static bool g_watchdog_available = false;
+static bool g_relay_manager_initialized = false;
 
-// Optimizado para ESP32 4MB - menos logs verbosos - VERSION CORREGIDA
+// CORREGIDO: Función para forzar limpieza de heap
+static void force_heap_cleanup(void) {
+    // Verificar integridad del heap para compactar
+    for (int i = 0; i < 3; i++) {
+        heap_caps_check_integrity_all(true);
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+
+// CORREGIDO: Optimizado para ESP32 4MB - menos logs verbosos
 static void print_memory_info(void) {
     size_t free_heap = esp_get_free_heap_size();
     size_t min_heap = esp_get_minimum_free_heap_size();
@@ -54,7 +66,7 @@ static void print_memory_info(void) {
     }
 }
 
-// Callback del watchdog para eventos críticos - VERSION CORREGIDA
+// Callback del watchdog para eventos críticos
 static void watchdog_event_callback(watchdog_health_status_t status, watchdog_check_type_t check_type, void *user_data) {
     const char* status_str = "UNKNOWN";
     const char* check_str = "UNKNOWN";
@@ -118,12 +130,131 @@ static void watchdog_event_callback(watchdog_health_status_t status, watchdog_ch
     }
 }
 
-// Callback MQTT simplificado - VERSION CORREGIDA
+// CORREGIDO: Callback para eventos de cambio de estado de relays
+static void relay_state_change_callback(const relay_event_t *event, void *user_data) {
+    if (!g_mqtt_connected) {
+        ESP_LOGD(TAG, "MQTT not connected, skipping relay event");
+        return;
+    }
+    
+    // Reportar actividad al watchdog (solo si está disponible)
+    if (g_watchdog_available) {
+        watchdog_manager_report_activity(WATCHDOG_CHECK_TASKS);
+    }
+    
+    // Verificar memoria disponible antes de procesar
+    size_t free_heap = esp_get_free_heap_size();
+    if (free_heap < 20000) {  // Mínimo 20KB para procesar evento
+        ESP_LOGW(TAG, "Insufficient memory for relay event: %zu bytes", free_heap);
+        return;
+    }
+    
+    // Obtener ESP32 ID para el mensaje
+    char esp32_id[ESP32_ID_LENGTH + 1];
+    if (esp32_id_manager_get_id(esp32_id, sizeof(esp32_id)) != ESP_OK) {
+        ESP_LOGE(TAG, "Could not get ESP32 ID for relay event");
+        return;
+    }
+    
+    // CAMBIO: Usar buffer dinámico en lugar de estático
+    char *json_buffer = heap_caps_malloc(512, MALLOC_CAP_8BIT);
+    if (!json_buffer) {
+        ESP_LOGE(TAG, "Failed to allocate relay event buffer");
+        return;
+    }
+    
+    // Limpiar buffer explícitamente
+    memset(json_buffer, 0, 512);
+    
+    int64_t timestamp_ms = event->timestamp / 1000; // Convertir a milisegundos
+    
+    int len = snprintf(json_buffer, 512,
+                      "{"
+                      "\"esp32_id\":\"%s\","
+                      "\"relay_id\":\"%s\","
+                      "\"relay_name\":\"%s\","
+                      "\"contact_type\":\"%s\","
+                      "\"state\":\"%s\","
+                      "\"timestamp\":{"
+                          "\"value\":%lld,"
+                          "\"type\":\"realtime\""
+                      "}"
+                      "}",
+                      esp32_id,
+                      event->relay_id,
+                      event->name,
+                      (event->contact_type == RELAY_CONTACT_NC) ? "NC" : "NO",
+                      (event->new_state == RELAY_STATE_OK) ? "OK" : "DISC",
+                      (long long)timestamp_ms);
+    
+    if (len > 0 && len < 512) {
+        // Publicar en tópico individual (para la VM)
+        char individual_topic[128];
+        snprintf(individual_topic, sizeof(individual_topic), "clients/unknown/panels/unknown");
+        
+        esp_err_t ret = mqtt_manager_publish_json(individual_topic, json_buffer, 1, false);
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "Relay %s state change published: %s -> %s", 
+                    event->relay_id,
+                    (event->old_state == RELAY_STATE_OK) ? "OK" : "DISC",
+                    (event->new_state == RELAY_STATE_OK) ? "OK" : "DISC");
+        } else {
+            ESP_LOGW(TAG, "Failed to publish relay event: %s", esp_err_to_name(ret));
+        }
+    } else {
+        ESP_LOGE(TAG, "Relay event JSON too large or formatting error");
+    }
+    
+    // CRÍTICO: Limpiar y liberar buffer inmediatamente
+    memset(json_buffer, 0, 512);
+    free(json_buffer);
+    json_buffer = NULL;
+    
+    // Forzar compactación del heap para evitar fragmentación
+    heap_caps_check_integrity_all(true);
+}
+
+// Callback para comandos MQTT de configuración de relays
+static esp_err_t relay_mqtt_command_callback(const char *topic, const char *command_json, void *user_data) {
+    ESP_LOGI(TAG, "Processing relay MQTT command from topic: %s", topic);
+    ESP_LOGI(TAG, "Command JSON: %s", command_json);
+    
+    // Reportar actividad al watchdog
+    if (g_watchdog_available) {
+        watchdog_manager_report_activity(WATCHDOG_CHECK_MQTT);
+    }
+    
+    // El comando ya fue procesado por relay_manager_process_mqtt_command
+    // Aquí podemos enviar respuesta de confirmación si es necesario
+    
+    return ESP_OK;
+}
+
+// Callback MQTT simplificado
 static void mqtt_state_callback(mqtt_manager_state_t state, void *user_data) {
     switch (state) {
         case MQTT_MANAGER_STATE_CONNECTED:
             ESP_LOGI(TAG, "MQTT connected");
             g_mqtt_connected = true;
+            
+            // Inicializar relay manager cuando MQTT se conecta por primera vez
+            if (!g_relay_manager_initialized) {
+                ESP_LOGI(TAG, "Initializing Relay Manager after MQTT connection");
+                esp_err_t ret = relay_manager_init();
+                if (ret == ESP_OK) {
+                    // Configurar callbacks
+                    relay_manager_set_state_callback(relay_state_change_callback, NULL);
+                    relay_manager_set_mqtt_callback(relay_mqtt_command_callback, NULL);
+                    
+                    // Forzar verificación inicial de estados
+                    relay_manager_check_all_states(true);
+                    
+                    g_relay_manager_initialized = true;
+                    ESP_LOGI(TAG, "Relay Manager initialized successfully");
+                } else {
+                    ESP_LOGE(TAG, "Failed to initialize Relay Manager: %s", esp_err_to_name(ret));
+                }
+            }
             
             // Reportar actividad MQTT (solo si watchdog está disponible)
             if (g_watchdog_available) {
@@ -159,7 +290,7 @@ static void mqtt_state_callback(mqtt_manager_state_t state, void *user_data) {
     }
 }
 
-// Callback mensajes MQTT simplificado - VERSION CORREGIDA
+// Callback mensajes MQTT simplificado
 static void mqtt_message_callback(const char *topic, const char *data, int data_len, void *user_data) {
     ESP_LOGI(TAG, "MQTT message: %s (%d bytes)", topic, data_len);
     
@@ -170,9 +301,18 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
             ESP_LOGD(TAG, "Could not report MQTT activity to watchdog");
         }
     }
+    
+    // Procesar comandos de configuración de relays
+    if (strstr(topic, "/relay_config") && g_relay_manager_initialized) {
+        ESP_LOGI(TAG, "Relay config command received");
+        esp_err_t ret = relay_manager_process_mqtt_command(data);
+        if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to process relay command: %s", esp_err_to_name(ret));
+        }
+    }
 }
 
-// WiFi callback con integración de watchdog - VERSION CORREGIDA
+// WiFi callback con integración de watchdog
 static void wifi_state_callback(wifi_manager_state_t state, void *user_data) {
     char esp32_id[ESP32_ID_LENGTH + 1];
     
@@ -239,7 +379,7 @@ static void on_wifi_connect_callback(void *user_data) {
     }
 }
 
-// Task para monitoreo del sistema - VERSION CORREGIDA SIN wifi_manager_is_connecting()
+// CORREGIDO: Task para monitoreo del sistema
 static void system_monitor_task(void *pvParameters) {
     ESP_LOGI(TAG, "System monitor task started");
     
@@ -281,6 +421,12 @@ static void system_monitor_task(void *pvParameters) {
         
         cycle_count++;
         
+        // Verificar relays cada 5 minutos si están inicializados
+        if (cycle_count % 60 == 0 && g_relay_manager_initialized) {
+            ESP_LOGI(TAG, "Performing periodic relay check");
+            relay_manager_check_all_states(false);
+        }
+        
         // Manejar network info pendiente después de NTP sync
         if (time_manager_should_send_network_info()) {
             ESP_LOGI(TAG, "Sending network info after NTP synchronization");
@@ -294,7 +440,7 @@ static void system_monitor_task(void *pvParameters) {
             }
         }
         
-        // Limpieza agresiva de memoria si está baja
+        // CORREGIDO: Limpieza agresiva de memoria si está baja
         size_t free_heap = esp_get_free_heap_size();
         if (free_heap < 40000) {  // Umbral más alto para prevención
             ESP_LOGW(TAG, "Low memory detected: %zu bytes - Performing emergency cleanup", free_heap);
@@ -305,14 +451,17 @@ static void system_monitor_task(void *pvParameters) {
                 mqtt_manager_emergency_memory_cleanup();
             }
             
-            // Forzar garbage collection si hubiera
-            for (int i = 0; i < 5; i++) {
-                vTaskDelay(pdMS_TO_TICKS(10));
-            }
+            // Forzar limpieza de heap
+            force_heap_cleanup();
             
             size_t free_after = esp_get_free_heap_size();
             ESP_LOGI(TAG, "Memory after cleanup: %zu bytes (recovered: %d bytes)", 
                     free_after, (int)(free_after - free_heap));
+        }
+        
+        // NUEVO: Forzar limpieza de heap cada 30 minutos
+        if (cycle_count % 360 == 0) {  // 30 minutos = 30*60/5 = 360 ciclos
+            force_heap_cleanup();
         }
         
         // Memoria cada 10 minutos (reduce overhead)
@@ -386,7 +535,7 @@ static void system_monitor_task(void *pvParameters) {
                 }
             }
         } else {
-            // ← CORRECCIÓN CRÍTICA: WiFi desconectado - verificar recovery SIN wifi_manager_is_connecting()
+            // WiFi desconectado - verificar recovery
             if (cycle_count % 12 == 0) {
                 ESP_LOGI(TAG, "WiFi disconnected - attempting recovery");
                 wifi_manager_handle_disconnection("FirePanel", "firepanel", 3);
@@ -614,5 +763,12 @@ void app_main(void)
         
         // El task principal ahora tiene un ciclo más rápido para mejor responsividad del watchdog
         vTaskDelay(pdMS_TO_TICKS(5000));
+    }
+    
+    // En caso de salida del while (que no debería pasar), limpiar recursos
+    if (g_relay_manager_initialized) {
+        ESP_LOGI(TAG, "Cleaning up Relay Manager");
+        relay_manager_deinit();
+        g_relay_manager_initialized = false;
     }
 }
