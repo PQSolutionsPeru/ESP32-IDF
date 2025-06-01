@@ -34,6 +34,7 @@ sealed class Screen(val route: String) {
     object NotificationHistory : Screen("notification_history")
     object Events : Screen("events")
     object BleConfig : Screen("ble_config")
+    object RelayControl : Screen("relay_control")
 
     companion object {
         fun eventDetail(eventId: String) = "events/$eventId"
@@ -51,8 +52,8 @@ fun AppNavigation(
     val navController = rememberNavController()
     val hasPendingNotifications by viewModel.hasPendingNotifications.collectAsState()
 
-    val dashboardViewModel = hiltViewModel<DashboardViewModel>()
-    val notificationViewModel = hiltViewModel<NotificationViewModel>()
+    val dashboardViewModel: DashboardViewModel = hiltViewModel()
+    val notificationViewModel: NotificationViewModel = hiltViewModel()
 
     NavHost(
         navController = navController,
@@ -68,7 +69,7 @@ fun AppNavigation(
         }
 
         composable(Screen.Login.route) {
-            val loginViewModel = hiltViewModel<LoginViewModel>()
+            val loginViewModel: LoginViewModel = hiltViewModel()
             LoginScreen(
                 loginViewModel = loginViewModel,
                 onLoginClick = { email, password ->
@@ -105,6 +106,7 @@ fun AppNavigation(
                         onViewEventsClick = { safeNavigate(navController, Screen.Events.route) },
                         onViewNotificationHistoryClick = { safeNavigate(navController, Screen.NotificationHistory.route) },
                         onConfigureEsp32Click = { safeNavigate(navController, Screen.BleConfig.route) },
+                        onRelayControlClick = { safeNavigate(navController, Screen.RelayControl.route) },
                         hasPendingNotifications = hasPendingNotifications,
                         selectedPanelId = panelId
                     )
@@ -117,6 +119,7 @@ fun AppNavigation(
                         onViewNotificationHistoryClick = { safeNavigate(navController, Screen.NotificationHistory.route) },
                         onViewEventsClick = { safeNavigate(navController, Screen.Events.route) },
                         onConfigureEsp32Click = { safeNavigate(navController, Screen.BleConfig.route) },
+                        onControlRelaysClick = { safeNavigate(navController, Screen.RelayControl.route) },
                         hasPendingNotifications = hasPendingNotifications,
                         selectedPanelId = panelId
                     )
@@ -232,6 +235,14 @@ fun AppNavigation(
             BleConfigScreen(
                 onConfigurationComplete = { safeNavigate(navController, Screen.Dashboard.route) },
                 onBackClick = { safeNavigateBack(navController) }
+            )
+        }
+
+        composable(Screen.RelayControl.route) {
+            RelayControlScreen(
+                onBackClick = { safeNavigateBack(navController) },
+                hasPendingNotifications = hasPendingNotifications,
+                onNotificationClick = { safeNavigate(navController, Screen.NotificationHistory.route) }
             )
         }
     }

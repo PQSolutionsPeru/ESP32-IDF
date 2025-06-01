@@ -24,6 +24,7 @@ class ESP32Repository @Inject constructor(
     companion object {
         private const val TAG = "ESP32Repository"
         private const val ESP32_COLLECTION = "hdd-monitor/esp32/registered"
+        private const val BASE_PATH = "hdd-monitor/accounts/clients"
     }
 
     // Mapa para rastrear listeners activos
@@ -266,6 +267,181 @@ class ESP32Repository @Inject constructor(
         activeListeners[listenerId] = registration
     }
 
+    /**
+     * Obtiene ESP32s asignados a un cliente específico o todos para admin
+     */
+    fun observeAssignedESP32s(clientId: String? = null): Flow<List<ESP32Device>> = callbackFlow {
+        try {
+            Log.d(TAG, "Observando ESP32s asignados para cliente: $clientId")
+
+            val listenerId = "observe_assigned_esp32_${clientId ?: "all"}"
+            activeListeners[listenerId]?.remove()
+
+            val query = if (clientId != null) {
+                // Para usuarios normales: solo ESP32s de su cliente
+                firestore.collection(ESP32_COLLECTION)
+                    .whereEqualTo("client_id", clientId)
+                    .whereIn("status", listOf(
+                        ESP32Device.STATUS_ONLINE,
+                        ESP32Device.STATUS_RUNNING,
+                        ESP32Device.STATUS_OFFLINE
+                    ))
+            } else {
+                // Para admin: todos los ESP32s asignados
+                firestore.collection(ESP32_COLLECTION)
+                    .whereNotEqualTo("client_id", "")
+                    .whereIn("status", listOf(
+                        ESP32Device.STATUS_ONLINE,
+                        ESP32Device.STATUS_RUNNING,
+                        ESP32Device.STATUS_OFFLINE
+                    ))
+            }
+
+            val listenerRegistration = query.addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e(TAG, "Error observando ESP32s asignados", error)
+                    return@addSnapshotListener
+                }
+
+                val devices = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toESP32Device()?.let { device ->
+                        // Enriquecer con información del cliente y panel
+                        val clientName = doc.getString("client_name") ?: ""
+                        val panelName = doc.getString("panel_name") ?: ""
+                        device.copy(
+                            clientName = clientName,
+                            panelName = panelName
+                        )
+                    }
+                } ?: emptyList()
+
+                Log.d(TAG, "ESP32s asignados encontrados: ${devices.size}")
+                trySend(devices)
+            }
+
+            activeListeners[listenerId] = listenerRegistration
+
+            awaitClose {
+                listenerRegistration.remove()
+                activeListeners.remove(listenerId)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error configurando listener de ESP32s asignados", e)
+            close(e)
+        }
+    }
+
+    /**
+     * Envía comando para cambiar estado de relay
+     */
+    suspend fun sendRelayCommand(
+        esp32Id: String,
+        relayName: String,
+        targetStatus: String
+    ): Result<Unit> = runCatching {
+        Log.d(TAG, "Enviando comando de relay: ESP32=$esp32Id, Relay=$relayName, Estado=$targetStatus")
+
+        // Verificar que el ESP32 existe y está asignado
+        val esp32Doc = firestore.document("$ESP32_COLLECTION/$esp32Id").get().await()
+        if (!esp32Doc.exists()) {
+            throw IllegalStateException("ESP32 no encontrado: $esp32Id")
+        }
+
+        val clientId = esp32Doc.getString("client_id")
+        val panelId = esp32Doc.getString("panel_id")
+
+        if (clientId.isNullOrEmpty() || panelId.isNullOrEmpty()) {
+            throw IllegalStateException("ESP32 no está asignado a ningún panel")
+        }
+
+        // Verificar que el relay existe
+        val relayRef = firestore.document("$BASE_PATH/$clientId/panels/$panelId/relays/$relayName")
+        val relayDoc = relayRef.get().await()
+
+        if (!relayDoc.exists()) {
+            throw IllegalStateException("Relay no encontrado: $relayName")
+        }
+
+        // Actualizar el estado del relay en Firestore
+        val updateData = mapOf(
+            "status" to targetStatus,
+            "lastUpdate" to Timestamp.now(),
+            "commandSource" to "app",
+            "lastCommandSent" to Timestamp.now()
+        )
+
+        relayRef.update(updateData).await()
+        Log.d(TAG, "Comando de relay enviado exitosamente")
+    }
+
+    /**
+     * Actualiza el nombre personalizado de un relay
+     */
+    suspend fun updateRelayName(
+        esp32Id: String,
+        relayName: String,
+        customName: String
+    ): Result<Unit> = runCatching {
+        Log.d(TAG, "Actualizando nombre de relay: ESP32=$esp32Id, Relay=$relayName, Nuevo nombre=$customName")
+
+        // Obtener información del ESP32
+        val esp32Doc = firestore.document("$ESP32_COLLECTION/$esp32Id").get().await()
+        if (!esp32Doc.exists()) {
+            throw IllegalStateException("ESP32 no encontrado: $esp32Id")
+        }
+
+        val clientId = esp32Doc.getString("client_id")
+        val panelId = esp32Doc.getString("panel_id")
+
+        if (clientId.isNullOrEmpty() || panelId.isNullOrEmpty()) {
+            throw IllegalStateException("ESP32 no está asignado a ningún panel")
+        }
+
+        // Actualizar el nombre del relay
+        val relayRef = firestore.document("$BASE_PATH/$clientId/panels/$panelId/relays/$relayName")
+        val updateData = mapOf(
+            "customName" to customName.trim(),
+            "lastUpdate" to Timestamp.now()
+        )
+
+        relayRef.update(updateData).await()
+        Log.d(TAG, "Nombre de relay actualizado exitosamente")
+    }
+
+    /**
+     * Habilita o deshabilita un relay para control remoto
+     */
+    suspend fun updateRelayActiveState(
+        esp32Id: String,
+        relayName: String,
+        isActive: Boolean
+    ): Result<Unit> = runCatching {
+        Log.d(TAG, "Actualizando estado activo de relay: ESP32=$esp32Id, Relay=$relayName, Activo=$isActive")
+
+        // Obtener información del ESP32
+        val esp32Doc = firestore.document("$ESP32_COLLECTION/$esp32Id").get().await()
+        if (!esp32Doc.exists()) {
+            throw IllegalStateException("ESP32 no encontrado: $esp32Id")
+        }
+
+        val clientId = esp32Doc.getString("client_id")
+        val panelId = esp32Doc.getString("panel_id")
+
+        if (clientId.isNullOrEmpty() || panelId.isNullOrEmpty()) {
+            throw IllegalStateException("ESP32 no está asignado a ningún panel")
+        }
+
+        // Actualizar el estado activo del relay
+        val relayRef = firestore.document("$BASE_PATH/$clientId/panels/$panelId/relays/$relayName")
+        val updateData = mapOf(
+            "isActive" to isActive,
+            "lastUpdate" to Timestamp.now()
+        )
+
+        relayRef.update(updateData).await()
+        Log.d(TAG, "Estado activo de relay actualizado exitosamente")
+    }
+
     private fun generateESP32Id(mac: String): String {
         val normalizedMAC = mac.uppercase().replace(":", "").replace("-", "")
         return normalizedMAC.takeLast(4) + "AC" + normalizedMAC.take(2)
@@ -326,9 +502,18 @@ class ESP32Repository @Inject constructor(
             }
         }
 
+        // Obtener nombres para enriquecer la información
+        val clientDoc = firestore.document("$BASE_PATH/$clientId").get().await()
+        val panelDoc = firestore.document("$BASE_PATH/$clientId/panels/$panelId").get().await()
+
+        val clientName = clientDoc.getString("name") ?: ""
+        val panelName = panelDoc.getString("name") ?: ""
+
         val updateData = mapOf(
             "client_id" to clientId,
             "panel_id" to panelId,
+            "clientName" to clientName,
+            "panelName" to panelName,
             "status" to ESP32Device.STATUS_AWAITING_CONFIG,
             "lastUpdate" to Timestamp.now()
         )
@@ -424,6 +609,8 @@ class ESP32Repository @Inject constructor(
         val updateData = mapOf(
             "client_id" to "",
             "panel_id" to "",
+            "clientName" to "",
+            "panelName" to "",
             "status" to ESP32Device.STATUS_AWAITING_CONFIG,
             "lastUpdate" to Timestamp.now()
         )

@@ -46,7 +46,7 @@ class MainViewModel @Inject constructor(
     private val eventRepository: EventRepository,
     private val panelRepository: PanelRepository,
     private val notificationRepository: NotificationRepository,
-    private val firestore: FirebaseFirestore, // Añadido FirebaseFirestore
+    private val firestore: FirebaseFirestore,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -56,25 +56,37 @@ class MainViewModel @Inject constructor(
     private val _hasPendingNotifications = MutableStateFlow(false)
     val hasPendingNotifications: StateFlow<Boolean> = _hasPendingNotifications.asStateFlow()
 
+    // Estado para navegación al control de relays
+    private val _navigateToRelayControl = MutableStateFlow(false)
+    val navigateToRelayControl: StateFlow<Boolean> = _navigateToRelayControl.asStateFlow()
+
     private var sessionCheckJob: Job? = null
     private var pendingNotificationsJob: Job? = null
 
     companion object {
         private const val TAG = "MainViewModel"
         const val PANEL_UPDATE_ACTION = "com.pqsolutions.hdd_monitor.PANEL_UPDATE"
+        const val RELAY_CONTROL_ACTION = "com.pqsolutions.hdd_monitor.RELAY_CONTROL"
         const val CLIENT_MANAGEMENT_ROUTE = "client_management"
-        private const val BASE_PATH = "hdd-monitor/accounts/clients" // Añadida constante BASE_PATH
+        const val RELAY_CONTROL_ROUTE = "relay_control"
+        private const val BASE_PATH = "hdd-monitor/accounts/clients"
     }
 
     private val panelUpdateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == PANEL_UPDATE_ACTION) {
-                val clientDocName = intent.getStringExtra("clientDocName")
-                val panelDocName = intent.getStringExtra("panelDocName")
-                val relayName = intent.getStringExtra("relayName")
-                val relayStatus = intent.getStringExtra("relayStatus")
-                if (clientDocName != null && panelDocName != null && relayName != null && relayStatus != null) {
-                    updateRelay(clientDocName, panelDocName, relayName, relayStatus)
+            when (intent?.action) {
+                PANEL_UPDATE_ACTION -> {
+                    val clientDocName = intent.getStringExtra("clientDocName")
+                    val panelDocName = intent.getStringExtra("panelDocName")
+                    val relayName = intent.getStringExtra("relayName")
+                    val relayStatus = intent.getStringExtra("relayStatus")
+                    if (clientDocName != null && panelDocName != null && relayName != null && relayStatus != null) {
+                        updateRelay(clientDocName, panelDocName, relayName, relayStatus)
+                    }
+                }
+                RELAY_CONTROL_ACTION -> {
+                    // Manejar eventos específicos de control de relays si es necesario
+                    Log.d(TAG, "Relay control action received")
                 }
             }
         }
@@ -149,9 +161,13 @@ class MainViewModel @Inject constructor(
         }
 
     private fun registerPanelUpdateReceiver() {
+        val intentFilter = IntentFilter().apply {
+            addAction(PANEL_UPDATE_ACTION)
+            addAction(RELAY_CONTROL_ACTION)
+        }
         LocalBroadcastManager.getInstance(context).registerReceiver(
             panelUpdateReceiver,
-            IntentFilter(PANEL_UPDATE_ACTION)
+            intentFilter
         )
     }
 
@@ -159,9 +175,11 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 FirebaseMessaging.getInstance().subscribeToTopic("relay-status").await()
-                Log.d(TAG, "Suscrito exitosamente al tema relay-status")
+                // Suscribirse también al tópico de control de relays
+                FirebaseMessaging.getInstance().subscribeToTopic("relay-control").await()
+                Log.d(TAG, "Suscrito exitosamente a temas relay-status y relay-control")
             } catch (e: Exception) {
-                Log.e(TAG, "Error al suscribirse al tema relay-status", e)
+                Log.e(TAG, "Error al suscribirse a temas MQTT", e)
             }
         }
     }
@@ -185,7 +203,57 @@ class MainViewModel @Inject constructor(
             is MainUiEvent.SetTheme -> setTheme(event.theme)
             is MainUiEvent.SetLanguage -> setLanguage(event.language)
             is MainUiEvent.SetNotificationsEnabled -> setNotificationsEnabled(event.enabled)
+            is MainUiEvent.NavigateToRelayControl -> navigateToRelayControl()
         }
+    }
+
+    /**
+     * Función para navegar al control de relays
+     */
+    fun navigateToRelayControl() {
+        viewModelScope.launch {
+            try {
+                val currentUser = _uiState.value.userData
+                if (currentUser != null) {
+                    Log.d(TAG, "Navegando a control de relays para usuario: ${currentUser.name}")
+                    _navigateToRelayControl.value = true
+                } else {
+                    Log.e(TAG, "No hay usuario logueado para navegar al control de relays")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error navegando al control de relays", e)
+            }
+        }
+    }
+
+    /**
+     * Función para completar la navegación al control de relays
+     */
+    fun onRelayControlNavigationCompleted() {
+        _navigateToRelayControl.value = false
+    }
+
+    /**
+     * Verifica si el usuario actual puede acceder al control de relays
+     */
+    fun canAccessRelayControl(): Boolean {
+        val userData = _uiState.value.userData
+        return userData != null && (userData.role == UserRole.ADMIN || userData.role == UserRole.USER)
+    }
+
+    /**
+     * Obtiene la ruta de navegación actual
+     */
+    fun getCurrentRoute(): String {
+        return _uiState.value.currentRoute
+    }
+
+    /**
+     * Actualiza la ruta de navegación actual
+     */
+    fun updateCurrentRoute(route: String) {
+        _uiState.value = _uiState.value.copy(currentRoute = route)
+        Log.d(TAG, "Ruta actualizada a: $route")
     }
 
     private fun login(email: String, password: String) {
@@ -250,13 +318,16 @@ class MainViewModel @Inject constructor(
                 notificationRepository.clearListeners()
                 eventRepository.clearListeners()
 
-                // 2. Luego cambiamos la ruta (esto desencadenará la navegación)
+                // 2. Resetear estados de navegación
+                _navigateToRelayControl.value = false
+
+                // 3. Luego cambiamos la ruta (esto desencadenará la navegación)
                 _uiState.value = _uiState.value.copy(currentRoute = "login")
 
-                // 3. Esperamos para que empiece la navegación
+                // 4. Esperamos para que empiece la navegación
                 kotlinx.coroutines.delay(300)
 
-                // 4. Actualizamos el resto del estado
+                // 5. Actualizamos el resto del estado
                 _uiState.value = _uiState.value.copy(
                     isLoggedIn = false,
                     userData = null,
@@ -264,10 +335,10 @@ class MainViewModel @Inject constructor(
                 )
                 _hasPendingNotifications.value = false
 
-                // 5. Procedemos con el logout en Firebase
+                // 6. Procedemos con el logout en Firebase
                 authRepository.logout().fold(
                     onSuccess = {
-                        // 6. Limpiamos datos locales al final
+                        // 7. Limpiamos datos locales al final
                         userPreferences.clearUserData()
                         Log.d(TAG, "Logout successful")
                     },
@@ -300,13 +371,16 @@ class MainViewModel @Inject constructor(
             notificationRepository.clearListeners()
             eventRepository.clearListeners()
 
-            // 2. Actualizar la ruta para iniciar navegación
+            // 2. Resetear estados de navegación
+            _navigateToRelayControl.value = false
+
+            // 3. Actualizar la ruta para iniciar navegación
             _uiState.value = _uiState.value.copy(currentRoute = "login")
 
-            // 3. Pequeña pausa para que se inicie la navegación
+            // 4. Pequeña pausa para que se inicie la navegación
             kotlinx.coroutines.delay(300)
 
-            // 4. Limpiar el resto del estado
+            // 5. Limpiar el resto del estado
             userPreferences.clearUserData()
             _uiState.value = _uiState.value.copy(
                 isLoggedIn = false,
@@ -358,8 +432,6 @@ class MainViewModel @Inject constructor(
             } else {
                 // Consultar para usuarios normales en su cliente específico
                 if (clientDocName.isNotEmpty()) {
-                    // CORRECCIÓN: Usar la ruta correcta sin duplicar "clients"
-                    // Error era: "$BASE_PATH/clients/$clientDocName/notifications"
                     firestore.collection("$BASE_PATH/$clientDocName/notifications")
                         .whereEqualTo("isRead", false)
                         .limit(1)
@@ -394,7 +466,6 @@ class MainViewModel @Inject constructor(
                 for (clientDoc in clientsSnapshot.documents) {
                     val clientId = clientDoc.id
                     try {
-                        // CORRECCIÓN: Usar la ruta correcta sin duplicar "clients"
                         val events = firestore.collection("$BASE_PATH/$clientId/events")
                             .whereEqualTo("status", "PROGRAMADO")
                             .limit(1)
@@ -414,7 +485,6 @@ class MainViewModel @Inject constructor(
                 hasPendingEvents
             } else {
                 // Para usuarios normales, buscar en su cliente específico
-                // CORRECCIÓN: Usar la ruta correcta sin duplicar "clients"
                 val events = firestore.collection("$BASE_PATH/$clientDocName/events")
                     .whereEqualTo("status", "PROGRAMADO")
                     .limit(1)

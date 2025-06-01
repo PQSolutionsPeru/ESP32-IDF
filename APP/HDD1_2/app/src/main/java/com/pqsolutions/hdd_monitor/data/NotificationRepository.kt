@@ -431,6 +431,63 @@ class NotificationRepository @Inject constructor(
         Log.d(TAG, "Token FCM actualizado: $userDocName")
     }
 
+    // NUEVO: Crear notificación para cambios de relay con información de comando
+    suspend fun createRelayNotification(
+        clientDocName: String,
+        panelDocName: String,
+        relayName: String,
+        oldStatus: String,
+        newStatus: String,
+        commandSource: String = "esp32"
+    ): Result<Unit> = runCatching {
+        val notificationDocName = IdManager.generateNotificationDocumentName("relay_$relayName", clientDocName)
+        val now = LocalDateTime.now(Constants.TimeZone.PERU_ZONE)
+
+        // Obtener el nombre real del panel
+        val panelName = try {
+            val panelDoc = firestore.document("$BASE_PATH/$clientDocName/panels/$panelDocName")
+                .get()
+                .await()
+            panelDoc.getString("name") ?: ""
+        } catch (e: Exception) {
+            Log.e(TAG, "Error al obtener nombre del panel: $panelDocName", e)
+            ""
+        }
+
+        // Crear mensaje dependiendo del origen del cambio
+        val message = when (commandSource) {
+            "app" -> "Relay $relayName del panel \"$panelName\" cambiado remotamente de $oldStatus a $newStatus"
+            "web" -> "Relay $relayName del panel \"$panelName\" cambiado desde web de $oldStatus a $newStatus"
+            else -> "El relay $relayName del panel \"$panelName\" ha cambiado de $oldStatus a $newStatus"
+        }
+
+        val notificationData = hashMapOf(
+            "type" to "relay",
+            "panelDocName" to panelDocName,
+            "panel_id" to panelDocName,
+            "panel_name" to panelName,
+            "relayName" to relayName,
+            "relay" to relayName,
+            "old_status" to oldStatus,
+            "state" to newStatus,
+            "commandSource" to commandSource,
+            "message" to message,
+            "date_time" to now.format(DateTimeFormatter.ofPattern(DATE_FORMAT)),
+            "timestamp" to now.atZone(Constants.TimeZone.PERU_ZONE)
+                .toInstant()
+                .toEpochMilli(),
+            "isRead" to false,
+            "readByAdmin" to false
+        )
+
+        firestore.collection("$BASE_PATH/$clientDocName/notifications")
+            .document(notificationDocName)
+            .set(notificationData)
+            .await()
+
+        Log.d(TAG, "Relay notification created: $notificationDocName with source: $commandSource")
+    }
+
     suspend fun createNotification(
         clientDocName: String,
         panelDocName: String,

@@ -20,6 +20,10 @@
     <string name="navigation_drawer_open">Abrir navegación</string>
     <string name="navigation_drawer_close">Cerrar navegación</string>
 
+    <!-- Control de Relays -->
+    <string name="relay_control">Control de Relays</string>
+    <string name="relay_control_title">Control de Relays</string>
+
     <!-- Gestión de Clientes -->
     <string name="client_management">Gestión de Clientes</string>
     <string name="client_list">Lista de Clientes</string>

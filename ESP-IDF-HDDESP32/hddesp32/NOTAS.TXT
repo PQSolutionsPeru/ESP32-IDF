@@ -18,6 +18,112 @@ por qué se envía ese mensaje de ONLINE con la IP además de los heartbeats cad
 "time":"28/05/2025, 22:40:35"}
 
 
+POR QUÉ SI ES QUE HAY UN PANEL EN LA BD Y TAMBIÉN EN LA APP SE REFLEJA, NO SE PUEDEN CONFIGURAR SUS RELAYS?
+
+QUITAR LA OPCIÓN DE BUSCAR ESP32 POR BLE, LO QUE TIENE QUE HACER ES ENCONTRAR UNA MANERA DE ASIGNARSE AL CLIENTE DUEÑO DE LA RED WIFI CON LA APP INSTALADA EN SU SMARTPHONE:
+Basándome en el análisis de tu código, entiendo perfectamente la modificación que necesitas. Te explico la solución completa:
+
+## **Cambios Conceptuales Principales**
+
+### **1. Eliminar Búsqueda BLE**
+- Remover toda la funcionalidad de escaneo Bluetooth
+- Los ESP32 ya estarán registrados en Firebase por otros medios (configuración manual, web, etc.)
+- El usuario solo verá y gestionará ESP32s ya existentes en la base de datos
+
+### **2. Nueva Funcionalidad: Gestión de ESP32s Asignados**
+- Los clientes podrán ver sus ESP32s asignados
+- Podrán crear/editar paneles y asignar ESP32s disponibles
+- Configuración de relays por panel
+- Gestión de ubicaciones
+
+## **Archivos a Modificar**
+
+### **Navegación:**
+- **`AppNavigation.kt`**: Eliminar rutas BLE, agregar rutas de gestión ESP32
+
+### **Pantallas a Modificar:**
+- **`UserDashboardScreen.kt`**: Agregar botón "Gestionar ESP32s" 
+- **`AdminDashboardScreen.kt`**: Agregar botón "Gestionar ESP32s"
+
+### **Pantallas a Eliminar:**
+- **`BleConfigScreen.kt`**: Eliminar completamente (ya no se usará)
+
+### **Pantallas Nuevas a Crear:**
+- **`ESP32ManagementScreen.kt`**: Pantalla principal para gestionar ESP32s
+- **`PanelConfigurationScreen.kt`**: Configurar paneles y asignar ESP32s
+- **`RelayCustomizationScreen.kt`**: Personalizar relays por panel
+
+### **ViewModels a Modificar:**
+- **`DashboardViewModel.kt`**: Remover referencias BLE
+- **`RelayControlViewModel.kt`**: Ya está bien para control de relays
+
+### **ViewModels a Eliminar:**
+- **`BleViewModel.kt`**: Eliminar completamente
+
+### **ViewModels Nuevos a Crear:**
+- **`ESP32ManagementViewModel.kt`**: Gestión de ESP32s asignados
+- **`PanelConfigurationViewModel.kt`**: Configuración de paneles
+
+### **Estados a Eliminar:**
+- **`BleState.kt`**: Eliminar completamente
+
+### **Estados Nuevos a Crear:**
+- **`ESP32ManagementState.kt`**: Estados para gestión ESP32
+- **`PanelConfigurationState.kt`**: Estados para configuración paneles
+
+### **Repositorios a Modificar:**
+- **`ESP32Repository.kt`**: 
+  - Remover métodos BLE
+  - Agregar métodos para obtener ESP32s por cliente
+  - Métodos para asignar/desasignar ESP32s a paneles
+- **`PanelRepository.kt`**: 
+  - Métodos para crear paneles sin BLE
+  - Asignación de ESP32s existentes
+
+## **Nueva Arquitectura de Flujo**
+
+### **Para Usuarios Normales:**
+1. **Dashboard** → Ver paneles actuales + botón "Gestionar ESP32s"
+2. **Gestión ESP32s** → Lista de ESP32s asignados al cliente
+3. **Configurar Panel** → Crear/editar panel y asignar ESP32 disponible
+4. **Personalizar Relays** → Configurar nombres y comportamiento de relays
+
+### **Para Administradores:**
+1. **Dashboard** → Ver todos los paneles + botón "Gestionar ESP32s"  
+2. **Gestión ESP32s** → Ver todos los ESP32s, asignar a clientes
+3. **Configurar Panel** → Crear panel para cualquier cliente
+4. **Personalizar Relays** → Configurar relays de cualquier panel
+
+## **Funcionalidades Nuevas**
+
+### **Gestión de ESP32s:**
+- Ver ESP32s asignados al cliente logueado
+- Estado de cada ESP32 (Online/Offline)
+- Asignar ESP32 disponible a nuevo panel
+- Reasignar ESP32 entre paneles
+- Ver información técnica (MAC, IP, etc.)
+
+### **Configuración de Paneles:**
+- Crear panel con nombre y ubicación
+- Seleccionar ESP32 de lista disponible
+- Editar información de panel existente
+- Eliminar panel (libera ESP32 para reasignación)
+
+### **Personalización de Relays:**
+- Cambiar nombres de relays por panel
+- Habilitar/deshabilitar relays individuales
+- Configurar si relay es controlable remotamente
+- Establecer tipo de contacto (NO/NC)
+
+## **Beneficios de esta Solución**
+
+1. **Simplicidad**: No más problemas con Bluetooth
+2. **Escalabilidad**: Fácil gestión de múltiples ESP32s
+3. **Flexibilidad**: Reasignación fácil entre paneles
+4. **Personalización**: Control granular de relays
+5. **Mantenimiento**: Menos código complejo que mantener
+
+¿Te parece bien esta aproximación? ¿Quieres que proceda con la implementación de alguna parte específica primero?
 
 
 
@@ -35,64 +141,3 @@ por qué se envía ese mensaje de ONLINE con la IP además de los heartbeats cad
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-HddApplication.kt
-
-AppModule.kt
-
-FirebaseModule.kt
-
-FirebaseMessagingService.kt
-
-Client.kt
-
-Event.kt
-
-Panel.kt
-
-Notification.kt
-
-UserRepository.kt
-
-UserData.kt
-
-MainViewModel.kt
-
-DashboardViewModel.kt
-
-NotificationViewModel.kt
-
-PanelRepository.kt
-
-ESP32Repository.kt
-
-AdminDashboardScreen.kt
-
-UserDashboardScreen.kt
-
-PanelListComponents.kt
-
-DashboardComponents.kt
-
-BleConfigScreen.kt
-
-ClientManagementScreen.kt
-
-EventRepository.kt
-
-ClientRepository.kt
-
-BleViewModel.kt

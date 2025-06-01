@@ -43,7 +43,6 @@ import com.pqsolutions.hdd_monitor.presentation.components.ScreenTopBar
 import com.pqsolutions.hdd_monitor.presentation.theme.HDD1_2Theme
 import com.pqsolutions.hdd_monitor.presentation.theme.PanelColors
 import com.pqsolutions.hdd_monitor.presentation.util.performHapticFeedback
-//import com.pqsolutions.hdd_monitor.presentation.util.playSoundEffect
 import com.pqsolutions.hdd_monitor.presentation.viewmodel.DashboardViewModel
 import com.pqsolutions.hdd_monitor.presentation.viewmodel.NotificationViewModel
 
@@ -59,6 +58,7 @@ fun AdminDashboardScreen(
     onViewEventsClick: () -> Unit,
     onViewNotificationHistoryClick: () -> Unit,
     onConfigureEsp32Click: () -> Unit,
+    onRelayControlClick: () -> Unit, // Nueva función para control de relays
     hasPendingNotifications: Boolean,
     selectedPanelId: String? = null
 ) {
@@ -133,6 +133,7 @@ fun AdminDashboardScreen(
                     onViewEventsClick = onViewEventsClick,
                     onViewNotificationHistoryClick = onViewNotificationHistoryClick,
                     onConfigureEsp32Click = onConfigureEsp32Click,
+                    onRelayControlClick = onRelayControlClick, // Pasar la nueva función
                     context = context
                 )
 
@@ -226,6 +227,7 @@ private fun DashboardActions(
     onViewEventsClick: () -> Unit,
     onViewNotificationHistoryClick: () -> Unit,
     onConfigureEsp32Click: () -> Unit,
+    onRelayControlClick: () -> Unit, // Nueva función para control de relays
     context: android.content.Context
 ) {
     Log.d(TAG, "Rendering DashboardActions")
@@ -268,6 +270,16 @@ private fun DashboardActions(
                 onConfigureEsp32Click()
             },
             text = stringResource(R.string.configure_esp32)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        // Nuevo botón para control de relays
+        DashboardButton(
+            onClick = {
+                Log.d(TAG, "Relay Control button clicked")
+                performHapticFeedback(context)
+                onRelayControlClick()
+            },
+            text = stringResource(R.string.relay_control)
         )
     }
 }

@@ -7,4 +7,5 @@ sealed class MainUiEvent {
     data class SetTheme(val theme: String) : MainUiEvent()
     data class SetLanguage(val language: String) : MainUiEvent()
     data class SetNotificationsEnabled(val enabled: Boolean) : MainUiEvent()
+    data class NavigateToRelayControl(val clientId: String, val panelId: String) : MainUiEvent()
 }

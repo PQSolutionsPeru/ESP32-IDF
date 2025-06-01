@@ -16,7 +16,10 @@ data class ESP32Device(
     var panelId: String = "",
     @get:PropertyName("lastUpdate")
     @set:PropertyName("lastUpdate")
-    var lastUpdate: com.google.firebase.Timestamp = com.google.firebase.Timestamp.now()
+    var lastUpdate: com.google.firebase.Timestamp = com.google.firebase.Timestamp.now(),
+    // Campos adicionales para enriquecer la información
+    val clientName: String = "",
+    val panelName: String = ""
 ) {
     companion object {
         const val STATUS_WIFI_CONFIG = "WIFI_CONFIG"
@@ -36,6 +39,8 @@ data class ESP32Device(
         "status" to status,
         "client_id" to clientId,
         "panel_id" to panelId,
-        "lastUpdate" to lastUpdate
+        "lastUpdate" to lastUpdate,
+        "clientName" to clientName,
+        "panelName" to panelName
     )
 }

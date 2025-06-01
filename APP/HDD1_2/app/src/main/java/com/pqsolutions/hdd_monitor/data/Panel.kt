@@ -16,8 +16,6 @@ data class Panel(
         Relay(RELAY_SUPERVISION, STATUS_DISC)
     ),
     var esp32Status: String = ESP32Device.STATUS_OFFLINE
-
-
 ) : Serializable {
 
     val overallStatus: Boolean
@@ -25,10 +23,16 @@ data class Panel(
 
     val relaysInDisc: String
         get() = relays.filter { it.status == STATUS_DISC }
-            .joinToString(", ") { it.name }
+            .joinToString(", ") { it.displayName }
 
     val hasIssues: Boolean
         get() = !overallStatus
+
+    val activeRelays: List<Relay>
+        get() = relays.filter { it.isActive }
+
+    val controllableRelays: List<Relay>
+        get() = relays.filter { it.isControllable && it.isActive }
 
     fun toMap(): Map<String, Any?> = mapOf(
         "documentName" to documentName,
@@ -45,6 +49,19 @@ data class Panel(
         val updatedRelays = relays.map { relay ->
             if (relay.name == relayName) relay.copy(status = newStatus)
             else relay
+        }
+        return copy(relays = updatedRelays)
+    }
+
+    fun updateRelayConfig(relayName: String, newCustomName: String, isActive: Boolean, isControllable: Boolean): Panel {
+        val updatedRelays = relays.map { relay ->
+            if (relay.name == relayName) {
+                relay.copy(
+                    customName = newCustomName.takeIf { it.isNotBlank() },
+                    isActive = isActive,
+                    isControllable = isControllable
+                )
+            } else relay
         }
         return copy(relays = updatedRelays)
     }
@@ -71,30 +88,6 @@ data class Panel(
             location = location,
             clientName = clientName,
             esp32_id = esp32Id
-        )
-    }
-}
-
-data class Relay(
-    val name: String,
-    val status: String,
-    val date_time: String? = null
-) : Serializable {
-
-    fun toMap(): Map<String, Any?> = mapOf(
-        "name" to name,
-        "status" to status,
-        "date_time" to date_time
-    )
-
-    companion object {
-        const val STATUS_OK = "OK"
-        const val STATUS_DISC = "DISC"
-
-        fun fromMap(map: Map<String, Any?>): Relay = Relay(
-            name = map["name"]?.toString() ?: "",
-            status = map["status"]?.toString() ?: STATUS_DISC,
-            date_time = map["date_time"]?.toString()
         )
     }
 }
