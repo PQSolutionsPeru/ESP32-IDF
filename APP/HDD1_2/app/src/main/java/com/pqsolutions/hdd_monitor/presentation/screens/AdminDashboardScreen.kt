@@ -58,7 +58,6 @@ fun AdminDashboardScreen(
     onViewEventsClick: () -> Unit,
     onViewNotificationHistoryClick: () -> Unit,
     onManageESP32Click: () -> Unit,
-    onRelayControlClick: () -> Unit,
     hasPendingNotifications: Boolean,
     selectedPanelId: String? = null
 ) {
@@ -133,7 +132,6 @@ fun AdminDashboardScreen(
                     onViewEventsClick = onViewEventsClick,
                     onViewNotificationHistoryClick = onViewNotificationHistoryClick,
                     onManageESP32Click = onManageESP32Click,
-                    onRelayControlClick = onRelayControlClick,
                     context = context
                 )
 
@@ -227,7 +225,6 @@ private fun DashboardActions(
     onViewEventsClick: () -> Unit,
     onViewNotificationHistoryClick: () -> Unit,
     onManageESP32Click: () -> Unit,
-    onRelayControlClick: () -> Unit,
     context: android.content.Context
 ) {
     Log.d(TAG, "Rendering DashboardActions")
@@ -270,15 +267,6 @@ private fun DashboardActions(
                 onManageESP32Click()
             },
             text = "Gestionar ESP32"
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        DashboardButton(
-            onClick = {
-                Log.d(TAG, "Relay Control button clicked")
-                performHapticFeedback(context)
-                onRelayControlClick()
-            },
-            text = stringResource(R.string.relay_control)
         )
     }
 }

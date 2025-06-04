@@ -111,7 +111,6 @@ fun AppNavigation(
                         onViewEventsClick = { safeNavigate(navController, Screen.Events.route) },
                         onViewNotificationHistoryClick = { safeNavigate(navController, Screen.NotificationHistory.route) },
                         onManageESP32Click = { safeNavigate(navController, Screen.ESP32Management.route) },
-                        onRelayControlClick = { safeNavigate(navController, Screen.RelayControl.route) },
                         hasPendingNotifications = hasPendingNotifications,
                         selectedPanelId = panelId
                     )
@@ -124,7 +123,6 @@ fun AppNavigation(
                         onViewNotificationHistoryClick = { safeNavigate(navController, Screen.NotificationHistory.route) },
                         onViewEventsClick = { safeNavigate(navController, Screen.Events.route) },
                         onManageESP32Click = { safeNavigate(navController, Screen.ESP32Management.route) },
-                        onControlRelaysClick = { safeNavigate(navController, Screen.RelayControl.route) },
                         hasPendingNotifications = hasPendingNotifications,
                         selectedPanelId = panelId
                     )

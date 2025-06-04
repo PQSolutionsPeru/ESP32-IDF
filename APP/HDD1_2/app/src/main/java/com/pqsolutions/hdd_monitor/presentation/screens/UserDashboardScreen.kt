@@ -58,7 +58,6 @@ fun UserDashboardScreen(
     onViewEventsClick: () -> Unit,
     onViewNotificationHistoryClick: () -> Unit,
     onManageESP32Click: () -> Unit,
-    onControlRelaysClick: () -> Unit,
     hasPendingNotifications: Boolean,
     selectedPanelId: String? = null
 ) {
@@ -126,7 +125,6 @@ fun UserDashboardScreen(
                     onViewEventsClick = onViewEventsClick,
                     onViewNotificationHistoryClick = onViewNotificationHistoryClick,
                     onManageESP32Click = onManageESP32Click,
-                    onControlRelaysClick = onControlRelaysClick,
                     context = context
                 )
 
@@ -186,7 +184,6 @@ private fun DashboardActions(
     onViewEventsClick: () -> Unit,
     onViewNotificationHistoryClick: () -> Unit,
     onManageESP32Click: () -> Unit,
-    onControlRelaysClick: () -> Unit,
     context: android.content.Context
 ) {
     Log.d(TAG, "Rendering DashboardActions")
@@ -215,15 +212,6 @@ private fun DashboardActions(
                 onViewNotificationHistoryClick()
             },
             text = stringResource(R.string.view_notification_history)
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        DashboardButton(
-            onClick = {
-                Log.d(TAG, "Control Relays button clicked")
-                performHapticFeedback(context)
-                onControlRelaysClick()
-            },
-            text = "Control de Relays"
         )
         Spacer(modifier = Modifier.height(8.dp))
         DashboardButton(
