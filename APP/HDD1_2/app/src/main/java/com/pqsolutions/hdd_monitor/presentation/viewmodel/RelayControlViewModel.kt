@@ -25,6 +25,7 @@ import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
+import com.pqsolutions.hdd_monitor.data.RelayConfiguration
 
 @HiltViewModel
 class RelayControlViewModel @Inject constructor(
@@ -238,20 +239,40 @@ class RelayControlViewModel @Inject constructor(
     fun updateRelayConfig(panel: Panel, updatedRelay: Relay) {
         viewModelScope.launch {
             try {
-                Log.d(TAG, "Actualizando configuración del relay ${updatedRelay.name}")
+                Log.d(TAG, "Actualizando configuración completa del relay ${updatedRelay.name}")
 
                 _uiState.value = _uiState.value.copy(operationInProgress = true)
 
-                val success = relayControlRepository.updateRelayConfiguration(
+                // Usar el nuevo método para actualización completa
+                val success = relayControlRepository.updateCompleteRelayConfiguration(
                     clientId = panel.clientName,
                     panelId = panel.documentName,
-                    relay = updatedRelay
+                    relayName = updatedRelay.name,
+                    customName = updatedRelay.customName,
+                    isActive = updatedRelay.isActive,
+                    isControllable = updatedRelay.isControllable,
+                    contactType = updatedRelay.contactType
                 )
 
                 _uiState.value = _uiState.value.copy(operationInProgress = false)
 
                 if (success) {
                     Log.d(TAG, "Configuración actualizada exitosamente")
+
+                    // Actualizar inmediatamente en el estado local para UI responsiva
+                    updateRelayInState(panel.documentName, updatedRelay.name) { _ ->
+                        updatedRelay.copy(
+                            // Mantener campos que no se modifican en configuración
+                            status = updatedRelay.status,
+                            date_time = updatedRelay.date_time,
+                            lastCommandSent = updatedRelay.lastCommandSent,
+                            commandSource = updatedRelay.commandSource
+                        )
+                    }
+
+                    // Mensaje de éxito (opcional - podrías agregarlo al estado)
+                    Log.d(TAG, "Relay ${updatedRelay.displayName} configurado exitosamente")
+
                 } else {
                     _uiState.value = _uiState.value.copy(
                         error = "Error actualizando configuración del relay"
@@ -259,10 +280,10 @@ class RelayControlViewModel @Inject constructor(
                 }
 
             } catch (e: Exception) {
-                Log.e(TAG, "Error actualizando configuración", e)
+                Log.e(TAG, "Error actualizando configuración completa", e)
                 _uiState.value = _uiState.value.copy(
                     operationInProgress = false,
-                    error = "Error actualizando relay: ${e.message}"
+                    error = "Error actualizando configuración: ${e.message}"
                 )
             }
         }
@@ -417,9 +438,299 @@ class RelayControlViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Carga nombres de clientes
-     */
+    fun updateRelayCustomName(
+        panel: Panel,
+        relay: Relay,
+        newCustomName: String
+    ) {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "Actualizando nombre personalizado del relay ${relay.name} a: $newCustomName")
+
+                _uiState.value = _uiState.value.copy(operationInProgress = true)
+
+                val success = relayControlRepository.updateRelayName(
+                    clientId = panel.clientName,
+                    panelId = panel.documentName,
+                    relayName = relay.name,
+                    customName = newCustomName
+                )
+
+                _uiState.value = _uiState.value.copy(operationInProgress = false)
+
+                if (success) {
+                    Log.d(TAG, "Nombre personalizado actualizado exitosamente")
+                    // Actualizar inmediatamente en el estado local
+                    updateRelayInState(panel.documentName, relay.name) { currentRelay ->
+                        currentRelay.copy(customName = newCustomName.takeIf { it.isNotBlank() })
+                    }
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        error = "Error actualizando nombre del relay"
+                    )
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Error actualizando nombre personalizado", e)
+                _uiState.value = _uiState.value.copy(
+                    operationInProgress = false,
+                    error = "Error actualizando nombre: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun updateRelayActiveState(
+        panel: Panel,
+        relay: Relay,
+        isActive: Boolean
+    ) {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "Actualizando estado activo del relay ${relay.name} a: $isActive")
+
+                _uiState.value = _uiState.value.copy(operationInProgress = true)
+
+                val success = relayControlRepository.updateRelayActiveState(
+                    clientId = panel.clientName,
+                    panelId = panel.documentName,
+                    relayName = relay.name,
+                    isActive = isActive
+                )
+
+                _uiState.value = _uiState.value.copy(operationInProgress = false)
+
+                if (success) {
+                    Log.d(TAG, "Estado activo actualizado exitosamente")
+                    // Actualizar inmediatamente en el estado local
+                    updateRelayInState(panel.documentName, relay.name) { currentRelay ->
+                        currentRelay.copy(isActive = isActive)
+                    }
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        error = "Error actualizando estado del relay"
+                    )
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Error actualizando estado activo", e)
+                _uiState.value = _uiState.value.copy(
+                    operationInProgress = false,
+                    error = "Error actualizando estado: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun updateRelayControllability(
+        panel: Panel,
+        relay: Relay,
+        isControllable: Boolean
+    ) {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "Actualizando controlabilidad del relay ${relay.name} a: $isControllable")
+
+                _uiState.value = _uiState.value.copy(operationInProgress = true)
+
+                val success = relayControlRepository.updateRelayControlConfig(
+                    clientId = panel.clientName,
+                    panelId = panel.documentName,
+                    relayName = relay.name,
+                    isControllable = isControllable
+                )
+
+                _uiState.value = _uiState.value.copy(operationInProgress = false)
+
+                if (success) {
+                    Log.d(TAG, "Controlabilidad actualizada exitosamente")
+                    // Actualizar inmediatamente en el estado local
+                    updateRelayInState(panel.documentName, relay.name) { currentRelay ->
+                        currentRelay.copy(isControllable = isControllable)
+                    }
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        error = "Error actualizando controlabilidad del relay"
+                    )
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Error actualizando controlabilidad", e)
+                _uiState.value = _uiState.value.copy(
+                    operationInProgress = false,
+                    error = "Error actualizando controlabilidad: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun updateRelayContactType(
+        panel: Panel,
+        relay: Relay,
+        contactType: String
+    ) {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "Actualizando tipo de contacto del relay ${relay.name} a: $contactType")
+
+                _uiState.value = _uiState.value.copy(operationInProgress = true)
+
+                val success = relayControlRepository.updateRelayContactType(
+                    clientId = panel.clientName,
+                    panelId = panel.documentName,
+                    relayName = relay.name,
+                    contactType = contactType
+                )
+
+                _uiState.value = _uiState.value.copy(operationInProgress = false)
+
+                if (success) {
+                    Log.d(TAG, "Tipo de contacto actualizado exitosamente")
+                    // Actualizar inmediatamente en el estado local
+                    updateRelayInState(panel.documentName, relay.name) { currentRelay ->
+                        currentRelay.copy(contactType = contactType)
+                    }
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        error = "Error actualizando tipo de contacto del relay"
+                    )
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Error actualizando tipo de contacto", e)
+                _uiState.value = _uiState.value.copy(
+                    operationInProgress = false,
+                    error = "Error actualizando tipo de contacto: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun updateCompleteRelayConfig(
+        panel: Panel,
+        originalRelay: Relay,
+        updatedRelay: Relay
+    ) {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "Actualizando configuración completa del relay ${originalRelay.name}")
+
+                _uiState.value = _uiState.value.copy(operationInProgress = true)
+
+                // Actualizar todas las configuraciones en una sola operación
+                val success = relayControlRepository.updateCompleteRelayConfiguration(
+                    clientId = panel.clientName,
+                    panelId = panel.documentName,
+                    relayName = originalRelay.name,
+                    customName = updatedRelay.customName,
+                    isActive = updatedRelay.isActive,
+                    isControllable = updatedRelay.isControllable,
+                    contactType = updatedRelay.contactType
+                )
+
+                _uiState.value = _uiState.value.copy(operationInProgress = false)
+
+                if (success) {
+                    Log.d(TAG, "Configuración completa actualizada exitosamente")
+                    // Actualizar inmediatamente en el estado local
+                    updateRelayInState(panel.documentName, originalRelay.name) { _ ->
+                        updatedRelay
+                    }
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        error = "Error actualizando configuración del relay"
+                    )
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Error actualizando configuración completa", e)
+                _uiState.value = _uiState.value.copy(
+                    operationInProgress = false,
+                    error = "Error actualizando configuración: ${e.message}"
+                )
+            }
+        }
+    }
+
+    private fun updateRelayInState(
+        panelDocName: String,
+        relayName: String,
+        transform: (Relay) -> Relay
+    ) {
+        val currentState = _uiState.value
+        val updatedPanels = currentState.panels.map { panel ->
+            if (panel.documentName == panelDocName) {
+                val updatedRelays = panel.relays.map { relay ->
+                    if (relay.name == relayName) {
+                        transform(relay)
+                    } else {
+                        relay
+                    }
+                }
+                panel.copy(relays = updatedRelays)
+            } else {
+                panel
+            }
+        }
+
+        val updatedGroupedPanels = updatedPanels.groupBy { panel ->
+            currentState.clientNames[panel.clientName] ?: panel.clientName
+        }
+
+        _uiState.value = currentState.copy(
+            panels = updatedPanels,
+            groupedPanels = updatedGroupedPanels
+        )
+    }
+
+    fun getRelayConfiguration(panelId: String, relayName: String): RelayConfiguration? {
+        val panel = _uiState.value.panels.find { it.documentName == panelId }
+        val relay = panel?.relays?.find { it.name == relayName }
+
+        return relay?.let {
+            RelayConfiguration(
+                name = it.name,
+                customName = it.customName,
+                isControllable = it.isControllable,
+                isActive = it.isActive,
+                contactType = it.contactType
+            )
+        }
+    }
+
+    fun canControlRelay(panel: Panel, relay: Relay): Boolean {
+        return !panel.isESP32Offline() &&
+                relay.isActive &&
+                relay.isControllable &&
+                !_uiState.value.operationInProgress
+    }
+
+    fun getRelayConfigStats(): RelayConfigStats {
+        val allRelays = _uiState.value.panels.flatMap { it.relays }
+
+        return RelayConfigStats(
+            totalRelays = allRelays.size,
+            activeRelays = allRelays.count { it.isActive },
+            controllableRelays = allRelays.count { it.isControllable && it.isActive },
+            customNamedRelays = allRelays.count { !it.customName.isNullOrBlank() },
+            normallyOpenRelays = allRelays.count { it.contactType == "NO" },
+            normallyClosedRelays = allRelays.count { it.contactType == "NC" }
+        )
+    }
+
+    data class RelayConfigStats(
+        val totalRelays: Int,
+        val activeRelays: Int,
+        val controllableRelays: Int,
+        val customNamedRelays: Int,
+        val normallyOpenRelays: Int,
+        val normallyClosedRelays: Int
+    ) {
+        val inactiveRelays: Int get() = totalRelays - activeRelays
+        val readOnlyRelays: Int get() = activeRelays - controllableRelays
+        val customizationPercentage: Float get() = if (totalRelays > 0) (customNamedRelays.toFloat() / totalRelays) * 100f else 0f
+    }
+
     private suspend fun loadClientNames(clientDocName: String?): Map<String, String> {
         return try {
             if (clientDocName != null) {

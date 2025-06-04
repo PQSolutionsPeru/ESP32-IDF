@@ -18,6 +18,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Named
 import javax.inject.Singleton
+import androidx.work.WorkManager
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -34,17 +35,6 @@ object AppModule {
         firestore: FirebaseFirestore,
         esp32Repository: ESP32Repository
     ): PanelRepository = PanelRepository(firestore, esp32Repository)
-
-    // Eliminamos el proveedor de EventNotificationScheduler
-    // @Provides
-    // @Singleton
-    // fun provideEventNotificationScheduler(
-    //     @ApplicationContext context: Context,
-    //     firestore: FirebaseFirestore,
-    //     userRepository: UserRepository
-    // ): EventNotificationScheduler {
-    //     return EventNotificationScheduler(context, firestore, userRepository)
-    // }
 
     @Provides
     @Singleton
@@ -71,11 +61,8 @@ object AppModule {
     @Singleton
     fun provideEventRepository(
         firestore: FirebaseFirestore,
-        auth: FirebaseAuth,
-        // Eliminamos la dependencia de eventNotificationScheduler
-        // eventNotificationScheduler: EventNotificationScheduler
+        auth: FirebaseAuth
     ): EventRepository {
-        // Modificamos el constructor para que no use eventNotificationScheduler
         return EventRepository(firestore, auth)
     }
 
@@ -95,5 +82,13 @@ object AppModule {
         userRepository: UserRepository
     ): NotificationRepository {
         return NotificationRepository(firestore, userRepository)
+    }
+
+    @Provides
+    @Singleton
+    fun provideWorkManager(
+        @ApplicationContext context: Context
+    ): WorkManager {
+        return WorkManager.getInstance(context)
     }
 }

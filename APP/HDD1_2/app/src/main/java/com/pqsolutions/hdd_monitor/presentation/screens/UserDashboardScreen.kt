@@ -57,8 +57,8 @@ fun UserDashboardScreen(
     onLogoutClick: () -> Unit,
     onViewEventsClick: () -> Unit,
     onViewNotificationHistoryClick: () -> Unit,
-    onConfigureEsp32Click: () -> Unit,
-    onControlRelaysClick: () -> Unit, // Nueva función para control de relays
+    onManageESP32Click: () -> Unit,
+    onControlRelaysClick: () -> Unit,
     hasPendingNotifications: Boolean,
     selectedPanelId: String? = null
 ) {
@@ -125,8 +125,8 @@ fun UserDashboardScreen(
                 DashboardActions(
                     onViewEventsClick = onViewEventsClick,
                     onViewNotificationHistoryClick = onViewNotificationHistoryClick,
-                    onConfigureEsp32Click = onConfigureEsp32Click,
-                    onControlRelaysClick = onControlRelaysClick, // Nuevo parámetro
+                    onManageESP32Click = onManageESP32Click,
+                    onControlRelaysClick = onControlRelaysClick,
                     context = context
                 )
 
@@ -185,8 +185,8 @@ fun UserDashboardScreen(
 private fun DashboardActions(
     onViewEventsClick: () -> Unit,
     onViewNotificationHistoryClick: () -> Unit,
-    onConfigureEsp32Click: () -> Unit,
-    onControlRelaysClick: () -> Unit, // Nueva función
+    onManageESP32Click: () -> Unit,
+    onControlRelaysClick: () -> Unit,
     context: android.content.Context
 ) {
     Log.d(TAG, "Rendering DashboardActions")
@@ -223,16 +223,16 @@ private fun DashboardActions(
                 performHapticFeedback(context)
                 onControlRelaysClick()
             },
-            text = "Control de Relays" // Nuevo botón
+            text = "Control de Relays"
         )
         Spacer(modifier = Modifier.height(8.dp))
         DashboardButton(
             onClick = {
-                Log.d(TAG, "Configure ESP32 button clicked")
+                Log.d(TAG, "Manage ESP32 button clicked")
                 performHapticFeedback(context)
-                onConfigureEsp32Click()
+                onManageESP32Click()
             },
-            text = stringResource(R.string.configure_esp32)
+            text = "Gestionar ESP32"
         )
     }
 }

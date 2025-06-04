@@ -23,7 +23,9 @@ import com.pqsolutions.hdd_monitor.data.Panel
 import com.pqsolutions.hdd_monitor.data.Relay
 import com.pqsolutions.hdd_monitor.presentation.components.AnimatedNotificationBell
 import com.pqsolutions.hdd_monitor.presentation.components.AppTopBar
-import com.pqsolutions.hdd_monitor.presentation.state.RelayControlState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material.icons.filled.Block
 import com.pqsolutions.hdd_monitor.presentation.theme.HDD1_2Theme
 import com.pqsolutions.hdd_monitor.presentation.theme.PanelColors
 import com.pqsolutions.hdd_monitor.presentation.util.performHapticFeedback
@@ -422,11 +424,23 @@ private fun RelayControlItem(
 ) {
     val context = LocalContext.current
 
+    // Determinar si el relay puede ser controlado
+    val canControl = enabled && relay.isActive && relay.isControllable
+
+    // Color de fondo según estado y configuración
+    val backgroundColor = when {
+        !relay.isActive -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        !enabled -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+        else -> MaterialTheme.colorScheme.surface
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
+        colors = CardDefaults.cardColors(containerColor = backgroundColor),
+        border = if (!relay.isActive) BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+        ) else null
     ) {
         Row(
             modifier = Modifier
@@ -435,25 +449,110 @@ private fun RelayControlItem(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Información del relay
+            // Información del relay (expandida)
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = relay.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = "Estado: ${relay.status}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = when (relay.status) {
-                        "OK" -> MaterialTheme.colorScheme.primary
-                        "DISC" -> MaterialTheme.colorScheme.error
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                // Nombre (personalizado o original)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = relay.displayName, // Usa displayName que ya maneja custom vs original
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = if (relay.isActive)
+                            MaterialTheme.colorScheme.onSurface
+                        else
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+
+                    // Indicadores de configuración
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        // Indicador de nombre personalizado
+                        if (!relay.customName.isNullOrBlank() && relay.customName != relay.name) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                shape = MaterialTheme.shapes.extraSmall
+                            ) {
+                                Text(
+                                    text = "PERSONALIZADO",
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
+                        }
+
+                        // Indicador de tipo de contacto
+                        if (relay.contactType != "NO") {
+                            Surface(
+                                color = MaterialTheme.colorScheme.tertiaryContainer,
+                                shape = MaterialTheme.shapes.extraSmall
+                            ) {
+                                Text(
+                                    text = relay.contactType,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                            }
+                        }
                     }
-                )
+                }
+
+                // Información de estado y configuración
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Estado del relay
+                    Text(
+                        text = "Estado: ${relay.status}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = when (relay.status) {
+                            "OK" -> MaterialTheme.colorScheme.primary
+                            "DISC" -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+
+                    // Separador
+                    Text(
+                        text = "•",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    // Estado de configuración
+                    Text(
+                        text = when {
+                            !relay.isActive -> "Deshabilitado"
+                            !relay.isControllable -> "Solo lectura"
+                            else -> "Controlable"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = when {
+                            !relay.isActive -> MaterialTheme.colorScheme.error
+                            !relay.isControllable -> MaterialTheme.colorScheme.outline
+                            else -> MaterialTheme.colorScheme.primary
+                        },
+                        fontWeight = if (!relay.isActive || !relay.isControllable) FontWeight.Medium else FontWeight.Normal
+                    )
+                }
+
+                // Nombre original si es diferente al personalizado
+                if (!relay.customName.isNullOrBlank() && relay.customName != relay.name) {
+                    Text(
+                        text = "Original: ${relay.name}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+
+                // Fecha de última actualización
                 relay.date_time?.let { dateTime ->
                     Text(
-                        text = "Última actualización: $dateTime",
+                        text = "Actualizado: $dateTime",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -465,33 +564,128 @@ private fun RelayControlItem(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Botón de configuración
+                // Botón de configuración (siempre disponible)
                 IconButton(
                     onClick = {
                         performHapticFeedback(context)
                         onConfig(panel, relay)
-                    },
-                    enabled = enabled
+                    }
                 ) {
                     Icon(
                         imageVector = Icons.Default.Settings,
-                        contentDescription = "Configurar ${relay.name}",
-                        tint = if (enabled) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant
+                        contentDescription = "Configurar ${relay.displayName}",
+                        tint = MaterialTheme.colorScheme.primary
                     )
                 }
 
-                // Switch para toggle del relay
-                Switch(
-                    checked = relay.status == "OK",
-                    onCheckedChange = { _ ->
-                        performHapticFeedback(context)
-                        onToggle(panel, relay)
-                    },
-                    enabled = enabled
-                )
+                // Switch para toggle del relay (solo si es controlable)
+                if (relay.isActive) {
+                    Switch(
+                        checked = relay.status == "OK",
+                        onCheckedChange = { _ ->
+                            if (canControl) {
+                                performHapticFeedback(context)
+                                onToggle(panel, relay)
+                            }
+                        },
+                        enabled = canControl
+                    )
+                } else {
+                    // Indicador de relay deshabilitado
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = MaterialTheme.shapes.small
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Block,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "Deshabilitado",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun RelayConfigurationIndicators(
+    relay: Relay,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        // Indicador de relay personalizado
+        if (!relay.customName.isNullOrBlank() && relay.customName != relay.name) {
+            ConfigurationChip(
+                text = "CUSTOM",
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                textColor = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+        }
+
+        // Indicador de tipo de contacto (solo si no es NO por defecto)
+        if (relay.contactType == "NC") {
+            ConfigurationChip(
+                text = "NC",
+                color = MaterialTheme.colorScheme.tertiaryContainer,
+                textColor = MaterialTheme.colorScheme.onTertiaryContainer
+            )
+        }
+
+        // Indicador de solo lectura
+        if (relay.isActive && !relay.isControllable) {
+            ConfigurationChip(
+                text = "READ-ONLY",
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f),
+                textColor = MaterialTheme.colorScheme.outline
+            )
+        }
+
+        // Indicador de deshabilitado
+        if (!relay.isActive) {
+            ConfigurationChip(
+                text = "DISABLED",
+                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
+                textColor = MaterialTheme.colorScheme.error
+            )
+        }
+    }
+}
+
+@Composable
+private fun ConfigurationChip(
+    text: String,
+    color: Color,
+    textColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = color,
+        shape = MaterialTheme.shapes.extraSmall,
+        modifier = modifier
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = textColor,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
 

@@ -267,9 +267,8 @@ class ESP32Repository @Inject constructor(
         activeListeners[listenerId] = registration
     }
 
-    /**
-     * Obtiene ESP32s asignados a un cliente específico o todos para admin
-     */
+    //Obtiene ESP32s asignados a un cliente específico o todos para admin
+    //SOLUCIÓN: Para admin, obtenemos todos y filtramos en memoria
     fun observeAssignedESP32s(clientId: String? = null): Flow<List<ESP32Device>> = callbackFlow {
         try {
             Log.d(TAG, "Observando ESP32s asignados para cliente: $clientId")
@@ -277,52 +276,85 @@ class ESP32Repository @Inject constructor(
             val listenerId = "observe_assigned_esp32_${clientId ?: "all"}"
             activeListeners[listenerId]?.remove()
 
-            val query = if (clientId != null) {
-                // Para usuarios normales: solo ESP32s de su cliente
-                firestore.collection(ESP32_COLLECTION)
+            if (clientId != null) {
+                // Para usuarios normales: solo ESP32s de su cliente con query optimizada
+                val listenerRegistration = firestore.collection(ESP32_COLLECTION)
                     .whereEqualTo("client_id", clientId)
                     .whereIn("status", listOf(
                         ESP32Device.STATUS_ONLINE,
                         ESP32Device.STATUS_RUNNING,
                         ESP32Device.STATUS_OFFLINE
                     ))
-            } else {
-                // Para admin: todos los ESP32s asignados
-                firestore.collection(ESP32_COLLECTION)
-                    .whereNotEqualTo("client_id", "")
-                    .whereIn("status", listOf(
-                        ESP32Device.STATUS_ONLINE,
-                        ESP32Device.STATUS_RUNNING,
-                        ESP32Device.STATUS_OFFLINE
-                    ))
-            }
+                    .addSnapshotListener { snapshot, error ->
+                        if (error != null) {
+                            Log.e(TAG, "Error observando ESP32s asignados para cliente", error)
+                            return@addSnapshotListener
+                        }
 
-            val listenerRegistration = query.addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e(TAG, "Error observando ESP32s asignados", error)
-                    return@addSnapshotListener
-                }
+                        val devices = snapshot?.documents?.mapNotNull { doc ->
+                            doc.toESP32Device()?.let { device ->
+                                // Enriquecer con información del cliente y panel
+                                val clientName = doc.getString("client_name") ?: ""
+                                val panelName = doc.getString("panel_name") ?: ""
+                                device.copy(
+                                    clientName = clientName,
+                                    panelName = panelName
+                                )
+                            }
+                        } ?: emptyList()
 
-                val devices = snapshot?.documents?.mapNotNull { doc ->
-                    doc.toESP32Device()?.let { device ->
-                        // Enriquecer con información del cliente y panel
-                        val clientName = doc.getString("client_name") ?: ""
-                        val panelName = doc.getString("panel_name") ?: ""
-                        device.copy(
-                            clientName = clientName,
-                            panelName = panelName
-                        )
+                        Log.d(TAG, "ESP32s asignados encontrados para cliente: ${devices.size}")
+                        trySend(devices)
                     }
-                } ?: emptyList()
 
-                Log.d(TAG, "ESP32s asignados encontrados: ${devices.size}")
-                trySend(devices)
+                activeListeners[listenerId] = listenerRegistration
+            } else {
+                // Para admin: obtener todos y filtrar en memoria
+                val listenerRegistration = firestore.collection(ESP32_COLLECTION)
+                    .addSnapshotListener { snapshot, error ->
+                        if (error != null) {
+                            Log.e(TAG, "Error observando ESP32s para admin", error)
+                            return@addSnapshotListener
+                        }
+
+                        // Filtrar en memoria: solo ESP32s asignados y con estados válidos
+                        val devices = snapshot?.documents?.mapNotNull { doc ->
+                            val device = doc.toESP32Device()
+                            if (device != null) {
+                                val deviceClientId = doc.getString("client_id") ?: ""
+                                val deviceStatus = device.status
+
+                                // Solo incluir si tiene client_id y estado válido
+                                if (deviceClientId.isNotEmpty() &&
+                                    deviceStatus in listOf(
+                                        ESP32Device.STATUS_ONLINE,
+                                        ESP32Device.STATUS_RUNNING,
+                                        ESP32Device.STATUS_OFFLINE
+                                    )) {
+                                    // Enriquecer con información del cliente y panel
+                                    val clientName = doc.getString("client_name") ?: ""
+                                    val panelName = doc.getString("panel_name") ?: ""
+                                    device.copy(
+                                        clientName = clientName,
+                                        panelName = panelName
+                                    )
+                                } else {
+                                    null
+                                }
+                            } else {
+                                null
+                            }
+                        } ?: emptyList()
+
+                        Log.d(TAG, "ESP32s asignados encontrados para admin: ${devices.size}")
+                        trySend(devices)
+                    }
+
+                activeListeners[listenerId] = listenerRegistration
             }
-
-            activeListeners[listenerId] = listenerRegistration
 
             awaitClose {
-                listenerRegistration.remove()
+                activeListeners[listenerId]?.remove()
                 activeListeners.remove(listenerId)
             }
         } catch (e: Exception) {
@@ -331,9 +363,7 @@ class ESP32Repository @Inject constructor(
         }
     }
 
-    /**
-     * Envía comando para cambiar estado de relay
-     */
+    // Envía comando para cambiar estado de relay
     suspend fun sendRelayCommand(
         esp32Id: String,
         relayName: String,
@@ -374,9 +404,7 @@ class ESP32Repository @Inject constructor(
         Log.d(TAG, "Comando de relay enviado exitosamente")
     }
 
-    /**
-     * Actualiza el nombre personalizado de un relay
-     */
+    // Actualiza el nombre personalizado de un relay
     suspend fun updateRelayName(
         esp32Id: String,
         relayName: String,
@@ -408,9 +436,7 @@ class ESP32Repository @Inject constructor(
         Log.d(TAG, "Nombre de relay actualizado exitosamente")
     }
 
-    /**
-     * Habilita o deshabilita un relay para control remoto
-     */
+    // Habilita o deshabilita un relay para control remoto
     suspend fun updateRelayActiveState(
         esp32Id: String,
         relayName: String,
@@ -622,9 +648,7 @@ class ESP32Repository @Inject constructor(
         Log.d(TAG, "ESP32 unassigned successfully")
     }
 
-    /**
-     * Limpia todos los listeners activos
-     */
+    // Limpia todos los listeners activos
     fun clearListeners() {
         Log.d(TAG, "Limpiando todos los listeners de ESP32: ${activeListeners.size} listeners")
 

@@ -33,12 +33,17 @@ sealed class Screen(val route: String) {
     object ClientManagement : Screen("client_management")
     object NotificationHistory : Screen("notification_history")
     object Events : Screen("events")
-    object BleConfig : Screen("ble_config")
     object RelayControl : Screen("relay_control")
+
+    // Rutas para gestión ESP32
+    object ESP32Management : Screen("esp32_management")
+    object PanelConfiguration : Screen("panel_configuration")
+    // ELIMINADA: RelayCustomization - la funcionalidad está en RelayControl
 
     companion object {
         fun eventDetail(eventId: String) = "events/$eventId"
         fun panelDetail(panelId: String) = "dashboard?panelId=$panelId"
+        fun panelConfiguration(panelId: String? = null) = if (panelId != null) "panel_configuration/$panelId" else "panel_configuration"
     }
 }
 
@@ -105,7 +110,7 @@ fun AppNavigation(
                         onManageUsersClick = { safeNavigate(navController, Screen.ClientManagement.route) },
                         onViewEventsClick = { safeNavigate(navController, Screen.Events.route) },
                         onViewNotificationHistoryClick = { safeNavigate(navController, Screen.NotificationHistory.route) },
-                        onConfigureEsp32Click = { safeNavigate(navController, Screen.BleConfig.route) },
+                        onManageESP32Click = { safeNavigate(navController, Screen.ESP32Management.route) },
                         onRelayControlClick = { safeNavigate(navController, Screen.RelayControl.route) },
                         hasPendingNotifications = hasPendingNotifications,
                         selectedPanelId = panelId
@@ -118,7 +123,7 @@ fun AppNavigation(
                         onLogoutClick = { handleLogout(viewModel) },
                         onViewNotificationHistoryClick = { safeNavigate(navController, Screen.NotificationHistory.route) },
                         onViewEventsClick = { safeNavigate(navController, Screen.Events.route) },
-                        onConfigureEsp32Click = { safeNavigate(navController, Screen.BleConfig.route) },
+                        onManageESP32Click = { safeNavigate(navController, Screen.ESP32Management.route) },
                         onControlRelaysClick = { safeNavigate(navController, Screen.RelayControl.route) },
                         hasPendingNotifications = hasPendingNotifications,
                         selectedPanelId = panelId
@@ -231,13 +236,6 @@ fun AppNavigation(
             )
         }
 
-        composable(Screen.BleConfig.route) {
-            BleConfigScreen(
-                onConfigurationComplete = { safeNavigate(navController, Screen.Dashboard.route) },
-                onBackClick = { safeNavigateBack(navController) }
-            )
-        }
-
         composable(Screen.RelayControl.route) {
             RelayControlScreen(
                 onBackClick = { safeNavigateBack(navController) },
@@ -245,6 +243,64 @@ fun AppNavigation(
                 onNotificationClick = { safeNavigate(navController, Screen.NotificationHistory.route) }
             )
         }
+
+        // NUEVAS RUTAS PARA GESTIÓN ESP32
+
+        composable(Screen.ESP32Management.route) {
+            ESP32ManagementScreen(
+                onBackClick = { safeNavigateBack(navController) },
+                onCreatePanel = {
+                    safeNavigate(navController, Screen.panelConfiguration())
+                },
+                onEditPanel = { panelId ->
+                    safeNavigate(navController, Screen.panelConfiguration(panelId))
+                },
+                onCustomizeRelays = { panelId ->
+                    // Navegar a RelayControl en lugar de una pantalla inexistente
+                    safeNavigate(navController, Screen.RelayControl.route)
+                },
+                hasPendingNotifications = hasPendingNotifications,
+                onNotificationClick = { safeNavigate(navController, Screen.NotificationHistory.route) }
+            )
+        }
+
+        // Configuración de panel (crear nuevo o editar existente)
+        composable(
+            route = "${Screen.PanelConfiguration.route}/{panelId}",
+            arguments = listOf(
+                navArgument("panelId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            val panelId = backStackEntry.arguments?.getString("panelId")
+            PanelConfigurationScreen(
+                panelId = panelId,
+                onBackClick = { safeNavigateBack(navController) },
+                onSaveSuccess = {
+                    safeNavigateBack(navController)
+                },
+                hasPendingNotifications = hasPendingNotifications,
+                onNotificationClick = { safeNavigate(navController, Screen.NotificationHistory.route) }
+            )
+        }
+
+        // Ruta para crear panel nuevo (sin ID)
+        composable(Screen.PanelConfiguration.route) {
+            PanelConfigurationScreen(
+                panelId = null,
+                onBackClick = { safeNavigateBack(navController) },
+                onSaveSuccess = {
+                    safeNavigateBack(navController)
+                },
+                hasPendingNotifications = hasPendingNotifications,
+                onNotificationClick = { safeNavigate(navController, Screen.NotificationHistory.route) }
+            )
+        }
+
+        // ELIMINADA: La ruta de RelayCustomization ya que la funcionalidad está en RelayControl
     }
 
     // Manejar cambios de ruta

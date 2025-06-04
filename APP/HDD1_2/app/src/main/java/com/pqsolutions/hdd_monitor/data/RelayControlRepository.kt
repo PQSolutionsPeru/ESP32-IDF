@@ -1,10 +1,12 @@
 package com.pqsolutions.hdd_monitor.data
 
+import android.content.ContentValues.TAG
 import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Source
 import com.pqsolutions.hdd_monitor.esp32.ESP32Repository
+import com.pqsolutions.hdd_monitor.presentation.state.RelayConfiguration
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -21,6 +23,7 @@ import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.google.firebase.firestore.FieldValue
 
 @Singleton
 class RelayControlRepository @Inject constructor(
@@ -368,40 +371,6 @@ class RelayControlRepository @Inject constructor(
         false
     }
 
-    /**
-     * Actualiza la configuración de un relay (nombre personalizado, etc.)
-     */
-    suspend fun updateRelayConfiguration(
-        clientId: String,
-        panelId: String,
-        relay: Relay
-    ): Boolean = try {
-        Log.d(TAG, "Actualizando configuración relay: $clientId/$panelId/${relay.name}")
-
-        val relayRef = firestore
-            .document("$BASE_PATH/$clientId/panels/$panelId/relays/${relay.name}")
-
-        val updateData = mapOf(
-            "name" to relay.name,
-            "status" to relay.status,
-            "date_time" to relay.date_time,
-            "lastUpdate" to com.google.firebase.Timestamp.now(),
-            "isActive" to true,
-            "customName" to relay.name,
-            "isControllable" to true
-        )
-
-        relayRef.set(updateData).await()
-        Log.d(TAG, "Configuración de relay actualizada exitosamente")
-        true
-    } catch (e: Exception) {
-        Log.e(TAG, "Error actualizando configuración de relay", e)
-        false
-    }
-
-    /**
-     * Obtiene el estado actual de un relay específico
-     */
     suspend fun getRelayStatus(
         clientId: String,
         panelId: String,
@@ -566,4 +535,343 @@ class RelayControlRepository @Inject constructor(
             throw e
         }
     }
+
+    //Actualiza el nombre personalizado de un relay
+    suspend fun updateRelayName(
+        clientId: String,
+        panelId: String,
+        relayName: String,
+        customName: String
+    ): Boolean {
+        return try {
+            Log.d(TAG, "Actualizando nombre de relay: $relayName -> $customName")
+
+            val relayRef = firestore
+                .collection("$BASE_PATH/$clientId/panels/$panelId/relays")
+                .document(relayName)
+
+            val updateData = mapOf(
+                "customName" to customName.trim(),
+                "lastUpdate" to FieldValue.serverTimestamp()
+            )
+
+            relayRef.update(updateData).await()
+            Log.d(TAG, "Nombre de relay actualizado exitosamente")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error actualizando nombre de relay", e)
+            false
+        }
+    }
+
+    //Actualiza el estado activo de un relay
+    suspend fun updateRelayActiveState(
+        clientId: String,
+        panelId: String,
+        relayName: String,
+        isActive: Boolean
+    ): Boolean {
+        return try {
+            Log.d(TAG, "Actualizando estado activo de relay: $relayName -> $isActive")
+
+            val relayRef = firestore
+                .collection("$BASE_PATH/$clientId/panels/$panelId/relays")
+                .document(relayName)
+
+            val updateData = mapOf(
+                "isActive" to isActive,
+                "lastUpdate" to FieldValue.serverTimestamp()
+            )
+
+            relayRef.update(updateData).await()
+            Log.d(TAG, "Estado activo de relay actualizado exitosamente")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error actualizando estado activo de relay", e)
+            false
+        }
+    }
+
+    //Actualiza la configuración de controlabilidad de un relay
+    suspend fun updateRelayControlConfig(
+        clientId: String,
+        panelId: String,
+        relayName: String,
+        isControllable: Boolean
+    ): Boolean {
+        return try {
+            Log.d(TAG, "Actualizando controlabilidad de relay: $relayName -> $isControllable")
+
+            val relayRef = firestore
+                .collection("$BASE_PATH/$clientId/panels/$panelId/relays")
+                .document(relayName)
+
+            val updateData = mapOf(
+                "isControllable" to isControllable,
+                "lastUpdate" to FieldValue.serverTimestamp()
+            )
+
+            relayRef.update(updateData).await()
+            Log.d(TAG, "Controlabilidad de relay actualizada exitosamente")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error actualizando controlabilidad de relay", e)
+            false
+        }
+    }
+
+    //Actualiza el tipo de contacto de un relay
+    suspend fun updateRelayContactType(
+        clientId: String,
+        panelId: String,
+        relayName: String,
+        contactType: String
+    ): Boolean {
+        return try {
+            Log.d(TAG, "Actualizando tipo de contacto de relay: $relayName -> $contactType")
+
+            val relayRef = firestore
+                .collection("$BASE_PATH/$clientId/panels/$panelId/relays")
+                .document(relayName)
+
+            val updateData = mapOf(
+                "contactType" to contactType,
+                "lastUpdate" to FieldValue.serverTimestamp()
+            )
+
+            relayRef.update(updateData).await()
+            Log.d(TAG, "Tipo de contacto de relay actualizado exitosamente")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error actualizando tipo de contacto de relay", e)
+            false
+        }
+    }
+
+    //Actualiza múltiples configuraciones de un relay en una sola operación
+    suspend fun updateCompleteRelayConfiguration(
+        clientId: String,
+        panelId: String,
+        relayName: String,
+        customName: String?,
+        isActive: Boolean,
+        isControllable: Boolean,
+        contactType: String
+    ): Boolean {
+        return try {
+            Log.d(TAG, "Actualizando configuración completa de relay: $relayName")
+
+            val relayRef = firestore
+                .collection("$BASE_PATH/$clientId/panels/$panelId/relays")
+                .document(relayName)
+
+            val updateData = buildMap<String, Any> {
+                put("isActive", isActive)
+                put("isControllable", isControllable)
+                put("contactType", contactType)
+                put("lastUpdate", FieldValue.serverTimestamp())
+
+                // Solo actualizar customName si no es nulo o vacío
+                customName?.takeIf { it.isNotBlank() }?.let { name ->
+                    put("customName", name.trim())
+                } ?: put("customName", FieldValue.delete()) // Eliminar si es vacío
+            }
+
+            relayRef.update(updateData).await()
+            Log.d(TAG, "Configuración completa de relay actualizada exitosamente")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error actualizando configuración completa de relay", e)
+            false
+        }
+    }
+
+    //Obtiene la configuración actual de un relay
+    suspend fun getRelayConfiguration(
+        clientId: String,
+        panelId: String,
+        relayName: String
+    ): Result<RelayConfiguration?> = runCatching {
+        Log.d(TAG, "Obteniendo configuración de relay: $relayName")
+
+        val relayDoc = firestore
+            .collection("$BASE_PATH/$clientId/panels/$panelId/relays")
+            .document(relayName)
+            .get()
+            .await()
+
+        if (relayDoc.exists()) {
+            val data = relayDoc.data ?: return@runCatching null
+
+            RelayConfiguration(
+                name = relayName,
+                customName = data["customName"] as? String,
+                isControllable = data["isControllable"] as? Boolean ?: true,
+                isActive = data["isActive"] as? Boolean ?: true,
+                contactType = data["contactType"] as? String ?: "NO",
+                description = data["description"] as? String,
+                alertOnChange = data["alertOnChange"] as? Boolean ?: true
+            )
+        } else {
+            null
+        }
+    }
+
+    //Resetea la configuración de un relay a valores por defecto
+    suspend fun resetRelayConfiguration(
+        clientId: String,
+        panelId: String,
+        relayName: String
+    ): Boolean {
+        return try {
+            Log.d(TAG, "Reseteando configuración de relay: $relayName")
+
+            val relayRef = firestore
+                .collection("$BASE_PATH/$clientId/panels/$panelId/relays")
+                .document(relayName)
+
+            val defaultData = mapOf<String, Any>(
+                "customName" to FieldValue.delete(), // Eliminar nombre personalizado
+                "isActive" to true,
+                "isControllable" to true,
+                "contactType" to "NO",
+                "description" to FieldValue.delete(), // Eliminar descripción
+                "alertOnChange" to true,
+                "lastUpdate" to FieldValue.serverTimestamp()
+            )
+
+            relayRef.update(defaultData).await()
+            Log.d(TAG, "Configuración de relay reseteada exitosamente")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error reseteando configuración de relay", e)
+            false
+        }
+    }
+
+    //Obtiene estadísticas de configuración de relays para un panel
+    suspend fun getRelayConfigurationStats(
+        clientId: String,
+        panelId: String
+    ): Result<RelayConfigStats> = runCatching {
+        Log.d(TAG, "Obteniendo estadísticas de configuración para panel: $panelId")
+
+        val relaysSnapshot = firestore
+            .collection("$BASE_PATH/$clientId/panels/$panelId/relays")
+            .get()
+            .await()
+
+        val relays = relaysSnapshot.documents.mapNotNull { doc ->
+            doc.data?.let { data ->
+                RelayConfiguration(
+                    name = doc.id,
+                    customName = data["customName"] as? String,
+                    isControllable = data["isControllable"] as? Boolean ?: true,
+                    isActive = data["isActive"] as? Boolean ?: true,
+                    contactType = data["contactType"] as? String ?: "NO"
+                )
+            }
+        }
+
+        RelayConfigStats(
+            totalRelays = relays.size,
+            activeRelays = relays.count { it.isActive },
+            controllableRelays = relays.count { it.isControllable && it.isActive },
+            customNamedRelays = relays.count { !it.customName.isNullOrBlank() },
+            normallyOpenRelays = relays.count { it.contactType == "NO" },
+            normallyClosedRelays = relays.count { it.contactType == "NC" }
+        )
+    }
+
+    //Valida la configuración de un relay antes de aplicarla
+    fun validateRelayConfiguration(config: RelayConfiguration): ValidationResult {
+        val errors = mutableListOf<String>()
+
+        // Validar nombre personalizado
+        config.customName?.let { name ->
+            when {
+                name.isBlank() -> errors.add("El nombre personalizado no puede estar vacío")
+                name.length > 50 -> errors.add("El nombre personalizado no puede tener más de 50 caracteres")
+                else -> { /* nombre válido */ }
+            }
+        }
+
+        // Validar tipo de contacto
+        if (config.contactType !in listOf("NO", "NC")) {
+            errors.add("Tipo de contacto debe ser NO o NC")
+        }
+
+        // Validar lógica de configuración
+        if (!config.isActive && config.isControllable) {
+            errors.add("Un relay inactivo no puede ser controlable")
+        }
+
+        return if (errors.isEmpty()) {
+            ValidationResult.Success
+        } else {
+            ValidationResult.Error(errors)
+        }
+    }
+
+    //Aplica configuración por lotes a múltiples relays
+    suspend fun batchUpdateRelayConfiguration(
+        clientId: String,
+        panelId: String,
+        updates: Map<String, RelayConfiguration>
+    ): Result<Unit> = runCatching {
+        Log.d(TAG, "Aplicando configuración por lotes a ${updates.size} relays")
+
+        firestore.runBatch { batch ->
+            updates.forEach { (relayName, config) ->
+                val relayRef = firestore
+                    .collection("$BASE_PATH/$clientId/panels/$panelId/relays")
+                    .document(relayName)
+
+                val updateData = buildMap<String, Any> {
+                    put("isActive", config.isActive)
+                    put("isControllable", config.isControllable)
+                    put("contactType", config.contactType)
+                    put("lastUpdate", FieldValue.serverTimestamp())
+
+                    config.customName?.takeIf { it.isNotBlank() }?.let { name ->
+                        put("customName", name.trim())
+                    }
+
+                    config.description?.takeIf { it.isNotBlank() }?.let { desc ->
+                        put("description", desc.trim())
+                    }
+                }
+
+                batch.update(relayRef, updateData)
+            }
+        }.await()
+
+        Log.d(TAG, "Configuración por lotes aplicada exitosamente")
+    }
+}
+
+// Clases de datos fuera de la clase principal
+data class RelayConfiguration(
+    val name: String,
+    val customName: String? = null,
+    val isControllable: Boolean = true,
+    val isActive: Boolean = true,
+    val contactType: String = "NO",
+    val description: String? = null,
+    val alertOnChange: Boolean = true
+)
+
+data class RelayConfigStats(
+    val totalRelays: Int,
+    val activeRelays: Int,
+    val controllableRelays: Int,
+    val customNamedRelays: Int,
+    val normallyOpenRelays: Int,
+    val normallyClosedRelays: Int
+)
+
+//Resultado de validación
+sealed class ValidationResult {
+    object Success : ValidationResult()
+    data class Error(val errors: List<String>) : ValidationResult()
 }

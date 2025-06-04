@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
+import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.BackoffPolicy
 import androidx.work.Configuration
 import androidx.work.Constraints
@@ -29,6 +30,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
+import javax.inject.Inject
 
 @HiltAndroidApp
 class HddApplication : Application(), Configuration.Provider {
@@ -38,34 +40,35 @@ class HddApplication : Application(), Configuration.Provider {
         private const val SERVICE_CHECK_WORK = "service_check_work"
     }
 
+    @Inject
+    lateinit var workerFactory: HiltWorkerFactory
+
     // Scope para operaciones en la aplicación
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    // Modificamos la configuración de WorkManager para que no use el factory eliminado
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setMinimumLoggingLevel(Log.INFO)
-            // Eliminamos la línea que configura el worker factory
-            // .setWorkerFactory(eventReminderWorkerFactory)
+            .setWorkerFactory(workerFactory)
             .build()
 
     override fun onCreate() {
         super.onCreate()
 
-        // Inicializar Firebase
-        FirebaseApp.initializeApp(this)
+        // Inicializar Firebase con reintentos
+        initializeFirebaseWithRetry()
 
-        // Configurar Firestore para optimizar rendimiento y tiempo real
+        // Configurar Firestore para optimizar rendimiento
         setupFirestore()
-
-        // Inicializar Firebase Messaging
-        initializeFirebaseMessaging()
 
         // Crear canales de notificación
         createNotificationChannels()
 
-        // Iniciar servicio de monitoreo
-        startMonitoringService()
+        // Iniciar servicio de monitoreo con delay para dar tiempo a Firebase
+        applicationScope.launch {
+            delay(2000) // Esperar 2 segundos para asegurar inicialización
+            startMonitoringService()
+        }
 
         // Configurar la app para mantenerla viva
         setupKeepAlive()
@@ -74,41 +77,80 @@ class HddApplication : Application(), Configuration.Provider {
         scheduleServiceCheck()
     }
 
-    private fun setupFirestore() {
+    private fun initializeFirebaseWithRetry() {
         applicationScope.launch {
-            try {
-                // Configurar ajustes de Firestore
-                val settings = FirebaseFirestoreSettings.Builder()
-                    .setPersistenceEnabled(true) // Habilitar persistencia local
-                    .setCacheSizeBytes(FirebaseFirestoreSettings.CACHE_SIZE_UNLIMITED) // Sin límite de caché
-                    .setSslEnabled(true) // Asegurar conexiones SSL
-                    .build()
+            var retries = 0
+            val maxRetries = 3
 
-                // Aplicar configuración
-                val firestore = FirebaseFirestore.getInstance()
-                firestore.firestoreSettings = settings
+            while (retries < maxRetries) {
+                try {
+                    FirebaseApp.initializeApp(this@HddApplication)
+                    Log.d(TAG, "Firebase inicializado correctamente")
 
-                // Forzar reconexión para limpiar cualquier estado anterior
-                // Esto simula un ciclo de desconexión-reconexión que puede ayudar con problemas de caché
-                firestore.disableNetwork()
-                delay(1000) // Esperar un segundo
-                firestore.enableNetwork()
+                    // Inicializar FCM con reintento
+                    initializeMessagingWithRetry()
+                    break
 
-                Log.d(TAG, "Firestore configurado correctamente con persistencia y sin límite de caché")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error configurando Firestore", e)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error inicializando Firebase, intento ${retries + 1}", e)
+                    retries++
+                    if (retries < maxRetries) {
+                        delay(2000L * retries) // Backoff exponencial
+                    }
+                }
             }
         }
     }
 
-    private fun initializeFirebaseMessaging() {
-        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-            if (!task.isSuccessful) {
-                Log.w(TAG, "Error obteniendo token FCM", task.exception)
-                return@addOnCompleteListener
+    private suspend fun initializeMessagingWithRetry() {
+        try {
+            FirebaseMessaging.getInstance().apply {
+                isAutoInitEnabled = true
+
+                // Suscribir a tópicos con manejo de errores
+                subscribeToTopic("panel_updates")
+                    .addOnSuccessListener {
+                        Log.d(TAG, "Suscrito a panel_updates")
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e(TAG, "Error suscribiendo a tópico, se reintentará", e)
+                        // Reintentar después de un delay
+                        applicationScope.launch {
+                            delay(5000)
+                            subscribeToTopic("panel_updates")
+                        }
+                    }
+
+                subscribeToTopic("relay-status")
+                    .addOnSuccessListener {
+                        Log.d(TAG, "Suscrito a relay-status")
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e(TAG, "Error suscribiendo a relay-status", e)
+                    }
             }
-            val token = task.result
-            Log.d(TAG, "FCM Token: $token")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error inicializando messaging", e)
+        }
+    }
+
+    private fun setupFirestore() {
+        applicationScope.launch {
+            try {
+                val settings = FirebaseFirestoreSettings.Builder()
+                    .setPersistenceEnabled(true)
+                    .setCacheSizeBytes(FirebaseFirestoreSettings.CACHE_SIZE_UNLIMITED)
+                    .setSslEnabled(true)
+                    .build()
+
+                val firestore = FirebaseFirestore.getInstance()
+                firestore.firestoreSettings = settings
+
+                // No hacer disable/enable network aquí, causa problemas
+                Log.d(TAG, "Firestore configurado correctamente")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error configurando Firestore", e)
+            }
         }
     }
 
@@ -117,7 +159,7 @@ class HddApplication : Application(), Configuration.Provider {
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
             // Canal para el servicio de monitoreo
-            NotificationChannel(
+            val serviceChannel = NotificationChannel(
                 "MonitoringServiceChannel",
                 "Estado del Servicio",
                 NotificationManager.IMPORTANCE_MIN
@@ -128,11 +170,11 @@ class HddApplication : Application(), Configuration.Provider {
                 enableVibration(false)
                 setSound(null, null)
                 lockscreenVisibility = NotificationManager.IMPORTANCE_MIN
-                notificationManager.createNotificationChannel(this)
             }
+            notificationManager.createNotificationChannel(serviceChannel)
 
             // Canal para eventos y alarmas
-            NotificationChannel(
+            val eventChannel = NotificationChannel(
                 "event_notifications",
                 getString(R.string.channel_name),
                 NotificationManager.IMPORTANCE_HIGH
@@ -142,8 +184,32 @@ class HddApplication : Application(), Configuration.Provider {
                 enableVibration(true)
                 setShowBadge(true)
                 lockscreenVisibility = NotificationManager.IMPORTANCE_HIGH
-                notificationManager.createNotificationChannel(this)
             }
+            notificationManager.createNotificationChannel(eventChannel)
+
+            // Canal para estado de panel
+            val statusChannel = NotificationChannel(
+                "status_notifications",
+                "Estado del Panel",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Notificaciones sobre cambios en el estado del panel"
+                enableLights(true)
+                enableVibration(true)
+            }
+            notificationManager.createNotificationChannel(statusChannel)
+
+            // Canal para relays
+            val relayChannel = NotificationChannel(
+                "relay_notifications",
+                "Estado del Relay",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Notificaciones sobre cambios en el estado de los relays"
+                enableLights(true)
+                enableVibration(true)
+            }
+            notificationManager.createNotificationChannel(relayChannel)
         }
     }
 
@@ -158,44 +224,20 @@ class HddApplication : Application(), Configuration.Provider {
             Log.d(TAG, "Servicio de monitoreo iniciado")
         } catch (e: Exception) {
             Log.e(TAG, "Error iniciando servicio de monitoreo", e)
-        }
-    }
-
-    private fun setupKeepAlive() {
-        // Solicitar ignorar optimización de batería
-        requestBatteryOptimizationDisable()
-
-        // Mantener viva la aplicación durante el modo de ahorro de batería
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val powerManager = getSystemService(POWER_SERVICE) as PowerManager
-            if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
-                try {
-                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                        data = Uri.parse("package:$packageName")
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                    }
-                    startActivity(intent)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error solicitando ignorar optimización de batería", e)
-                }
+            // Reintentar después de un delay
+            applicationScope.launch {
+                delay(5000)
+                startMonitoringService()
             }
         }
     }
 
-    private fun requestBatteryOptimizationDisable() {
+    private fun setupKeepAlive() {
+        // Solo verificar, no solicitar automáticamente
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val powerManager = getSystemService(POWER_SERVICE) as PowerManager
             if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
-                try {
-                    val intent = Intent().apply {
-                        action = Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
-                        data = Uri.parse("package:$packageName")
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                    }
-                    startActivity(intent)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error solicitando ignorar optimización de batería", e)
-                }
+                Log.d(TAG, "La app no está excluida de optimización de batería")
             }
         }
     }
@@ -211,15 +253,15 @@ class HddApplication : Application(), Configuration.Provider {
             .setConstraints(constraints)
             .setBackoffCriteria(
                 BackoffPolicy.LINEAR,
-                30000L, // 30 segundos como backoff mínimo recomendado
+                30000L,
                 TimeUnit.MILLISECONDS
             )
             .addTag("service_check")
             .build()
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            ServiceCheckWorker.SERVICE_CHECK_WORK,
-            ExistingPeriodicWorkPolicy.UPDATE,
+            SERVICE_CHECK_WORK,
+            ExistingPeriodicWorkPolicy.KEEP,
             serviceCheckWork
         )
 

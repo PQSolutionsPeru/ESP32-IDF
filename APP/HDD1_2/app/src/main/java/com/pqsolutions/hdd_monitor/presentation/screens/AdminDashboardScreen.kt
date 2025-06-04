@@ -57,8 +57,8 @@ fun AdminDashboardScreen(
     onManageUsersClick: () -> Unit,
     onViewEventsClick: () -> Unit,
     onViewNotificationHistoryClick: () -> Unit,
-    onConfigureEsp32Click: () -> Unit,
-    onRelayControlClick: () -> Unit, // Nueva función para control de relays
+    onManageESP32Click: () -> Unit,
+    onRelayControlClick: () -> Unit,
     hasPendingNotifications: Boolean,
     selectedPanelId: String? = null
 ) {
@@ -132,8 +132,8 @@ fun AdminDashboardScreen(
                     onManageUsersClick = onManageUsersClick,
                     onViewEventsClick = onViewEventsClick,
                     onViewNotificationHistoryClick = onViewNotificationHistoryClick,
-                    onConfigureEsp32Click = onConfigureEsp32Click,
-                    onRelayControlClick = onRelayControlClick, // Pasar la nueva función
+                    onManageESP32Click = onManageESP32Click,
+                    onRelayControlClick = onRelayControlClick,
                     context = context
                 )
 
@@ -226,8 +226,8 @@ private fun DashboardActions(
     onManageUsersClick: () -> Unit,
     onViewEventsClick: () -> Unit,
     onViewNotificationHistoryClick: () -> Unit,
-    onConfigureEsp32Click: () -> Unit,
-    onRelayControlClick: () -> Unit, // Nueva función para control de relays
+    onManageESP32Click: () -> Unit,
+    onRelayControlClick: () -> Unit,
     context: android.content.Context
 ) {
     Log.d(TAG, "Rendering DashboardActions")
@@ -265,14 +265,13 @@ private fun DashboardActions(
         Spacer(modifier = Modifier.height(8.dp))
         DashboardButton(
             onClick = {
-                Log.d(TAG, "Configure ESP32 button clicked")
+                Log.d(TAG, "Manage ESP32 button clicked")
                 performHapticFeedback(context)
-                onConfigureEsp32Click()
+                onManageESP32Click()
             },
-            text = stringResource(R.string.configure_esp32)
+            text = "Gestionar ESP32"
         )
         Spacer(modifier = Modifier.height(8.dp))
-        // Nuevo botón para control de relays
         DashboardButton(
             onClick = {
                 Log.d(TAG, "Relay Control button clicked")

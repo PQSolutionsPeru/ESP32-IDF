@@ -4,6 +4,7 @@ import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.messaging.FirebaseMessaging
 import com.pqsolutions.hdd_monitor.data.util.IdManager
 import com.pqsolutions.hdd_monitor.domain.model.UserRole
 import kotlinx.coroutines.Dispatchers
@@ -323,6 +324,33 @@ class UserRepository @Inject constructor(
                 .await()
 
             Log.d(TAG, "FCM token updated successfully: $userDocName")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating FCM token: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    // Nuevo método updateFCMToken sin parámetros para FirebaseMessagingService
+    suspend fun updateFCMToken(token: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val currentUser = getCurrentUser()
+            if (currentUser == null) {
+                Log.e(TAG, "No user logged in, cannot update FCM token")
+                return@withContext Result.failure(Exception("No user logged in"))
+            }
+
+            val collectionPath = when (currentUser.role) {
+                UserRole.ADMIN -> "$BASE_PATH/admins"
+                UserRole.USER -> "$BASE_PATH/clients/${currentUser.clientDocName}/users"
+            }
+
+            firestore.collection(collectionPath)
+                .document(currentUser.documentName)
+                .update("fcmToken", token)
+                .await()
+
+            Log.d(TAG, "FCM token updated successfully for user: ${currentUser.documentName}")
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Error updating FCM token: ${e.message}")

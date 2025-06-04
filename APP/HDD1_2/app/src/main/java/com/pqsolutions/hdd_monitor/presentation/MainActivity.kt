@@ -39,7 +39,10 @@ import com.pqsolutions.hdd_monitor.presentation.theme.HDD1_2Theme
 import com.pqsolutions.hdd_monitor.presentation.viewmodel.MainViewModel
 import com.pqsolutions.hdd_monitor.service.MonitoringService
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -70,8 +73,8 @@ class MainActivity : ComponentActivity() {
         if (allGranted) {
             startMonitoringService()
         } else {
-            // Algunos permisos fueron denegados, mostrar configuración
-            showAppSettings()
+            // Algunos permisos fueron denegados
+            Log.d(TAG, "Algunos permisos fueron denegados")
         }
     }
 
@@ -79,59 +82,30 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "onCreate: Iniciando aplicación")
 
-        try {
-            // Inicialización con manejo de errores
-            initializeWithErrorHandling()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error crítico durante la inicialización", e)
-            showErrorScreen(e)
-        }
+        // Configurar contenido UI primero para evitar frames saltados
+        setAppContent()
 
-        Log.d(TAG, "onCreate: Configuración inicial completada")
+        // Luego hacer las inicializaciones pesadas en background
+        lifecycleScope.launch(Dispatchers.IO) {
+            initializeInBackground()
+        }
     }
 
-    /**
-     * Método principal de inicialización con manejo de errores
-     */
-    private fun initializeWithErrorHandling() {
-        // Separar inicializaciones en bloques try-catch independientes
-        // para que un error en un componente no impida la inicialización de los demás
-
+    private suspend fun initializeInBackground() {
         try {
-            checkAndRequestPermissions()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error en checkAndRequestPermissions", e)
-        }
+            // Verificar permisos
+            withContext(Dispatchers.Main) {
+                checkAndRequestPermissions()
+            }
 
-        try {
-            checkAndSetupBatteryOptimization()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error en checkAndSetupBatteryOptimization", e)
-        }
+            // Verificar optimización de batería
+            checkBatteryOptimization()
 
-        try {
-            initializeFirebase()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error en initializeFirebase", e)
-        }
+            // Actualizar token FCM si es necesario
+            updateFCMTokenIfNeeded()
 
-        try {
-            createNotificationChannels()
         } catch (e: Exception) {
-            Log.e(TAG, "Error en createNotificationChannels", e)
-        }
-
-        try {
-            requestBatteryOptimizationExemption()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error en requestBatteryOptimizationExemption", e)
-        }
-
-        try {
-            setAppContent()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error en setAppContent", e)
-            showErrorScreen(e)
+            Log.e(TAG, "Error durante la inicialización en background", e)
         }
     }
 
@@ -147,10 +121,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun checkAndSetupBatteryOptimization() {
-        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
-        if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
-            // Si no está desactivada la optimización de batería, mostrar diálogo
+    private fun checkBatteryOptimization() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+            if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
+                // No mostrar diálogo inmediatamente, puede causar lag
+                lifecycleScope.launch(Dispatchers.Main) {
+                    delay(3000) // Esperar 3 segundos después del inicio
+                    showBatteryOptimizationDialog()
+                }
+            }
+        }
+    }
+
+    private fun showBatteryOptimizationDialog() {
+        if (!isFinishing && !isDestroyed) {
             AlertDialog.Builder(this)
                 .setTitle("Optimización de batería")
                 .setMessage("Para asegurar el correcto funcionamiento de la aplicación, es necesario desactivar la optimización de batería. ¿Desea hacerlo ahora?")
@@ -160,6 +145,7 @@ class MainActivity : ComponentActivity() {
                 .setNegativeButton("Más tarde") { dialog, _ ->
                     dialog.dismiss()
                 }
+                .setCancelable(true)
                 .show()
         }
     }
@@ -182,20 +168,17 @@ class MainActivity : ComponentActivity() {
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
             try {
-                // Primero intentamos con el diálogo directo
                 val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                     data = Uri.parse("package:$packageName")
                 }
                 startActivity(intent)
             } catch (e: Exception) {
                 Log.e(TAG, "Error solicitando exención de optimización de batería", e)
-                // Si falla, llevamos al usuario a la configuración general de optimización de batería
                 try {
                     val settingsIntent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
                     startActivity(settingsIntent)
-                } catch (e: Exception) {
-                    Log.e(TAG, "No se pudo abrir la configuración de optimización de batería", e)
-                    // Como último recurso, mostrar la configuración general de la aplicación
+                } catch (e2: Exception) {
+                    Log.e(TAG, "No se pudo abrir la configuración de optimización de batería", e2)
                     showAppSettings()
                 }
             }
@@ -210,22 +193,6 @@ class MainActivity : ComponentActivity() {
             startActivity(intent)
         } catch (e: Exception) {
             Log.e(TAG, "No se pudo abrir la configuración de la aplicación", e)
-        }
-    }
-
-    private fun requestNotificationPermission() {
-        Log.d(TAG, "Solicitando permisos de notificación")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
-                PackageManager.PERMISSION_GRANTED
-            ) {
-                requestPermissions(
-                    arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
-                    NOTIFICATION_PERMISSION_REQUEST_CODE
-                )
-            } else {
-                Log.d(TAG, "Permisos de notificación ya otorgados")
-            }
         }
     }
 
@@ -246,33 +213,25 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun initializeFirebase() {
-        Log.d(TAG, "Inicializando Firebase")
+    private suspend fun updateFCMTokenIfNeeded() {
         try {
-            FirebaseApp.initializeApp(this)
-
-            // Verificar y mostrar el token FCM
-            FirebaseMessaging.getInstance().token
-                .addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        Log.d(TAG, "Token FCM obtenido exitosamente: ${task.result}")
-                        lifecycleScope.launch {
-                            try {
-                                viewModel.updateFCMToken()
-                                Log.d(TAG, "Token FCM actualizado en el repositorio")
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Error actualizando token FCM", e)
-                            }
+            FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    Log.d(TAG, "Token FCM obtenido: ${task.result}")
+                    lifecycleScope.launch {
+                        try {
+                            viewModel.updateFCMToken()
+                            Log.d(TAG, "Token FCM actualizado en el repositorio")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error actualizando token FCM", e)
                         }
-                    } else {
-                        Log.e(TAG, "Error obteniendo token FCM", task.exception)
                     }
+                } else {
+                    Log.e(TAG, "Error obteniendo token FCM", task.exception)
                 }
+            }
 
-            // Configurar comportamiento de mensajes en primer plano
-            FirebaseMessaging.getInstance().isAutoInitEnabled = true
-
-            // Suscribirse a tópicos relevantes
+            // Suscribirse a tópicos
             FirebaseMessaging.getInstance().subscribeToTopic("relay-status")
                 .addOnCompleteListener { task ->
                     if (task.isSuccessful) {
@@ -281,62 +240,8 @@ class MainActivity : ComponentActivity() {
                         Log.e(TAG, "Error en suscripción a relay-status", task.exception)
                     }
                 }
-
-            Log.d(TAG, "Inicialización de Firebase completada")
         } catch (e: Exception) {
-            Log.e(TAG, "Error crítico inicializando Firebase", e)
-            throw e  // Re-lanzar para manejo global
-        }
-    }
-
-    private fun createNotificationChannels() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Log.d(TAG, "Creando canales de notificación")
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-            // Canal para notificaciones de relay
-            NotificationChannel(
-                CHANNEL_ID_RELAY,
-                "Estado de Relay",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Notificaciones de cambios de estado en relays"
-                enableVibration(true)
-                vibrationPattern = longArrayOf(100, 200, 300, 400, 500)
-                enableLights(true)
-                setSound(
-                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
-                    android.media.AudioAttributes.Builder()
-                        .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
-                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build()
-                )
-                setShowBadge(true)
-                notificationManager.createNotificationChannel(this)
-                Log.d(TAG, "Canal de relay creado: $id")
-            }
-
-            // Canal para notificaciones de eventos
-            NotificationChannel(
-                CHANNEL_ID_EVENT,
-                "Eventos",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Notificaciones de actualizaciones de eventos"
-                enableVibration(true)
-                vibrationPattern = longArrayOf(100, 200, 300, 400, 500)
-                enableLights(true)
-                setSound(
-                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
-                    android.media.AudioAttributes.Builder()
-                        .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
-                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build()
-                )
-                setShowBadge(true)
-                notificationManager.createNotificationChannel(this)
-                Log.d(TAG, "Canal de eventos creado: $id")
-            }
+            Log.e(TAG, "Error con Firebase Messaging", e)
         }
     }
 
@@ -351,8 +256,6 @@ class MainActivity : ComponentActivity() {
                         color = MaterialTheme.colorScheme.background
                     ) {
                         val uiState by viewModel.uiState.collectAsState()
-                        Log.d(TAG, "Estado actual de UI: $uiState")
-
                         AppNavigation(viewModel)
                     }
                 }
@@ -363,9 +266,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * Muestra una pantalla de error cuando hay un problema crítico
-     */
     private fun showErrorScreen(error: Exception) {
         try {
             setContent {
@@ -393,7 +293,6 @@ class MainActivity : ComponentActivity() {
                                 modifier = Modifier.padding(vertical = 16.dp)
                             )
 
-                            // Siempre mostrar el mensaje de error para diagnóstico
                             Text(
                                 "Error: ${error.message}",
                                 style = MaterialTheme.typography.bodySmall,
@@ -410,7 +309,6 @@ class MainActivity : ComponentActivity() {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error mostrando pantalla de error", e)
-            // En este punto, simplemente finalizamos la actividad como último recurso
             finish()
         }
     }

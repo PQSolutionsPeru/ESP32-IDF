@@ -39,17 +39,32 @@ fun RelayConfigDialog(
     onDismiss: () -> Unit,
     onConfirm: (Relay) -> Unit
 ) {
-    var customName by remember { mutableStateOf(relay.name) }
-    var isActive by remember { mutableStateOf(true) } // Asumiendo que todos los relays están activos por defecto
+    // Estados del formulario
+    var customName by remember { mutableStateOf(relay.customName ?: relay.name) }
+    var isActive by remember { mutableStateOf(relay.isActive) }
+    var isControllable by remember { mutableStateOf(relay.isControllable) }
+    var contactType by remember { mutableStateOf(relay.contactType) }
+    var showContactTypeDropdown by remember { mutableStateOf(false) }
+
     val context = LocalContext.current
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(
-                text = "Configurar Relay",
-                style = MaterialTheme.typography.titleLarge
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "Configurar Relay",
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
         },
         text = {
             Column(
@@ -76,55 +91,283 @@ fun RelayConfigDialog(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    }
-                }
-
-                // Campo para nombre personalizado
-                OutlinedTextField(
-                    value = customName,
-                    onValueChange = { customName = it },
-                    label = { Text("Nombre del Relay") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    supportingText = {
-                        Text("Nombre que se mostrará en la interfaz")
-                    }
-                )
-
-                // Switch para habilitar/deshabilitar
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
                         Text(
-                            text = "Relay Activo",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            text = "Permitir control remoto",
+                            text = "Relay Original: ${relay.name}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    Switch(
-                        checked = isActive,
-                        onCheckedChange = { isActive = it }
+                }
+
+                // Nombre personalizado
+                OutlinedTextField(
+                    value = customName,
+                    onValueChange = { customName = it },
+                    label = { Text("Nombre Personalizado") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    supportingText = {
+                        Text("Nombre que se mostrará en la interfaz")
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = null
+                        )
+                    }
+                )
+
+                // Switch para activar/desactivar
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isActive)
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                        else
+                            MaterialTheme.colorScheme.surfaceVariant
                     )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isActive) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                    contentDescription = null,
+                                    tint = if (isActive) Color.Green else Color.Red,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "Relay Activo",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                            Text(
+                                text = if (isActive) "El relay está habilitado" else "El relay está deshabilitado",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = isActive,
+                            onCheckedChange = { isActive = it }
+                        )
+                    }
+                }
+
+                // Switch para control remoto
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isControllable && isActive)
+                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+                        else
+                            MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PhoneAndroid,
+                                    contentDescription = null,
+                                    tint = if (isControllable && isActive)
+                                        MaterialTheme.colorScheme.primary
+                                    else
+                                        MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "Control Remoto",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                            Text(
+                                text = if (isControllable && isActive)
+                                    "Se puede controlar desde la app"
+                                else
+                                    "Solo lectura desde la app",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = isControllable,
+                            onCheckedChange = { isControllable = it },
+                            enabled = isActive
+                        )
+                    }
+                }
+
+                // Selector de tipo de contacto
+                ExposedDropdownMenuBox(
+                    expanded = showContactTypeDropdown,
+                    onExpandedChange = { showContactTypeDropdown = it }
+                ) {
+                    OutlinedTextField(
+                        value = when (contactType) {
+                            "NO" -> "Normalmente Abierto (NO)"
+                            "NC" -> "Normalmente Cerrado (NC)"
+                            else -> contactType
+                        },
+                        onValueChange = { },
+                        readOnly = true,
+                        label = { Text("Tipo de Contacto") },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(
+                                expanded = showContactTypeDropdown
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.ElectricalServices,
+                                contentDescription = null
+                            )
+                        }
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = showContactTypeDropdown,
+                        onDismissRequest = { showContactTypeDropdown = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(
+                                        text = "Normalmente Abierto (NO)",
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = "Contacto abierto en reposo",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            },
+                            onClick = {
+                                contactType = "NO"
+                                showContactTypeDropdown = false
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.RadioButtonUnchecked,
+                                    contentDescription = null
+                                )
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(
+                                        text = "Normalmente Cerrado (NC)",
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = "Contacto cerrado en reposo",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            },
+                            onClick = {
+                                contactType = "NC"
+                                showContactTypeDropdown = false
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.RadioButtonChecked,
+                                    contentDescription = null
+                                )
+                            }
+                        )
+                    }
                 }
 
                 // Estado actual
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Estado Actual:",
-                        style = MaterialTheme.typography.bodyMedium
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = when (relay.status) {
+                            "OK" -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                            "DISC" -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+                            else -> MaterialTheme.colorScheme.surfaceVariant
+                        }
                     )
-                    RelayStatusBadge(status = relay.status)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "Estado Actual",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            if (relay.date_time != null) {
+                                Text(
+                                    text = "Última actualización: ${relay.date_time}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        RelayStatusBadge(status = relay.status)
+                    }
+                }
+
+                // Información adicional si el relay no está activo
+                AnimatedVisibility(
+                    visible = !isActive,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "El relay deshabilitado no aparecerá en el control remoto",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer)
+                        }
+                    }
                 }
             }
         },
@@ -132,12 +375,23 @@ fun RelayConfigDialog(
             Button(
                 onClick = {
                     performHapticFeedback(context)
-                    val updatedRelay = relay.copy(name = customName.trim())
+                    val updatedRelay = relay.copy(
+                        customName = customName.trim().takeIf { it.isNotEmpty() && it != relay.name },
+                        isActive = isActive,
+                        isControllable = isControllable,
+                        contactType = contactType
+                    )
                     onConfirm(updatedRelay)
                 },
                 enabled = customName.trim().isNotEmpty()
             ) {
-                Text("Guardar")
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Guardar Cambios")
             }
         },
         dismissButton = {
@@ -147,6 +401,12 @@ fun RelayConfigDialog(
                     onDismiss()
                 }
             ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
                 Text("Cancelar")
             }
         }

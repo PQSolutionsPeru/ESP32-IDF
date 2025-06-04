@@ -6,6 +6,8 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.media.RingtoneManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -16,6 +18,7 @@ import com.pqsolutions.hdd_monitor.R
 import com.pqsolutions.hdd_monitor.data.ClientRepository
 import com.pqsolutions.hdd_monitor.data.NotificationRepository
 import com.pqsolutions.hdd_monitor.data.PanelRepository
+import com.pqsolutions.hdd_monitor.data.UserRepository
 import com.pqsolutions.hdd_monitor.presentation.MainActivity
 import com.pqsolutions.hdd_monitor.util.StatusUpdateManager
 import dagger.hilt.android.AndroidEntryPoint
@@ -24,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 import java.util.Date
 import javax.inject.Inject
 
@@ -40,6 +44,9 @@ class FirebaseMessagingService : FirebaseMessagingService() {
     lateinit var notificationRepository: NotificationRepository
 
     @Inject
+    lateinit var userRepository: UserRepository
+
+    @Inject
     lateinit var firestore: FirebaseFirestore
 
     // Configuración para mostrar notificaciones visuales
@@ -51,17 +58,15 @@ class FirebaseMessagingService : FirebaseMessagingService() {
         Log.d(TAG, "FCM Service Created")
 
         // Crear canales de notificación
-        createStatusNotificationChannel()
-        createRelayNotificationChannel()
-        createEventNotificationChannel()
+        createNotificationChannels()
     }
 
-    private fun createEventNotificationChannel() {
+    private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
             // Canal para notificaciones de eventos
-            NotificationChannel(
+            val eventChannel = NotificationChannel(
                 "event_notifications",
                 "Eventos",
                 NotificationManager.IMPORTANCE_HIGH
@@ -69,35 +74,23 @@ class FirebaseMessagingService : FirebaseMessagingService() {
                 description = "Notificaciones sobre eventos programados"
                 enableLights(true)
                 enableVibration(true)
-                notificationManager.createNotificationChannel(this)
             }
-        }
-    }
-
-    private fun createStatusNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(eventChannel)
 
             // Canal para notificaciones de estado
-            NotificationChannel(
-                "status_notifications",  // Identificador del canal
-                "Estado del Panel",      // Nombre del canal
+            val statusChannel = NotificationChannel(
+                "status_notifications",
+                "Estado del Panel",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Notificaciones sobre cambios en el estado del panel"
                 enableLights(true)
                 enableVibration(true)
-                notificationManager.createNotificationChannel(this)
             }
-        }
-    }
-
-    private fun createRelayNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(statusChannel)
 
             // Canal para notificaciones de relay
-            NotificationChannel(
+            val relayChannel = NotificationChannel(
                 "relay_notifications",
                 "Estado del Relay",
                 NotificationManager.IMPORTANCE_HIGH
@@ -105,14 +98,73 @@ class FirebaseMessagingService : FirebaseMessagingService() {
                 description = "Notificaciones sobre cambios en el estado de los relays"
                 enableLights(true)
                 enableVibration(true)
-                notificationManager.createNotificationChannel(this)
             }
+            notificationManager.createNotificationChannel(relayChannel)
         }
     }
 
     override fun onNewToken(token: String) {
-        Log.d(TAG, "New token: $token")
-        // Aquí puedes enviar el token al servidor
+        Log.d(TAG, "Nuevo token FCM: $token")
+
+        // Enviar token al servidor con reintentos
+        CoroutineScope(Dispatchers.IO).launch {
+            sendTokenToServerWithRetry(token)
+        }
+    }
+
+    private suspend fun sendTokenToServerWithRetry(token: String) {
+        var retries = 0
+        val maxRetries = 5
+
+        while (retries < maxRetries) {
+            try {
+                // Verificar conectividad
+                if (!isNetworkAvailable()) {
+                    Log.d(TAG, "Sin conexión de red, esperando...")
+                    delay(5000)
+                    continue
+                }
+
+                // Actualizar token en el repositorio
+                userRepository.updateFCMToken(token)
+                    .onSuccess {
+                        Log.d(TAG, "Token FCM actualizado exitosamente")
+                    }
+                    .onFailure { error ->
+                        throw error
+                    }
+
+                break // Éxito, salir del loop
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Error enviando token, intento ${retries + 1}", e)
+                retries++
+                if (retries < maxRetries) {
+                    // Backoff exponencial
+                    delay(1000L * (1 shl minOf(retries, 5)))
+                }
+            }
+        }
+
+        if (retries >= maxRetries) {
+            Log.e(TAG, "No se pudo actualizar el token FCM después de $maxRetries intentos")
+        }
+    }
+
+    private fun isNetworkAvailable(): Boolean {
+        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val activeNetwork = connectivityManager.activeNetwork ?: return false
+            val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
+
+            return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                    capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        } else {
+            @Suppress("DEPRECATION")
+            val networkInfo = connectivityManager.activeNetworkInfo
+            return networkInfo != null && networkInfo.isConnected
+        }
     }
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
@@ -192,9 +244,6 @@ class FirebaseMessagingService : FirebaseMessagingService() {
         }
     }
 
-    /**
-     * Procesa mensajes específicos de eventos (creación, actualización, eliminación)
-     */
     private fun processEventMessage(data: Map<String, String>) {
         Log.d(TAG, "=================== INICIO EVENTO ===================")
         Log.d(TAG, "Datos de evento recibidos: $data")
@@ -208,13 +257,13 @@ class FirebaseMessagingService : FirebaseMessagingService() {
         val panelDocName = data["panelDocName"] ?: data["panel_id"] ?: ""
         val panelName = data["panelName"] ?: data["panel_name"] ?: ""
 
-        // CORRECCIÓN: Intentar obtener el título de diferentes lugares
+        // Intentar obtener el título de diferentes lugares
         val title = data["title"] ?: data["eventTitle"] ?: ""
 
         // Si hay mensaje en los datos, usarlo; de lo contrario, construir uno
         var messageFromData = data["message"] ?: ""
 
-        // CORRECCIÓN: Reemplazar el ID del panel con el nombre del panel en el mensaje
+        // Reemplazar el ID del panel con el nombre del panel en el mensaje
         if (panelName.isNotEmpty() && panelDocName.isNotEmpty() && messageFromData.contains(panelDocName)) {
             messageFromData = messageFromData.replace(panelDocName, panelName)
         }
@@ -268,9 +317,6 @@ class FirebaseMessagingService : FirebaseMessagingService() {
         Log.d(TAG, "=================== FIN EVENTO ===================")
     }
 
-    /**
-     * Muestra una notificación específica para eventos
-     */
     private fun showEventNotification(
         title: String,
         message: String,
@@ -299,23 +345,6 @@ class FirebaseMessagingService : FirebaseMessagingService() {
 
         // Usar un canal específico para eventos
         val channelId = "event_notifications"
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-            // Crear canal si no existe
-            if (notificationManager.getNotificationChannel(channelId) == null) {
-                NotificationChannel(
-                    channelId,
-                    "Eventos",
-                    NotificationManager.IMPORTANCE_HIGH
-                ).apply {
-                    description = "Notificaciones sobre eventos programados"
-                    enableLights(true)
-                    enableVibration(true)
-                    notificationManager.createNotificationChannel(this)
-                }
-            }
-        }
 
         val notificationBuilder = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.drawable.ic_notification)
@@ -355,11 +384,10 @@ class FirebaseMessagingService : FirebaseMessagingService() {
                 )
                 Log.d(TAG, "Evento de actualización de ESP32 emitido: $panelDocName -> $status")
 
-                // 2. IMPORTANTE: Actualizar el estado en la base de datos local
+                // 2. Actualizar el estado en la base de datos local
                 if (clientDocName.isNotEmpty() && panelDocName.isNotEmpty()) {
                     try {
                         // Actualizar directamente el estado en Firestore
-                        // Esto asegura que PanelRepository lea el valor correcto
                         val esp32Id = firestore
                             .document("hdd-monitor/accounts/clients/$clientDocName/panels/$panelDocName")
                             .get()
@@ -377,7 +405,7 @@ class FirebaseMessagingService : FirebaseMessagingService() {
                     }
                 }
 
-                // 3. NUEVO: Si tiene SHOW_STATUS_NOTIFICATIONS activado
+                // 3. Si tiene SHOW_STATUS_NOTIFICATIONS activado
                 if (SHOW_STATUS_NOTIFICATIONS && (status == "ONLINE" || status == "OFFLINE")) {
                     showStatusNotification(clientDocName, panelDocName, status)
                 }
@@ -455,7 +483,6 @@ class FirebaseMessagingService : FirebaseMessagingService() {
                         .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
 
                     // Generar un ID único basado en el panelId y estado
-                    // Esto evita duplicados y asegura que cada cambio de estado reemplace la notificación anterior
                     val notificationId = "${panelDocName}_${status}".hashCode()
 
                     // Mostrar la notificación

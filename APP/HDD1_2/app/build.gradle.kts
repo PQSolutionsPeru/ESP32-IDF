@@ -113,6 +113,13 @@ dependencies {
     implementation(composeBom)
     androidTestImplementation(composeBom)
 
+    // Hilt Work - IMPORTANTE para ServiceCheckWorker
+    implementation(libs.androidx.hilt.work)
+    kapt(libs.androidx.hilt.compiler)
+
+    // WorkManager
+    implementation(libs.androidx.work.runtime.ktx)
+
     // Firebase BOM
     implementation(platform(libs.firebase.bom.v3280))
 
