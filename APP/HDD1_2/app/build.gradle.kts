@@ -108,22 +108,17 @@ android {
 }
 
 dependencies {
-    // Compose BOM
-    val composeBom = platform("androidx.compose:compose-bom:2024.01.00")
+    val composeBom = platform("androidx.compose:compose-bom:2024.02.00")
     implementation(composeBom)
     androidTestImplementation(composeBom)
 
-    // Hilt Work - IMPORTANTE para ServiceCheckWorker
     implementation(libs.androidx.hilt.work)
     kapt(libs.androidx.hilt.compiler)
 
-    // WorkManager
     implementation(libs.androidx.work.runtime.ktx)
 
-    // Firebase BOM
     implementation(platform(libs.firebase.bom.v3280))
 
-    // Firebase
     implementation(libs.com.google.firebase.firebase.messaging.ktx2)
     implementation(libs.com.google.firebase.firebase.analytics.ktx)
     implementation(libs.com.google.firebase.firebase.auth.ktx2)
@@ -131,25 +126,22 @@ dependencies {
     implementation(libs.com.google.firebase.firebase.functions.ktx)
     implementation(libs.google.firebase.crashlytics.ktx)
 
-    // Hilt
     implementation(libs.hilt.android)
     kapt(libs.hilt.android.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.androidx.hilt.work)
     kapt(libs.androidx.hilt.compiler)
 
-    // Compose
     implementation(libs.ui)
     implementation(libs.ui.graphics)
     implementation(libs.ui.tooling.preview)
-    implementation(libs.material3)
+    implementation("androidx.compose.material3:material3")
     implementation(libs.androidx.runtime)
     implementation(libs.androidx.animation)
     implementation(libs.androidx.foundation)
     implementation(libs.androidx.material.icons.extended)
     debugImplementation(libs.ui.tooling)
 
-    // MQTT dependencies
     implementation(libs.org.eclipse.paho.client.mqttv3)
     implementation("org.eclipse.paho:org.eclipse.paho.android.service:1.1.1") {
         exclude(group = "com.android.support")
@@ -157,7 +149,6 @@ dependencies {
         exclude(module = "support-v4")
     }
 
-    // Testing
     testImplementation(libs.junit)
     testImplementation(libs.mockito.core)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -167,48 +158,37 @@ dependencies {
     androidTestImplementation(libs.ui.test.junit4)
     debugImplementation(libs.ui.test.manifest)
 
-    // Core Android
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.room.ktx)
 
-    // Navigation & Paging
     implementation(libs.androidx.navigation.compose.v281)
     implementation(libs.androidx.paging.compose)
 
-    // Coroutines
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.play.services)
 
-    // Google Play Services
     implementation(libs.play.services.base)
     implementation(libs.play.services.auth)
 
-    // WorkManager
     implementation(libs.androidx.work.runtime.ktx)
 
-    // Lifecycle
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx.v286)
     implementation(libs.androidx.activity.ktx)
 
-    // Date & Time Pickers
     implementation(libs.core)
     implementation(libs.calendar)
     implementation(libs.clock)
     implementation(libs.state)
 
-    // DataStore
     implementation(libs.androidx.datastore.preferences)
 
-    // Multidex
     implementation(libs.androidx.multidex)
 
-    // Bluetooth
     implementation(libs.play.services.nearby)
 
-    // Service intent para MQTT (recomendado)
     implementation(libs.androidx.localbroadcastmanager)
 }
 

@@ -58,7 +58,6 @@ fun EventDialog(
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    // Manejar el foco del teclado globalmente
     HandleKeyboardFocus()
 
     val isEditing = event != null
@@ -72,11 +71,9 @@ fun EventDialog(
     val dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
     val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
-    // Validación del máximo de caracteres
     val maxTitleLength = 50
     val maxDescriptionLength = 500
 
-    // Validación de fechas
     val isDateValid = if (isEditing) {
         selectedDate != null
     } else {
@@ -92,7 +89,6 @@ fun EventDialog(
                         selectedDate?.isEqual(LocalDate.now()) == true)
     }
 
-    // Validación del formulario
     val isFormValid = canEdit &&
             title.isNotBlank() &&
             description.isNotBlank() &&
@@ -103,7 +99,6 @@ fun EventDialog(
             selectedEventType != null &&
             (isEditing || isAdmin && selectedClients.isNotEmpty() || !isAdmin)
 
-    // Date Picker
     val datePickerDialog = remember {
         val calendar = Calendar.getInstance()
         selectedDate?.let {
@@ -123,31 +118,22 @@ fun EventDialog(
         }
     }
 
-    // Time Picker
     val timePickerDialog = remember {
         TimePickerDialog(
             context,
             { _, hourOfDay, minute ->
                 try {
-                    // Log para depuración
                     Log.d("EventDialog", "Hora seleccionada: $hourOfDay:$minute")
-
-                    // Crear LocalTime directamente, sin validaciones adicionales
                     val selectedLocalTime = LocalTime.of(hourOfDay, minute)
-
-                    // Log adicional para confirmar la creación
                     Log.d("EventDialog", "LocalTime creado: $selectedLocalTime")
-
-                    // Enviar el evento con la hora seleccionada
                     onEvent(EventDialogEvent.TimeSelected(selectedLocalTime))
                 } catch (e: Exception) {
-                    // Log detallado del error
                     Log.e("EventDialog", "Error seleccionando hora: ${e.message}", e)
                 }
             },
             selectedTime?.hour ?: LocalTime.now().hour,
             selectedTime?.minute ?: LocalTime.now().minute,
-            true // formato 24 horas
+            true
         )
     }
 
@@ -343,7 +329,6 @@ fun EventDialog(
                     }
                 }
 
-                // Solo mostrar selección de cliente para administradores en modo creación
                 if (!isEditing && isAdmin) {
                     item {
                         Text(
@@ -373,7 +358,7 @@ fun EventDialog(
                                             keyboardController?.hide()
                                             focusManager.clearFocus()
                                             selectedClients = if (checked) {
-                                                setOf(client.documentName)  // Solo permitir uno
+                                                setOf(client.documentName)
                                             } else {
                                                 emptySet()
                                             }
@@ -394,7 +379,6 @@ fun EventDialog(
                     }
                 }
 
-                // Mostrar selector de panel si hay cliente seleccionado o es un usuario normal
                 if ((isAdmin && selectedClients.size == 1) || (!isAdmin && selectedClientForPanels != null)) {
                     item {
                         if (availablePanels.isNotEmpty()) {

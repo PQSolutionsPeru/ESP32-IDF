@@ -6,14 +6,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EventTypeSelector(
     selectedEventType: String?,
@@ -25,7 +23,6 @@ fun EventTypeSelector(
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val keyboardController = LocalSoftwareKeyboardController.current
 
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
@@ -40,7 +37,6 @@ fun EventTypeSelector(
             expanded = expanded,
             onExpandedChange = {
                 if (enabled) {
-                    keyboardController?.hide()
                     expanded = it
                 }
             }
@@ -56,7 +52,7 @@ fun EventTypeSelector(
                 trailingIcon = {
                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
                 },
-                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                colors = OutlinedTextFieldDefaults.colors(),
                 textStyle = MaterialTheme.typography.bodyLarge,
                 singleLine = true
             )
@@ -83,7 +79,7 @@ fun EventTypeSelector(
                 }
 
                 if (isAdmin) {
-                    Divider(
+                    HorizontalDivider(
                         modifier = Modifier.padding(vertical = 4.dp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f)
                     )

@@ -41,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.pqsolutions.hdd_monitor.R
@@ -124,7 +125,6 @@ fun PanelCard(
     val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
 
-    // Determinar el color de fondo basado en el estado del ESP32 y relays
     val backgroundColor = when {
         panel.isESP32Offline() -> PanelColors.PanelBackgroundOffline
         panel.hasIssues -> PanelColors.PanelBackgroundDisc
@@ -146,7 +146,6 @@ fun PanelCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // Header con información básica y acciones
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -159,6 +158,16 @@ fun PanelCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+
+                    if (panel.clientDisplayName.isNotEmpty()) {
+                        Text(
+                            text = panel.clientDisplayName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = stringResource(R.string.field_location, panel.location),
@@ -192,7 +201,6 @@ fun PanelCard(
                 }
             }
 
-            // Estado del ESP32 - ACTUALIZADO para mostrar OFFLINE en rojo y negrita
             Row(
                 modifier = Modifier.padding(top = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -218,19 +226,17 @@ fun PanelCard(
                     else
                         MaterialTheme.typography.bodySmall,
                     color = if (panel.isESP32Offline())
-                        PanelColors.StatusDisc  // Rojo para OFFLINE
+                        PanelColors.StatusDisc
                     else
                         MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            // Detalles expandibles de relays
             if (expanded) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Divider()
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Si el ESP32 está OFFLINE, mostrar mensaje especial
                 if (panel.isESP32Offline()) {
                     Text(
                         text = "No hay datos disponibles - ESP32 OFFLINE",
@@ -255,7 +261,6 @@ fun PanelCard(
     }
 }
 
-// Nuevo componente para mostrar un panel con un solo relay en DISC
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PanelCardForRelay(
@@ -270,18 +275,16 @@ fun PanelCardForRelay(
     val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
 
-    // Determinar el color de fondo basado en el tipo de relay
     val backgroundColor = if (isAlarmRelay) {
-        Color(0xFFFFEBEE) // Rojo claro para relay Alarma
+        Color(0xFFFFEBEE)
     } else {
-        Color(0xFFFFFDE7) // Amarillo claro para otros relays
+        Color(0xFFFFFDE7)
     }
 
-    // Color del texto para paneles amarillos
     val textColor = if (!isAlarmRelay) {
-        Color(0xFF0D47A1) // Azul oscuro para texto en paneles amarillos
+        Color(0xFF0D47A1)
     } else {
-        MaterialTheme.colorScheme.onSurface // Color normal para otros casos
+        MaterialTheme.colorScheme.onSurface
     }
 
     Card(
@@ -302,7 +305,6 @@ fun PanelCardForRelay(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // Header con información básica y acciones
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -316,6 +318,16 @@ fun PanelCardForRelay(
                         overflow = TextOverflow.Ellipsis,
                         color = if (!isAlarmRelay) textColor else Color.Unspecified
                     )
+
+                    if (panel.clientDisplayName.isNotEmpty()) {
+                        Text(
+                            text = panel.clientDisplayName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (!isAlarmRelay) textColor.copy(alpha = 0.8f) else MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = stringResource(R.string.field_location, panel.location),
@@ -349,7 +361,6 @@ fun PanelCardForRelay(
                 }
             }
 
-            // Mostrar mensaje específico del relay en DISC
             Text(
                 text = "Estado: ${relay.name} en DISC",
                 style = MaterialTheme.typography.bodyMedium.copy(
@@ -358,7 +369,6 @@ fun PanelCardForRelay(
                 color = if (isAlarmRelay) PanelColors.StatusDisc else textColor
             )
 
-            // Detalles expandibles de relay
             if (expanded) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Divider()
@@ -370,7 +380,6 @@ fun PanelCardForRelay(
                     color = if (isAlarmRelay) PanelColors.StatusDisc else textColor
                 )
 
-                // Mostrar información adicional si está disponible
                 if (relay.date_time != null) {
                     Text(
                         text = "Fecha: ${relay.date_time}",

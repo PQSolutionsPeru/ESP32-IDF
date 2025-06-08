@@ -11,12 +11,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -61,26 +67,19 @@ fun UserDashboardScreen(
     hasPendingNotifications: Boolean,
     selectedPanelId: String? = null
 ) {
-    Log.d(TAG, "UserDashboardScreen composition started")
-
     val uiState by viewModel.uiState.collectAsState()
     val notificationUiState by notificationViewModel.uiState.collectAsState()
     val context = LocalContext.current
 
     LaunchedEffect(Unit) {
-        Log.d(TAG, "LaunchedEffect: Loading panels for user dashboard")
         viewModel.loadPanels()
-        viewModel.startPeriodicRefresh() // Iniciar actualización periódica
-
-        // Reiniciar la recolección de notificaciones
-        Log.d(TAG, "UserDashboardScreen: Reiniciando recolección de notificaciones")
+        viewModel.startPeriodicRefresh()
         notificationViewModel.restartNotificationCollection()
     }
 
     DisposableEffect(Unit) {
         onDispose {
-            Log.d(TAG, "DisposableEffect: Stopping periodic refresh")
-            viewModel.stopPeriodicRefresh() // Detener actualización al salir
+            viewModel.stopPeriodicRefresh()
         }
     }
 
@@ -90,6 +89,26 @@ fun UserDashboardScreen(
                 ScreenTopBar(
                     title = stringResource(R.string.user_dashboard_title),
                     actions = {
+                        IconButton(
+                            onClick = {
+                                performHapticFeedback(context)
+                                viewModel.refreshPanels()
+                            },
+                            enabled = !uiState.isLoading
+                        ) {
+                            if (uiState.isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Actualizar",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
                         AnimatedNotificationBell(
                             hasNewNotifications = hasPendingNotifications,
                             notificationCount = notificationUiState.pendingCount,
@@ -120,7 +139,6 @@ fun UserDashboardScreen(
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
-                // Botones de acción fijos
                 DashboardActions(
                     onViewEventsClick = onViewEventsClick,
                     onViewNotificationHistoryClick = onViewNotificationHistoryClick,
@@ -130,7 +148,6 @@ fun UserDashboardScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Lista scrolleable de paneles
                 LazyColumn(
                     modifier = Modifier
                         .weight(1f)
@@ -141,17 +158,13 @@ fun UserDashboardScreen(
                             EmptyPanelsContent()
                         }
                     } else {
-                        // Para cada panel, generar sus elementos según el estado de los relays
                         uiState.panels.forEach { panel ->
-                            // Si el ESP32 está OFFLINE o todos los relays están OK, mostrar un solo panel
                             if (panel.isESP32Offline() || panel.relays.none { it.status == Panel.STATUS_DISC }) {
                                 item(key = "${panel.documentName}_single") {
                                     UserPanelItem(panel)
                                     Spacer(modifier = Modifier.height(8.dp))
                                 }
                             } else {
-                                // Para los paneles con relays en DISC, mostrar un PanelItem por cada relay en DISC
-                                // dentro de un único item para mantenerlos agrupados
                                 val relaysInDisc = panel.relays.filter { it.status == Panel.STATUS_DISC }
 
                                 item(key = "${panel.documentName}_disc_group") {
@@ -175,8 +188,6 @@ fun UserDashboardScreen(
             }
         }
     }
-
-    Log.d(TAG, "UserDashboardScreen composition finished")
 }
 
 @Composable
@@ -196,7 +207,6 @@ private fun DashboardActions(
             onClick = {
                 Log.d(TAG, "View Events button clicked - iniciando navegación")
                 performHapticFeedback(context)
-                // Pequeña pausa para estabilizar la UI
                 kotlinx.coroutines.MainScope().launch {
                     kotlinx.coroutines.delay(100)
                     onViewEventsClick()
@@ -257,11 +267,10 @@ fun UserPanelItem(panel: Panel) {
             "isESP32Offline: ${panel.isESP32Offline()}, hasIssues: ${panel.hasIssues}")
     var expanded by remember { mutableStateOf(false) }
 
-    // Determinar color basado en estado del ESP32 primero, luego en relays
     val backgroundColor = when {
         panel.isESP32Offline() -> PanelColors.PanelBackgroundOffline
-        panel.hasIssues -> Color(0xFFFFEBEE) // Rojo claro
-        else -> Color(0xFFE8F5E9) // Verde claro
+        panel.hasIssues -> Color(0xFFFFEBEE)
+        else -> Color(0xFFE8F5E9)
     }
 
     Card(
@@ -275,7 +284,6 @@ fun UserPanelItem(panel: Panel) {
             Text(text = panel.name, style = MaterialTheme.typography.titleMedium)
             Text(text = "Ubicación: ${panel.location}", style = MaterialTheme.typography.bodyMedium)
 
-            // Estado especial para ESP32 OFFLINE
             if (panel.isESP32Offline()) {
                 Text(
                     text = "Estado: ESP32 OFFLINE",
@@ -320,18 +328,16 @@ fun UserPanelItemForRelay(
     Log.d(TAG, "Rendering UserPanelItemForRelay: ${panel.name}, Relay: ${relay.name}, isAlarmRelay: $isAlarmRelay")
     var expanded by remember { mutableStateOf(false) }
 
-    // Determinar color basado en el tipo de relay
     val backgroundColor = if (isAlarmRelay) {
-        Color(0xFFFFEBEE) // Rojo claro para relay Alarma
+        Color(0xFFFFEBEE)
     } else {
-        Color(0xFFFFEE58) // Amarillo más intenso para otros relays
+        Color(0xFFFFEE58)
     }
 
-    // Color del texto para paneles amarillos
     val textColor = if (!isAlarmRelay) {
-        Color(0xFF0D47A1) // Azul oscuro para texto en paneles amarillos
+        Color(0xFF0D47A1)
     } else {
-        MaterialTheme.colorScheme.onSurface // Color normal para otros casos
+        MaterialTheme.colorScheme.onSurface
     }
 
     Card(
@@ -356,7 +362,6 @@ fun UserPanelItemForRelay(
                 color = if (!isAlarmRelay) textColor else MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            // Mostrar mensaje específico del relay en DISC
             Text(
                 text = "Estado: ${relay.name} en DISC",
                 style = MaterialTheme.typography.bodyMedium.copy(
@@ -374,7 +379,6 @@ fun UserPanelItemForRelay(
                     color = if (isAlarmRelay) PanelColors.StatusDisc else textColor
                 )
 
-                // Mostrar información adicional si está disponible
                 if (relay.date_time != null) {
                     Text(
                         text = "Fecha: ${relay.date_time}",

@@ -9,6 +9,7 @@ data class Panel(
     val location: String = "",
     val esp32_id: String = "",
     val clientName: String = "",
+    val clientDisplayName: String = "",  // NUEVO CAMPO
     val lastUpdate: Long = System.currentTimeMillis(),
     var relays: List<Relay> = listOf(
         Relay(RELAY_ALARM, STATUS_DISC),
@@ -40,6 +41,7 @@ data class Panel(
         "location" to location,
         "esp32_id" to esp32_id,
         "clientName" to clientName,
+        "clientDisplayName" to clientDisplayName,
         "lastUpdate" to lastUpdate
     )
 
@@ -82,11 +84,13 @@ data class Panel(
             name: String,
             location: String,
             clientName: String,
-            esp32Id: String
+            esp32Id: String,
+            clientDisplayName: String = ""
         ) = Panel(
             name = name,
             location = location,
             clientName = clientName,
+            clientDisplayName = clientDisplayName,
             esp32_id = esp32Id
         )
     }

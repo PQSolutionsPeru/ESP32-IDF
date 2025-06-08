@@ -310,31 +310,35 @@ class PanelRepository @Inject constructor(
                     return@addSnapshotListener
                 }
 
-                val panels = snapshot.documents.mapNotNull { doc ->
-                    try {
-                        doc.toObject(Panel::class.java)?.copy(
-                            documentName = doc.id,
-                            clientName = clientDocName,
-                            lastUpdate = doc.getLong("lastUpdate") ?: System.currentTimeMillis()
-                        )
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error converting panel", e)
-                        null
+                coroutineScope.launch {
+                    val clientDisplayName = getClientDisplayName(clientDocName)
+
+                    val panels = snapshot.documents.mapNotNull { doc ->
+                        try {
+                            doc.toObject(Panel::class.java)?.copy(
+                                documentName = doc.id,
+                                clientName = clientDocName,
+                                clientDisplayName = clientDisplayName,
+                                lastUpdate = doc.getLong("lastUpdate") ?: System.currentTimeMillis()
+                            )
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error converting panel", e)
+                            null
+                        }
                     }
-                }
 
-                synchronized(currentPanels) {
-                    currentPanels.clear()
-                    currentPanels.addAll(panels)
-                }
+                    synchronized(currentPanels) {
+                        currentPanels.clear()
+                        currentPanels.addAll(panels)
+                    }
 
-                onUpdate(currentPanels.toList())
+                    onUpdate(currentPanels.toList())
 
-                // Configurar listeners de relays de forma asíncrona
-                panels.forEach { panel ->
-                    coroutineScope.launch {
-                        setupRelayListenerAsync(clientDocName, panel)
-                        updateESP32StatusAsync(panel)
+                    panels.forEach { panel ->
+                        launch {
+                            setupRelayListenerAsync(clientDocName, panel)
+                            updateESP32StatusAsync(panel)
+                        }
                     }
                 }
             }
@@ -371,6 +375,7 @@ class PanelRepository @Inject constructor(
 
                 clientsSnapshot.documents.forEach { clientDoc ->
                     val clientId = clientDoc.id
+                    val clientDisplayName = clientDoc.getString("name") ?: clientId
 
                     firestore.collection("$BASE_PATH/$clientId/panels")
                         .get()
@@ -380,6 +385,7 @@ class PanelRepository @Inject constructor(
                                     doc.toObject(Panel::class.java)?.copy(
                                         documentName = doc.id,
                                         clientName = clientId,
+                                        clientDisplayName = clientDisplayName,
                                         lastUpdate = doc.getLong("lastUpdate") ?: System.currentTimeMillis()
                                     )
                                 } catch (e: Exception) {
@@ -392,7 +398,6 @@ class PanelRepository @Inject constructor(
                                 allPanels.addAll(clientPanels)
                             }
 
-                            // Configurar listeners de forma asíncrona
                             clientPanels.forEach { panel ->
                                 coroutineScope.launch {
                                     setupRelayListenerAsync(clientId, panel)
@@ -422,6 +427,19 @@ class PanelRepository @Inject constructor(
                         }
                 }
             }
+    }
+
+    private suspend fun getClientDisplayName(clientDocName: String): String {
+        return try {
+            val clientDoc = firestore.document("$BASE_PATH/$clientDocName")
+                .get(Source.SERVER)
+                .await()
+
+            clientDoc.getString("name") ?: clientDocName
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting client display name", e)
+            clientDocName
+        }
     }
 
     private fun processPanelChanges(
@@ -632,11 +650,8 @@ class PanelRepository @Inject constructor(
 
             val panelListenerId = "panel_observe_${clientDocName}_$panelDocName"
 
-            // Emitir null inicialmente para indicar carga
-            // CORRECCIÓN: No asignar el resultado de trySend a Unit
             trySend(null)
 
-            // Eliminar listener existente
             activeListeners[panelListenerId]?.remove()
 
             val registration = firestore.document("$BASE_PATH/$clientDocName/panels/$panelDocName")
@@ -648,28 +663,31 @@ class PanelRepository @Inject constructor(
 
                     if (snapshot != null && snapshot.exists()) {
                         try {
-                            val panel = snapshot.toObject(Panel::class.java)?.copy(
-                                documentName = snapshot.id,
-                                clientName = clientDocName,
-                                lastUpdate = snapshot.getLong("lastUpdate")
-                                    ?: System.currentTimeMillis()
-                            )
+                            coroutineScope.launch {
+                                val clientDisplayName = getClientDisplayName(clientDocName)
 
-                            panel?.let {
-                                // Configurar listener de relays
-                                setupRelayListener(clientDocName, it)
+                                val panel = snapshot.toObject(Panel::class.java)?.copy(
+                                    documentName = snapshot.id,
+                                    clientName = clientDocName,
+                                    clientDisplayName = clientDisplayName,
+                                    lastUpdate = snapshot.getLong("lastUpdate")
+                                        ?: System.currentTimeMillis()
+                                )
 
-                                // Actualizar estado ESP32
-                                coroutineScope.launch {
-                                    try {
-                                        updateESP32StatusInBackground(it)
-                                    } catch (e: Exception) {
-                                        Log.e(TAG, "Error updating ESP32 status", e)
+                                panel?.let {
+                                    setupRelayListener(clientDocName, it)
+
+                                    launch {
+                                        try {
+                                            updateESP32StatusInBackground(it)
+                                        } catch (e: Exception) {
+                                            Log.e(TAG, "Error updating ESP32 status", e)
+                                        }
                                     }
                                 }
-                            }
 
-                            trySend(panel)
+                                trySend(panel)
+                            }
                         } catch (e: Exception) {
                             Log.e(TAG, "Error converting panel", e)
                             close(e)
@@ -710,8 +728,6 @@ class PanelRepository @Inject constructor(
         }
     }
 
-    // Métodos CRUD existentes con mejoras
-
     suspend fun createNewPanel(
         clientDocName: String,
         panel: Panel,
@@ -721,14 +737,12 @@ class PanelRepository @Inject constructor(
             throw IllegalArgumentException("Panel data is invalid")
         }
 
-        // Usar withRetry para operación de crear panel
         withRetry {
-            // Verificar si el ESP32 ya está asignado a otro panel
             if (esp32Id != null) {
                 val esp32Doc = firestore
                     .collection("hdd-monitor/esp32/registered")
                     .document(esp32Id)
-                    .get(Source.SERVER) // Forzar consulta al servidor
+                    .get(Source.SERVER)
                     .await()
 
                 if (esp32Doc.exists()) {
@@ -740,20 +754,20 @@ class PanelRepository @Inject constructor(
             }
 
             val panelDocName = IdManager.generatePanelDocumentName(panel.name, clientDocName)
+            val clientDisplayName = getClientDisplayName(clientDocName)
+
             Log.d(TAG, "Creating new panel: $panelDocName")
 
-            // Ejecutar todo en una transacción
             firestore.runTransaction { transaction ->
-                // Referencias
                 val panelRef = firestore.document("$BASE_PATH/$clientDocName/panels/$panelDocName")
                 val esp32Ref = esp32Id?.let {
                     firestore.document("hdd-monitor/esp32/registered/$it")
                 }
 
-                // Crear panel con datos actualizados
                 val updatedPanel = panel.copy(
                     documentName = panelDocName,
                     clientName = clientDocName,
+                    clientDisplayName = clientDisplayName,
                     esp32_id = esp32Id ?: "",
                     lastUpdate = System.currentTimeMillis(),
                     relays = listOf(
@@ -763,16 +777,13 @@ class PanelRepository @Inject constructor(
                     )
                 )
 
-                // Crear panel
                 transaction.set(panelRef, updatedPanel.toMap())
 
-                // Crear relays
                 updatedPanel.relays.forEach { relay ->
                     val relayRef = panelRef.collection("relays").document(relay.name)
                     transaction.set(relayRef, relay.toMap())
                 }
 
-                // Si hay ESP32, asignarlo
                 esp32Ref?.let {
                     transaction.update(
                         it, mapOf(
