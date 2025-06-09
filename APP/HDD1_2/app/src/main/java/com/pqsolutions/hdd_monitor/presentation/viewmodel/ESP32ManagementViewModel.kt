@@ -32,7 +32,7 @@ class ESP32ManagementViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "ESP32ManagementViewModel"
-        private const val REFRESH_INTERVAL = 30000L // 30 segundos
+        private const val REFRESH_INTERVAL = 30000L
     }
 
     private val _uiState = MutableStateFlow(ESP32ManagementState())
@@ -46,21 +46,20 @@ class ESP32ManagementViewModel @Inject constructor(
         Log.d(TAG, "ESP32ManagementViewModel inicializado")
         startStatusUpdatesListener()
         startPeriodicRefresh()
+        loadData()
     }
 
-    /**
-     * Carga todos los datos necesarios para la pantalla
-     */
     fun loadData() {
-        // Cancelar job anterior si existe
-        dataLoadingJob?.cancel()
+        if (dataLoadingJob?.isActive == true) {
+            Log.d(TAG, "Ya hay una carga de datos en progreso, ignorando solicitud")
+            return
+        }
 
         dataLoadingJob = viewModelScope.launch {
             try {
                 Log.d(TAG, "Iniciando carga de datos")
                 _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
-                // Obtener usuario actual
                 val currentUser = userRepository.getCurrentUser()
                 if (currentUser == null) {
                     _uiState.value = _uiState.value.copy(
@@ -72,13 +71,11 @@ class ESP32ManagementViewModel @Inject constructor(
 
                 Log.d(TAG, "Usuario: ${currentUser.name}, Rol: ${currentUser.role}")
 
-                // Determinar qué datos cargar según el rol
                 val clientDocName = when (currentUser.role) {
                     UserRole.USER -> currentUser.clientDocName
-                    UserRole.ADMIN -> null // Admin ve todos
+                    UserRole.ADMIN -> null
                 }
 
-                // Combinar flujos de paneles y ESP32s
                 combine(
                     panelRepository.getPanels(clientDocName),
                     esp32Repository.observeAssignedESP32s(clientDocName),
@@ -96,7 +93,6 @@ class ESP32ManagementViewModel @Inject constructor(
                     .collect { (panels, assignedESP32s, unassignedESP32s) ->
                         Log.d(TAG, "Datos recibidos - Paneles: ${panels.size}, ESP32s asignados: ${assignedESP32s.size}, ESP32s disponibles: ${unassignedESP32s.size}")
 
-                        // Crear mapa de estados ESP32
                         val esp32StatusMap = buildMap {
                             assignedESP32s.forEach { esp32 ->
                                 put(esp32.documentName, esp32.status)
@@ -106,12 +102,10 @@ class ESP32ManagementViewModel @Inject constructor(
                             }
                         }
 
-                        // Contar ESP32s online
                         val onlineCount = esp32StatusMap.values.count { status ->
                             status == ESP32Device.STATUS_ONLINE || status == ESP32Device.STATUS_RUNNING
                         }
 
-                        // Filtrar ESP32s disponibles (sin asignar y en estados válidos)
                         val availableESP32s = unassignedESP32s.filter { esp32 ->
                             esp32.status in listOf(
                                 ESP32Device.STATUS_AWAITING_CONFIG,
@@ -144,22 +138,19 @@ class ESP32ManagementViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Refresca los datos manualmente
-     */
     fun refreshData() {
         Log.d(TAG, "Refresh manual solicitado")
 
         viewModelScope.launch {
             try {
-                // Limpiar cachés para forzar datos frescos
+                dataLoadingJob?.cancel()
+                dataLoadingJob?.join()
+
                 esp32Repository.clearListeners()
                 panelRepository.clearListeners()
 
-                // Pequeña pausa para permitir limpieza
                 delay(300)
 
-                // Recargar datos
                 loadData()
 
             } catch (e: Exception) {
@@ -171,9 +162,6 @@ class ESP32ManagementViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Elimina un panel y libera su ESP32
-     */
     fun deletePanel(panelId: String) {
         viewModelScope.launch {
             try {
@@ -188,7 +176,6 @@ class ESP32ManagementViewModel @Inject constructor(
                 val clientDocName = when (currentUser.role) {
                     UserRole.USER -> currentUser.clientDocName
                     UserRole.ADMIN -> {
-                        // Para admin, necesitamos encontrar el cliente del panel
                         val panel = _uiState.value.panels.find { it.documentName == panelId }
                         panel?.clientName ?: run {
                             _uiState.value = _uiState.value.copy(error = "Panel no encontrado")
@@ -200,7 +187,6 @@ class ESP32ManagementViewModel @Inject constructor(
                 panelRepository.deletePanel(clientDocName, panelId)
                     .onSuccess {
                         Log.d(TAG, "Panel eliminado exitosamente")
-                        // Los datos se actualizarán automáticamente por los listeners
                     }
                     .onFailure { error ->
                         Log.e(TAG, "Error eliminando panel", error)
@@ -218,63 +204,39 @@ class ESP32ManagementViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Obtiene información detallada de un panel para edición
-     */
     fun getPanelForEdit(panelId: String): Panel? {
         return _uiState.value.panels.find { it.documentName == panelId }
     }
 
-    /**
-     * Obtiene ESP32s disponibles para asignación
-     */
     fun getAvailableESP32s(): List<ESP32Device> {
         return _uiState.value.availableESP32s
     }
 
-    /**
-     * Verifica si hay ESP32s disponibles
-     */
     fun hasAvailableESP32s(): Boolean {
         return _uiState.value.availableESP32s.isNotEmpty()
     }
 
-    /**
-     * Obtiene estadísticas resumidas
-     */
     fun getSummaryStats(): Triple<Int, Int, Int> {
         val state = _uiState.value
         return Triple(
-            state.panels.size,           // Total paneles
-            state.onlineESP32Count,      // ESP32s online
-            state.availableESP32s.size   // ESP32s disponibles
+            state.panels.size,
+            state.onlineESP32Count,
+            state.availableESP32s.size
         )
     }
 
-    /**
-     * Verifica si un ESP32 específico está disponible
-     */
     fun isESP32Available(esp32Id: String): Boolean {
         return _uiState.value.availableESP32s.any { it.documentName == esp32Id }
     }
 
-    /**
-     * Obtiene el estado de un ESP32 específico
-     */
     fun getESP32Status(esp32Id: String): String? {
         return _uiState.value.esp32StatusMap[esp32Id]
     }
 
-    /**
-     * Limpia errores del estado
-     */
     fun clearError() {
         _uiState.value = _uiState.value.copy(error = null)
     }
 
-    /**
-     * Escucha actualizaciones de estado en tiempo real
-     */
     private fun startStatusUpdatesListener() {
         statusUpdateJob = viewModelScope.launch {
             try {
@@ -298,24 +260,18 @@ class ESP32ManagementViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Maneja actualizaciones de estado ESP32
-     */
     private fun handleESP32Update(panelDocName: String, newStatus: String) {
         Log.d(TAG, "ESP32 del panel $panelDocName cambió a $newStatus")
 
         val currentState = _uiState.value
 
-        // Actualizar mapa de estados ESP32
         val updatedStatusMap = currentState.esp32StatusMap.toMutableMap()
 
-        // Buscar el ESP32 asociado al panel
         val panel = currentState.panels.find { it.documentName == panelDocName }
         panel?.let {
             updatedStatusMap[it.esp32_id] = newStatus
         }
 
-        // Recalcular ESP32s online
         val onlineCount = updatedStatusMap.values.count { status ->
             status == ESP32Device.STATUS_ONLINE || status == ESP32Device.STATUS_RUNNING
         }
@@ -327,29 +283,20 @@ class ESP32ManagementViewModel @Inject constructor(
         )
     }
 
-    /**
-     * Maneja actualizaciones de relays (para actualizar estados de paneles)
-     */
     private fun handleRelayUpdate(panelDocName: String, relayName: String, newStatus: String) {
         Log.d(TAG, "Relay $relayName del panel $panelDocName cambió a $newStatus")
 
-        // Los paneles se actualizarán automáticamente por el flow del PanelRepository
-        // Solo necesitamos actualizar el timestamp
         _uiState.value = _uiState.value.copy(
             lastUpdate = System.currentTimeMillis()
         )
     }
 
-    /**
-     * Inicia refresh periódico automático
-     */
     private fun startPeriodicRefresh() {
         refreshJob = viewModelScope.launch {
             while (true) {
                 try {
                     delay(REFRESH_INTERVAL)
 
-                    // Solo hacer refresh si no estamos cargando
                     val currentState = _uiState.value
                     if (!currentState.isLoading) {
                         Log.d(TAG, "Refresh periódico automático")
@@ -366,28 +313,21 @@ class ESP32ManagementViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Actualiza solo los estados de ESP32 sin recargar todo
-     */
     private suspend fun refreshESP32States() {
         try {
             val currentState = _uiState.value
             val updatedStatusMap = currentState.esp32StatusMap.toMutableMap()
             var hasChanges = false
 
-            // Verificar estado de cada ESP32
             currentState.panels.forEach { panel ->
                 if (panel.esp32_id.isNotEmpty()) {
                     try {
-                        // Aquí podrías implementar una verificación rápida del estado
-                        // Por ahora, confiamos en los listeners de tiempo real
                     } catch (e: Exception) {
                         Log.e(TAG, "Error verificando ESP32 ${panel.esp32_id}", e)
                     }
                 }
             }
 
-            // Actualizar solo si hay cambios
             if (hasChanges) {
                 val onlineCount = updatedStatusMap.values.count { status ->
                     status == ESP32Device.STATUS_ONLINE || status == ESP32Device.STATUS_RUNNING
@@ -405,9 +345,6 @@ class ESP32ManagementViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Detiene el refresh periódico
-     */
     fun stopPeriodicRefresh() {
         refreshJob?.cancel()
         refreshJob = null
@@ -417,12 +354,10 @@ class ESP32ManagementViewModel @Inject constructor(
         super.onCleared()
         Log.d(TAG, "ViewModel limpiado - cancelando jobs")
 
-        // Cancelar todos los jobs
         dataLoadingJob?.cancel()
         statusUpdateJob?.cancel()
         refreshJob?.cancel()
 
-        // Limpiar listeners de repositorios
         esp32Repository.clearListeners()
         panelRepository.clearListeners()
 

@@ -997,3 +997,19 @@ esp_err_t mqtt_manager_send_config_response(bool success, const char *message) {
     
     return mqtt_manager_publish(topic, json_buffer, strlen(json_buffer), 1, false);
 }
+
+esp_err_t mqtt_manager_clear_panel_config(void) {
+    mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
+    
+    if (xSemaphoreTake(ctx->mutex, portMAX_DELAY) == pdTRUE) {
+        memset(ctx->client_panel_id, 0, sizeof(ctx->client_panel_id));
+        memset(ctx->panel_id, 0, sizeof(ctx->panel_id));
+        
+        xSemaphoreGive(ctx->mutex);
+        
+        ESP_LOGI(TAG, "Panel configuration cleared");
+        return ESP_OK;
+    }
+    
+    return ESP_ERR_TIMEOUT;
+}

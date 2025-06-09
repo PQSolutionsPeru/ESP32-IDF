@@ -25,6 +25,7 @@ static bool g_wifi_connected = false;
 static bool g_mqtt_connected = false;
 static bool g_watchdog_available = false;
 static bool g_relay_manager_initialized = false;
+static bool g_need_reregister = false;
 
 static void force_heap_cleanup(void) {
     for (int i = 0; i < 3; i++) {
@@ -270,6 +271,32 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
         return;
     }
     
+    char esp32_id[ESP32_ID_LENGTH + 1];
+    if (esp32_id_manager_get_id(esp32_id, sizeof(esp32_id)) != ESP_OK) {
+        ESP_LOGE(TAG, "Could not get ESP32 ID");
+        return;
+    }
+    
+    char deleted_topic[128];
+    snprintf(deleted_topic, sizeof(deleted_topic), "esp32/notify/%s/deleted", esp32_id);
+    
+    if (strcmp(topic, deleted_topic) == 0) {
+        ESP_LOGW(TAG, "Deletion notification received - re-registering");
+        
+        config_manager_erase_key("client_id");
+        config_manager_erase_key("panel_id");
+        config_manager_erase_key("panel_name");
+        config_manager_erase_key("location");
+        
+        mqtt_manager_clear_panel_config();
+        
+        time_manager_reset_network_info_sent();
+        
+        g_need_reregister = true;
+        
+        return;
+    }
+    
     if (strstr(topic, "esp32/config/") && !strstr(topic, "/relay_config") && !strstr(topic, "/response")) {
         ESP_LOGI(TAG, "Configuration message received");
         
@@ -419,12 +446,13 @@ static void system_monitor_task(void *pvParameters) {
             relay_manager_check_all_states(false);
         }
         
-        if (time_manager_should_send_network_info()) {
-            ESP_LOGI(TAG, "Sending network info after NTP synchronization");
+        if (time_manager_should_send_network_info() || g_need_reregister) {
+            ESP_LOGI(TAG, "Sending network info %s", g_need_reregister ? "after deletion notification" : "after NTP synchronization");
             esp_err_t ret = mqtt_manager_send_network_info();
             if (ret == ESP_OK) {
                 ESP_LOGI(TAG, "Network info sent successfully");
                 time_manager_mark_network_info_sent();
+                g_need_reregister = false;
             } else {
                 ESP_LOGW(TAG, "Failed to send network info: %s", esp_err_to_name(ret));
             }

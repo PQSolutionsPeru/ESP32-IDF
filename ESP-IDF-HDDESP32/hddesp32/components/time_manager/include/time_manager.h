@@ -57,6 +57,8 @@ bool time_manager_should_send_network_info(void);
  */
 void time_manager_mark_network_info_sent(void);
 
+void time_manager_reset_network_info_sent(void);
+
 #ifdef __cplusplus
 }
 #endif

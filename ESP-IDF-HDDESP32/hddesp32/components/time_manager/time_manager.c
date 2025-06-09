@@ -14,23 +14,19 @@
 
 static const char *TAG = "TIME_MGR";
 
-// Event group bits
 #define TIME_SYNC_BIT BIT0
 #define TIME_UNSYNC_BIT BIT1
-#define TIME_SEND_NETWORK_INFO_BIT BIT2  // ← NUEVO BIT PARA SEÑALAR ENVÍO
+#define TIME_SEND_NETWORK_INFO_BIT BIT2
 
-// Constants optimized for 4MB ESP32
 #define NTP_SERVER_PRIMARY "pool.ntp.org"
 #define NTP_SERVER_SECONDARY "time.nist.gov"
 #define NTP_SERVER_FALLBACK "time.google.com"
-#define TIME_SYNC_INTERVAL_MS (1000 * 60 * 60) // 1 hour
-#define TIME_SYNC_RETRY_DELAY_MS (1000 * 60)   // 1 minute
+#define TIME_SYNC_INTERVAL_MS (1000 * 60 * 60)
+#define TIME_SYNC_RETRY_DELAY_MS (1000 * 60)
 
-// Lima, Peru timezone constants (UTC-5)
 #define LIMA_TIMEZONE_OFFSET -5 * 3600
 #define LIMA_TIMEZONE_STR "PET"
 
-// Time manager context - optimized structure
 typedef struct {
     time_manager_state_t state;
     EventGroupHandle_t event_group;
@@ -38,12 +34,11 @@ typedef struct {
     int64_t last_sync_time;
     int sync_retry_count;
     bool sntp_initialized;
-    bool network_info_pending;  // ← NUEVO FLAG
+    bool network_info_pending;
 } time_manager_context_t;
 
 static time_manager_context_t s_time_manager_ctx = {0};
 
-// SNTP callback - CORREGIDO: NO llamar MQTT desde aquí
 static void sntp_sync_callback(struct timeval *tv)
 {
     time_manager_context_t *ctx = &s_time_manager_ctx;
@@ -54,23 +49,19 @@ static void sntp_sync_callback(struct timeval *tv)
         ctx->state = TIME_MANAGER_STATE_SYNCHRONIZED;
         ctx->last_sync_time = esp_timer_get_time() / 1000;
         ctx->sync_retry_count = 0;
-        ctx->network_info_pending = true;  // ← MARCAR COMO PENDIENTE
+        ctx->network_info_pending = true;
         
         xEventGroupClearBits(ctx->event_group, TIME_UNSYNC_BIT);
         xEventGroupSetBits(ctx->event_group, TIME_SYNC_BIT | TIME_SEND_NETWORK_INFO_BIT);
         xSemaphoreGive(ctx->mutex);
     }
     
-    // Show current time - minimal logging
     char time_str[32];
     if (time_manager_get_lima_time_str(time_str, sizeof(time_str)) == ESP_OK) {
         ESP_LOGI(TAG, "Lima time: %s", time_str);
     }
-    
-    // NO LLAMAR MQTT DESDE AQUÍ - será manejado por el task principal
 }
 
-// NUEVA FUNCIÓN: Verificar si hay que enviar network info
 bool time_manager_should_send_network_info(void) {
     time_manager_context_t *ctx = &s_time_manager_ctx;
     
@@ -82,7 +73,6 @@ bool time_manager_should_send_network_info(void) {
     return (bits & TIME_SEND_NETWORK_INFO_BIT) != 0;
 }
 
-// NUEVA FUNCIÓN: Marcar network info como enviado
 void time_manager_mark_network_info_sent(void) {
     time_manager_context_t *ctx = &s_time_manager_ctx;
     
@@ -95,7 +85,6 @@ void time_manager_mark_network_info_sent(void) {
     }
 }
 
-// Initialize Time Manager
 esp_err_t time_manager_init(void)
 {
     time_manager_context_t *ctx = &s_time_manager_ctx;
@@ -107,14 +96,12 @@ esp_err_t time_manager_init(void)
     
     ESP_LOGI(TAG, "Initializing Time Manager");
     
-    // Create event group
     ctx->event_group = xEventGroupCreate();
     if (ctx->event_group == NULL) {
         ESP_LOGE(TAG, "Failed to create event group");
         return ESP_ERR_NO_MEM;
     }
     
-    // Create mutex
     ctx->mutex = xSemaphoreCreateMutex();
     if (ctx->mutex == NULL) {
         vEventGroupDelete(ctx->event_group);
@@ -123,14 +110,12 @@ esp_err_t time_manager_init(void)
         return ESP_ERR_NO_MEM;
     }
     
-    // Initialize variables
     ctx->state = TIME_MANAGER_STATE_UNSYNCHRONIZED;
     ctx->last_sync_time = 0;
     ctx->sync_retry_count = 0;
     ctx->sntp_initialized = false;
-    ctx->network_info_pending = false;  // ← INICIALIZAR NUEVO FLAG
+    ctx->network_info_pending = false;
     
-    // Set timezone for Lima, Peru (UTC-5)
     setenv("TZ", "PET5", 1);
     tzset();
     ESP_LOGI(TAG, "Timezone set to Lima, Peru (UTC-5)");
@@ -140,7 +125,6 @@ esp_err_t time_manager_init(void)
     return ESP_OK;
 }
 
-// Initialize SNTP - simplified
 static esp_err_t init_sntp(void)
 {
     time_manager_context_t *ctx = &s_time_manager_ctx;
@@ -164,7 +148,6 @@ static esp_err_t init_sntp(void)
     return ESP_OK;
 }
 
-// Sync time with NTP servers - optimized
 esp_err_t time_manager_sync_time(void)
 {
     time_manager_context_t *ctx = &s_time_manager_ctx;
@@ -193,7 +176,6 @@ esp_err_t time_manager_sync_time(void)
         xSemaphoreGive(ctx->mutex);
     }
     
-    // Wait for synchronization with timeout
     EventBits_t bits = xEventGroupWaitBits(ctx->event_group,
                                            TIME_SYNC_BIT,
                                            pdFALSE, pdFALSE, pdMS_TO_TICKS(30000));
@@ -207,7 +189,6 @@ esp_err_t time_manager_sync_time(void)
     }
 }
 
-// Check sync status - simplified
 esp_err_t time_manager_check_sync(void)
 {
     time_manager_context_t *ctx = &s_time_manager_ctx;
@@ -219,7 +200,6 @@ esp_err_t time_manager_check_sync(void)
     if (time_manager_is_synchronized()) {
         int64_t current_time = esp_timer_get_time() / 1000;
         
-        // Check if resync needed
         if (current_time - ctx->last_sync_time >= TIME_SYNC_INTERVAL_MS) {
             ESP_LOGI(TAG, "Resync interval reached");
             return time_manager_sync_time();
@@ -227,7 +207,6 @@ esp_err_t time_manager_check_sync(void)
         return ESP_OK;
     }
     
-    // Retry sync if needed
     if (xSemaphoreTake(ctx->mutex, portMAX_DELAY) == pdTRUE) {
         int64_t current_time = esp_timer_get_time() / 1000;
         
@@ -245,7 +224,6 @@ esp_err_t time_manager_check_sync(void)
     return ESP_ERR_NOT_FINISHED;
 }
 
-// Get ISO8601 timestamp
 esp_err_t time_manager_get_iso8601(char *timestamp_out, size_t max_len)
 {
     if (timestamp_out == NULL || max_len < 25) {
@@ -262,13 +240,11 @@ esp_err_t time_manager_get_iso8601(char *timestamp_out, size_t max_len)
     return ESP_OK;
 }
 
-// Get current timestamp
 time_t time_manager_get_time(void)
 {
     return time(NULL);
 }
 
-// Get formatted time
 esp_err_t time_manager_get_formatted(char *time_out, size_t max_len, const char* format)
 {
     if (time_out == NULL || format == NULL || max_len < 10) {
@@ -285,7 +261,6 @@ esp_err_t time_manager_get_formatted(char *time_out, size_t max_len, const char*
     return (ret == 0) ? ESP_ERR_INVALID_SIZE : ESP_OK;
 }
 
-// Get Lima time string
 esp_err_t time_manager_get_lima_time_str(char *time_out, size_t max_len)
 {
     if (time_out == NULL || max_len < 20) {
@@ -305,7 +280,6 @@ esp_err_t time_manager_get_lima_time_str(char *time_out, size_t max_len)
     return ESP_OK;
 }
 
-// Get timestamp string
 esp_err_t time_manager_get_timestamp(char *timestamp_out, size_t max_len)
 {
     if (timestamp_out == NULL) {
@@ -323,7 +297,6 @@ esp_err_t time_manager_get_timestamp(char *timestamp_out, size_t max_len)
     return ESP_OK;
 }
 
-// Check if synchronized
 bool time_manager_is_synchronized(void)
 {
     time_manager_context_t *ctx = &s_time_manager_ctx;
@@ -336,7 +309,6 @@ bool time_manager_is_synchronized(void)
     return (bits & TIME_SYNC_BIT) != 0;
 }
 
-// Get state
 time_manager_state_t time_manager_get_state(void)
 {
     time_manager_context_t *ctx = &s_time_manager_ctx;
@@ -348,7 +320,6 @@ time_manager_state_t time_manager_get_state(void)
     return ctx->state;
 }
 
-// Convert timestamp to epoch
 int64_t time_manager_timestamp_to_epoch(const char *timestamp)
 {
     if (timestamp == NULL) {
@@ -361,13 +332,12 @@ int64_t time_manager_timestamp_to_epoch(const char *timestamp)
     if (*endptr == '\0') {
         int digits = endptr - timestamp;
         if (digits >= 13) {
-            return timestamp_int / 1000; // Convert ms to seconds
+            return timestamp_int / 1000;
         } else {
-            return timestamp_int; // Already in seconds
+            return timestamp_int;
         }
     }
     
-    // Try parsing ISO 8601
     struct tm tm = {0};
     
     if (strptime(timestamp, "%Y-%m-%dT%H:%M:%S", &tm) != NULL) {
@@ -385,7 +355,6 @@ int64_t time_manager_timestamp_to_epoch(const char *timestamp)
     return 0;
 }
 
-// Convert epoch to ISO8601
 esp_err_t time_manager_epoch_to_iso8601(time_t epoch, char *iso_out, size_t max_len)
 {
     if (iso_out == NULL || max_len < 25) {
@@ -397,4 +366,17 @@ esp_err_t time_manager_epoch_to_iso8601(time_t epoch, char *iso_out, size_t max_
     
     strftime(iso_out, max_len, "%Y-%m-%dT%H:%M:%S-05:00", &timeinfo);
     return ESP_OK;
+}
+
+void time_manager_reset_network_info_sent(void) {
+    time_manager_context_t *ctx = &s_time_manager_ctx;
+    
+    if (ctx->event_group != NULL) {
+        if (xSemaphoreTake(ctx->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+            ctx->network_info_pending = true;
+            xEventGroupSetBits(ctx->event_group, TIME_SEND_NETWORK_INFO_BIT);
+            xSemaphoreGive(ctx->mutex);
+            ESP_LOGI(TAG, "Network info sent flag reset");
+        }
+    }
 }
