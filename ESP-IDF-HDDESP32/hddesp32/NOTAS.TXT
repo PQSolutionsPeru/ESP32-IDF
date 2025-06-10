@@ -202,3 +202,27 @@ Documento: esp32
 Documento: event_types
   types: CAPACITACION,GARANTIA,INSTALACION,MANTENIMIENTO,PRUEBAS,REPARACION
 Documento: vm
+
+
+
+luego, por qué la VM cambia por si sola el estado del ESP32 a "ONLINE" sin haber recibido información de asignación a cliente y panel con ubicación?
+log de la VM:
+Jun 09 02:10:13 instanciavm-myqtthub python3[2838926]: 2025-06-08 21:10:13,241 - INFO - Mensaje recibido en tópico: system/status/esp32_config_manager
+Jun 09 02:10:34 instanciavm-myqtthub python3[2838926]: 2025-06-08 21:10:34,600 - INFO - Verificando eventos próximos a las 08/06/2025, 21:10:34
+Jun 09 02:10:46 instanciavm-myqtthub python3[2838926]: 2025-06-08 21:10:46,243 - INFO - Mensaje recibido en tópico: esp32/network_info
+Jun 09 02:10:46 instanciavm-myqtthub python3[2838926]: 2025-06-08 21:10:46,402 - INFO - ESP32 42A8ACA0 sin asignación de cliente/panel, manteniendo en AWAITING_CONFIG
+Jun 09 02:10:46 instanciavm-myqtthub python3[2838926]: 2025-06-08 21:10:46,581 - INFO - Información de red actualizada para ESP32 42A8ACA0
+Jun 09 02:11:35 instanciavm-myqtthub python3[2838926]: 2025-06-08 21:11:35,267 - INFO - Verificando eventos próximos a las 08/06/2025, 21:11:35
+Jun 09 02:12:23 instanciavm-myqtthub python3[2838926]: 2025-06-08 21:12:23,099 - INFO - Mensaje recibido en tópico: esp32/network_info
+Jun 09 02:12:23 instanciavm-myqtthub python3[2838926]: 2025-06-08 21:12:23,258 - INFO - ESP32 42A8ACA0 sin asignación de cliente/panel, manteniendo en AWAITING_CONFIG
+Jun 09 02:12:23 instanciavm-myqtthub python3[2838926]: 2025-06-08 21:12:23,424 - INFO - Información de red actualizada para ESP32 42A8ACA0
+Jun 09 02:12:35 instanciavm-myqtthub python3[2838926]: 2025-06-08 21:12:35,969 - INFO - Verificando eventos próximos a las 08/06/2025, 21:12:35
+Jun 09 02:13:36 instanciavm-myqtthub python3[2838926]: 2025-06-08 21:13:36,615 - INFO - Verificando eventos próximos a las 08/06/2025, 21:13:36
+Jun 09 02:14:37 instanciavm-myqtthub python3[2838926]: 2025-06-08 21:14:37,267 - INFO - Verificando eventos próximos a las 08/06/2025, 21:14:37
+Jun 09 02:15:37 instanciavm-myqtthub python3[2838926]: 2025-06-08 21:15:37,950 - INFO - Verificando eventos próximos a las 08/06/2025, 21:15:37
+Jun 09 02:16:18 instanciavm-myqtthub python3[2838926]: 2025-06-08 21:16:18,102 - INFO - Mensaje recibido en tópico: system/status/42A8ACA0
+Jun 09 02:16:18 instanciavm-myqtthub python3[2838926]: 2025-06-08 21:16:18,420 - INFO - Estado actualizado para ESP32 42A8ACA0: ONLINE
+Jun 09 02:16:38 instanciavm-myqtthub python3[2838926]: 2025-06-08 21:16:38,615 - INFO - Verificando eventos próximos a las 08/06/2025, 21:16:38
+Jun 09 02:17:39 instanciavm-myqtthub python3[2838926]: 2025-06-08 21:17:39,270 - INFO - Verificando eventos próximos a las 08/06/2025, 21:17:39
+Jun 09 02:18:39 instanciavm-myqtthub python3[2838926]: 2025-06-08 21:18:39,968 - INFO - Verificando eventos próximos a las 08/06/2025, 21:18:39
+Jun 09 02:19:40 instanciavm-myqtthub python3[2838926]: 2025-06-08 21:19:40,677 - INFO - Verificando eventos próximos a las 08/06/2025, 21:19:40

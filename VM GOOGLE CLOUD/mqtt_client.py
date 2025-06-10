@@ -303,9 +303,20 @@ class MQTTClient:
             
             # Preparar actualizaciones básicas
             updates = {
-                'lastUpdate': firestore.SERVER_TIMESTAMP,
-                'status': payload['status']
+                'lastUpdate': firestore.SERVER_TIMESTAMP
             }
+            
+            # Verificar asignación antes de cambiar estado
+            requested_status = payload['status']
+            has_assignment = current_data.get('client_id') and current_data.get('panel_id')
+            
+            # Si el ESP32 quiere estar ONLINE pero no tiene asignación, mantener AWAITING_CONFIG
+            if requested_status == 'ONLINE' and not has_assignment:
+                updates['status'] = 'AWAITING_CONFIG'
+                logging.info(f"ESP32 {esp32_id} intentó cambiar a ONLINE sin asignación, manteniendo AWAITING_CONFIG")
+            else:
+                # En otros casos (OFFLINE, o ONLINE con asignación), permitir el cambio
+                updates['status'] = requested_status
             
             # Si es un mensaje LWT, agregar timestamp de desconexión
             if payload.get('type') == 'lwt':
@@ -318,8 +329,8 @@ class MQTTClient:
                     notification_handler.send_offline_notification(esp32_id)
                     logging.info(f"LWT recibido y notificado para ESP32 {esp32_id}")
             
-            # AÑADIR ESTAS LÍNEAS: Notificar cuando un dispositivo vuelve a estar online
-            elif payload['status'] == 'ONLINE' and current_data.get('status') == 'OFFLINE':
+            # Notificar cuando un dispositivo vuelve a estar online (solo si tiene asignación)
+            elif requested_status == 'ONLINE' and current_data.get('status') == 'OFFLINE' and has_assignment:
                 # Dispositivo volvió a estar online después de haber estado offline
                 from notification_handler import NotificationHandler
                 notification_handler = NotificationHandler(self.db)
@@ -334,7 +345,7 @@ class MQTTClient:
                     
             # Actualizar estado en Firestore
             esp32_ref.set(updates, merge=True)
-            logging.info(f"Estado actualizado para ESP32 {esp32_id}: {payload['status']}")
+            logging.info(f"Estado actualizado para ESP32 {esp32_id}: {updates.get('status', requested_status)}")
                 
         except Exception as e:
             logging.error(f"Error procesando estado del sistema: {e}", exc_info=True)
