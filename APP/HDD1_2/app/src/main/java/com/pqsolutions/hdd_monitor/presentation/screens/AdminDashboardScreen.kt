@@ -77,7 +77,7 @@ fun AdminDashboardScreen(
 
     LaunchedEffect(lifecycleKey) {
         Log.d(TAG, "LaunchedEffect: Loading panels for admin dashboard")
-        viewModel.loadPanels()
+        viewModel.refreshPanels()
 
         // Reiniciar la recolección de notificaciones
         Log.d(TAG, "AdminDashboardScreen: Reiniciando recolección de notificaciones")
