@@ -1,3 +1,5 @@
+EL DASHBOARD, YA SEA DE USUARIO O DE ADMINISTRADOR, NO REFLEJA EN TIEMPO REAL LO QUE ESTÁ EN LA BD
+
 AUMENTAR EL TIEMPO ENTRE REINTENTOS PARA QUE EL AP NO SE REINICIE
 
 DEBERIA DETECTAR CUANDO LA CONTRASEÑA ES INCORRECTA Y AVISAR AL USUARIO Y LANZAR DE NUEVO EL MODO AP/STA COMO AL COMIENZO, ESTO EN VEZ DE REINICIARSE A CADA RATO; SI LA CONTRASEÑA ES CORRECTA PERO LA RED NO ESTÁ DISPONIBLE DEBERÁ LANZAR DE IGUAL MANERA EL MODO AP/STA COMO AL COMIENZO
@@ -27,10 +29,114 @@ INVESTIGAR LAS FUINCIONES O VARIABLES NO USADAS EN ANDROID STUDIO Y EN EL ESP32.
 
 POR QUÉ EN esp32_config_manager.py HAY EN ESP32_STATES LOS VALORES 'REGISTERED': 'REGISTERED' Y TAMBIÉN 'status': ESP32_STATES['REGISTERED']?
 
-
+POR QUÉ AL HACER BUILD EN EL ESP32 SALE ESTO? 
+I (867) HDDESP32: Phase 3: Callback configuration
+I (877) MQTT_MGR: Setting credentials for ESP32 ID: 42A8ACA0
+E (877) ESP32_ID_MGR: Buffer too small for MAC address
+I (887) MQTT_MGR: Credentials configured
+I (887) HDDESP32: Phase 4: WiFi connection
 
 
 dame soluciones permanentes, para ESP-IDF v5.4.1 y en C puro; además, damelos archivos a corregir pero completos y ya corregidos
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+este es mi proyecto kotlin en android studio:
+
+e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\AndroidManifest.xml e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\util e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\util\IdManager.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\util\KeyboardUtils.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\util\PermissionsHelper.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\util\StatusUpdateManager.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\AuthRepository.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\Client.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\ClientRepository.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\Event.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\EventRepository.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\Notification.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\NotificationRepository.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\Panel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\PanelRepository.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\Relay.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\RelayControlRepository.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\UserData.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\UserPreferences.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\data\UserRepository.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\di e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\di\AppModule.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\di\FirebaseModule.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\model e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\model\EventStatus.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\model\Stateable.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\model\UserRole.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\GetPanelsUseCase.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\LoginUseCase.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\NotificationUseCase.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\domain\UseCase.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\esp32 e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\esp32\ESP32Device.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\esp32\ESP32Repository.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\AnimatedNotificationBell.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\AppTopBar.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\ClientComponents.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\ClientManagementDialogs.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\CommonComponents.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\ConfirmationDialogs.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\CustomTextField.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\DashboardComponents.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\EventCard.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\EventDialog.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\EventListItem.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\EventTypeSelector.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\LoadingContent.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\NewEventTypeDialog.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\PanelListComponents.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\RelayControlComponents.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\SnackbarHandler.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\UserComponents.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\components\UserListComponents.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\navigation e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\navigation\AppNavigation.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\AdminDashboardScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\ClientManagementScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\ESP32ManagementScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\EventScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\LoginScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\NotificationHistoryScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\OnboardingScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\PanelConfigurationScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\RelayControlScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\UserDashboardScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\screens\UserManagementScreen.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\state e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\state\ClientManagementState.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\state\ESP32ManagementState.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\state\EventViewState.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\state\MainUiEvent.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\state\MainUiState.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\state\PanelConfigurationState.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\state\RelayControlState.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\theme e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\theme\Color.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\theme\PanelColors.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\theme\Theme.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\theme\Type.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\util e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\util\Animations.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\util\Constants.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\util\Dimentions.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\util\Extensions.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\util\Feedback.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\util\FeedbackUtil.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\ClientManagementViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\DashboardViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\ESP32ManagementViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\EventViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\LoginViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\MainViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\NotificationHistoryViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\NotificationViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\PanelConfigurationViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\PermissionsViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\RelayControlViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\viewmodel\UserManagementViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\BaseViewModel.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\presentation\MainActivity.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\service e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\service\BootReceiver.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\service\FirebaseMessagingService.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\service\MonitoringService.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\HddApplication.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\java\com\pqsolutions\hdd_monitor\ServiceCheckWorker.kt e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\androidTest\java\com\pqsolutions\hdd_monitor e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\test\java\com\pqsolutions\hdd_monitor e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\res\drawable e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\res\drawable\ic_launcher_background.xml e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\res\drawable\ic_launcher_foreground.xml e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\res\drawable\ic_notification.xml e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\res\drawable\onboarding_image.png e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\res\drawable\onboarding_image_old.png e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\res\mipmap-hdpi e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\res\mipmap-mdpi e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\res\mipmap-xhdpi e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\res\mipmap-xxhdpi e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\res\mipmap-xxxhdpi e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\res\mipmap-anydpi-v26 e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\res\values e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\res\values\colors.xml e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\res\values\ic_launcher_background.xml e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\res\values\strings.xml e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\res\values\themes.xml e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\src\main\res\xml e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\build.gradle.kts e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\build.gradle.kts e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\app\proguard-rules.pro e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\gradle.properties e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\gradle\wrapper\gradle-wrapper.properties e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\gradle\libs.versions.toml e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\local.properties e:\PQSolutions\HDD-Monitor\HDD-Monitor-GitHub\ESP32-IDF\APP\HDD1_2\settings.gradle.kts
+
+cada panel muestra 3 panelitems en los dashboards de cuentas usuario y administrador, no quiero que sea así, quiero que se muestre un solo panelitem por cada panel y que la información de cada relay habilitado se muestre en el mismo panelitem, o sea que dentro de cada panel item se muestren cuadritos con el nombre de cada relay, que se muestren en verde los que están en OK y en rojo los que están en DISC.
+
+Qué archivos necesitas ver para corregirlo? también, no deben estar hardcodeados los nombres de los relays, deben ser por defecto relay_1 al 6 y debe reflejar exactamente cómo están
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

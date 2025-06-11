@@ -12,6 +12,11 @@ extern "C" {
 // Constantes
 #define ESP32_ID_LENGTH 8
 #define ESP32_MAC_STR_LENGTH 12
+#define ESP32_ID_LENGTH 8
+#define ESP32_ID_BUFFER_SIZE (ESP32_ID_LENGTH + 1)
+#define ESP32_MAC_LENGTH 12
+#define ESP32_MAC_BUFFER_SIZE (ESP32_MAC_LENGTH + 1)
+#define ESP32_MAC_STR_LENGTH 17 
 
 // Inicialización
 esp_err_t esp32_id_manager_init(void);

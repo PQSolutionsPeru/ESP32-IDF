@@ -17,6 +17,7 @@
 #include "esp_heap_caps.h"
 #include "esp_task_wdt.h"
 #include "config_processor.h"
+#include "esp_timer.h"
 
 static const char *TAG = "HDDESP32";
 
@@ -281,7 +282,7 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
     snprintf(deleted_topic, sizeof(deleted_topic), "esp32/notify/%s/deleted", esp32_id);
     
     if (strcmp(topic, deleted_topic) == 0) {
-        ESP_LOGW(TAG, "Deletion notification received - re-registering");
+        ESP_LOGW(TAG, "Deletion notification received - clearing configuration and re-registering");
         
         config_manager_erase_key("client_id");
         config_manager_erase_key("panel_id");
@@ -290,9 +291,50 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
         
         mqtt_manager_clear_panel_config();
         
-        time_manager_reset_network_info_sent();
+        char status_json[256];
+        char timestamp_str[32];
         
+        if (time_manager_is_synchronized()) {
+            time_manager_get_timestamp(timestamp_str, sizeof(timestamp_str));
+        } else {
+            snprintf(timestamp_str, sizeof(timestamp_str), "%lld", (long long)(esp_timer_get_time() / 1000));
+        }
+        
+        snprintf(status_json, sizeof(status_json),
+                "{\"esp32_id\":\"%s\",\"status\":\"AWAITING_CONFIG\",\"timestamp\":%s,\"type\":\"status_update\"}",
+                esp32_id, timestamp_str);
+        
+        char status_topic[128];
+        snprintf(status_topic, sizeof(status_topic), "system/status/%s", esp32_id);
+        mqtt_manager_publish(status_topic, status_json, strlen(status_json), 1, false);
+        
+        ESP_LOGI(TAG, "Published AWAITING_CONFIG status after deletion");
+        
+        if (g_relay_manager_initialized) {
+            relay_manager_deinit();
+            g_relay_manager_initialized = false;
+            ESP_LOGI(TAG, "Relay manager deinitialized after deletion");
+        }
+        
+        time_manager_reset_network_info_sent();
         g_need_reregister = true;
+        
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        
+        char network_json[512];
+        char ip_address[16] = "0.0.0.0";
+        wifi_manager_get_ip(ip_address, sizeof(ip_address));
+        
+        char mac_address[ESP32_MAC_BUFFER_SIZE];
+        esp32_id_manager_get_mac(mac_address, sizeof(mac_address));
+        
+        snprintf(network_json, sizeof(network_json),
+                "{\"esp32_id\":\"%s\",\"MAC\":\"%s\",\"IP\":\"%s\",\"status\":\"AWAITING_CONFIG\",\"timestamp\":%s}",
+                esp32_id, mac_address, ip_address, timestamp_str);
+        
+        mqtt_manager_publish("esp32/network_info", network_json, strlen(network_json), 0, false);
+        
+        ESP_LOGI(TAG, "Re-registration process completed - ESP32 is now AWAITING_CONFIG");
         
         return;
     }

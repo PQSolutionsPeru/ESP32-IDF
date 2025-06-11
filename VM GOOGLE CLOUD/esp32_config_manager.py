@@ -98,15 +98,40 @@ class ESP32ConfigManager:
             panel_data = panel_doc.to_dict()
 
             relays_ref = panel_ref.collection('relays')
+            existing_relays = list(relays_ref.stream())
+            
+            if len(existing_relays) < 6:
+                batch = self.db.batch()
+                for i in range(1, 7):
+                    relay_id = f"relay_{i}"
+                    if not any(r.id == relay_id for r in existing_relays):
+                        relay_ref = relays_ref.document(relay_id)
+                        relay_data = {
+                            'name': f'Relay {i}',
+                            'status': 'DISC',
+                            'isActive': False,
+                            'contactType': 'NO',
+                            'isControllable': True,
+                            'customName': None,
+                            'date_time': None,
+                            'lastUpdate': firestore.SERVER_TIMESTAMP
+                        }
+                        batch.set(relay_ref, relay_data)
+                batch.commit()
+                existing_relays = list(relays_ref.stream())
+
             relays = {}
-            for relay_doc in relays_ref.stream():
+            for relay_doc in existing_relays:
                 relay_data = relay_doc.to_dict()
                 status = relay_data.get('status')
                 if not status or status not in RELAY_STATES:
                     status = DEFAULT_RELAY_STATUS
                 relays[relay_doc.id] = {
                     'name': relay_data.get('name', relay_doc.id),
-                    'status': status
+                    'status': status,
+                    'isActive': relay_data.get('isActive', False),
+                    'contactType': relay_data.get('contactType', 'NO'),
+                    'customName': relay_data.get('customName')
                 }
 
             config = {

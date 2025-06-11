@@ -154,6 +154,11 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 char reset_topic[MQTT_TOPIC_MAX_LENGTH];
                 snprintf(reset_topic, sizeof(reset_topic), "esp32/config/%s/reset", ctx->esp32_id);
                 mqtt_manager_subscribe(reset_topic, 0);
+                
+                char deleted_topic[MQTT_TOPIC_MAX_LENGTH];
+                snprintf(deleted_topic, sizeof(deleted_topic), "esp32/notify/%s/deleted", ctx->esp32_id);
+                mqtt_manager_subscribe(deleted_topic, 1);
+                ESP_LOGI(TAG, "Subscribed to deletion notifications: %s", deleted_topic);
             }
             
             mqtt_pending_message_t pending_msg;
@@ -792,10 +797,19 @@ esp_err_t mqtt_manager_send_network_info(void) {
         }
     }
     
+    const char *current_status = "ONLINE";
+    
+    if (strlen(ctx->panel_id) == 0 || strlen(ctx->client_panel_id) == 0) {
+        current_status = "AWAITING_CONFIG";
+        ESP_LOGI(TAG, "Sending network info with AWAITING_CONFIG status (no panel config)");
+    }
+    
     int len = snprintf(json_buffer, 512,
                       "{\"esp32_id\":\"%.8s\",\"MAC\":\"%.12s\",\"IP\":\"%.15s\","
-                      "\"status\":\"ONLINE\",\"timestamp\":%.20s,\"time\":\"%.31s\"}",
-                      ctx->esp32_id, ctx->mac_address, ip_address, timestamp_str, time_str);
+                      "\"status\":\"%s\",\"timestamp\":%.20s,\"time\":\"%.31s\"}",
+                      ctx->esp32_id, ctx->mac_address, ip_address, 
+                      current_status,
+                      timestamp_str, time_str);
     
     esp_err_t ret = ESP_FAIL;
     if (len > 0 && len < 512) {
