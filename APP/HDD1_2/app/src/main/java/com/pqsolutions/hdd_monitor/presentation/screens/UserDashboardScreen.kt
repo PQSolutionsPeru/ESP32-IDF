@@ -92,7 +92,7 @@ fun UserDashboardScreen(
                         IconButton(
                             onClick = {
                                 performHapticFeedback(context)
-                                viewModel.refreshPanels()
+                                viewModel.loadPanels()
                             },
                             enabled = !uiState.isLoading
                         ) {

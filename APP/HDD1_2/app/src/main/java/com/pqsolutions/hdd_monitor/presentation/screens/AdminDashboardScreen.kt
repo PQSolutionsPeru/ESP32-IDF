@@ -77,7 +77,8 @@ fun AdminDashboardScreen(
 
     LaunchedEffect(lifecycleKey) {
         Log.d(TAG, "LaunchedEffect: Loading panels for admin dashboard")
-        viewModel.refreshPanels()
+        // CAMBIO: Usar loadPanels() en lugar de refreshPanels()
+        viewModel.loadPanels()
 
         // Reiniciar la recolección de notificaciones
         Log.d(TAG, "AdminDashboardScreen: Reiniciando recolección de notificaciones")
@@ -105,7 +106,8 @@ fun AdminDashboardScreen(
                         IconButton(
                             onClick = {
                                 performHapticFeedback(context)
-                                viewModel.refreshPanels()
+                                // CAMBIO: Usar loadPanels() para mantener los listeners activos
+                                viewModel.loadPanels()
                             },
                             enabled = !uiState.isLoading
                         ) {

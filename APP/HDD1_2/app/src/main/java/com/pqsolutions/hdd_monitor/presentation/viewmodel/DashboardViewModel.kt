@@ -49,7 +49,7 @@ class DashboardViewModel @Inject constructor(
     init {
         Log.d(TAG, "DashboardViewModel initialized")
         listenForStatusUpdates()
-        startPeriodicRefresh()
+        // NO iniciar el refresh periódico aquí, lo haremos desde la UI
     }
 
     /**
@@ -333,7 +333,8 @@ class DashboardViewModel @Inject constructor(
                     if (!isActive) break
 
                     Log.d(TAG, "Ejecutando actualización periódica")
-                    refreshPanels()
+                    // CAMBIO: Solo forzar refresco desde el servidor, NO limpiar listeners
+                    panelRepository.forceRefreshFromServer()
                 } catch (e: Exception) {
                     if (e is kotlinx.coroutines.CancellationException) {
                         break
@@ -356,23 +357,17 @@ class DashboardViewModel @Inject constructor(
 
     /**
      * Función para forzar una recarga de todos los paneles
-     * Útil para acciones manuales (botón de refresh) o recuperación de errores
+     * CAMBIO: NO limpiar listeners, solo iniciar la carga si no está activa
      */
     fun refreshPanels() {
-        Log.d(TAG, "refreshPanels() called - Recargando datos forzadamente")
+        Log.d(TAG, "refreshPanels() called - Iniciando carga de paneles")
 
         viewModelScope.launch {
             try {
-                // Primero limpiar listeners y cachés para forzar recargas frescas
-                panelRepository.clearListeners()
-
-                // Esperar un poco para permitir que se complete la limpieza
-                delay(300)
-
-                // Ahora cargar paneles de nuevo
+                // CAMBIO: Solo cargar paneles, NO limpiar listeners
                 loadPanels()
             } catch (e: Exception) {
-                Log.e(TAG, "Error forzando refresco de paneles", e)
+                Log.e(TAG, "Error cargando paneles", e)
             }
         }
     }
@@ -391,6 +386,7 @@ class DashboardViewModel @Inject constructor(
         cancelCurrentJob()
         statusUpdateJob?.cancel()
         refreshJob?.cancel()
+        // CAMBIO: Solo limpiar listeners cuando el ViewModel se destruye completamente
         panelRepository.clearListeners()
         Log.d(TAG, "ViewModel cleared, all listeners and jobs cancelled")
     }
