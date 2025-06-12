@@ -17,19 +17,19 @@
 
 // Configuración de pines por defecto (basada en MicroPython original)
 static const gpio_num_t DEFAULT_RELAY_PINS[RELAY_MANAGER_MAX_RELAYS] = {
-    GPIO_NUM_32,  // relay_1 - "Alarma" por defecto
-    GPIO_NUM_33,  // relay_2 - "Problema" por defecto  
-    GPIO_NUM_25,  // relay_3 - "Supervision" por defecto
-    GPIO_NUM_26,  // relay_4 - Nuevo relay
-    GPIO_NUM_27,  // relay_5 - Nuevo relay
-    GPIO_NUM_14   // relay_6 - Nuevo relay
+    GPIO_NUM_32,  // relay_1
+    GPIO_NUM_33,  // relay_2
+    GPIO_NUM_25,  // relay_3
+    GPIO_NUM_26,  // relay_4
+    GPIO_NUM_27,  // relay_5
+    GPIO_NUM_14   // relay_6
 };
 
 // Nombres por defecto para los relays
 static const char* DEFAULT_RELAY_NAMES[RELAY_MANAGER_MAX_RELAYS] = {
-    "Alarma",       // relay_1
-    "Problema",     // relay_2
-    "Supervision",  // relay_3
+    "Relay 1",       // relay_1
+    "Relay 2",       // relay_2
+    "Relay 3",      // relay_3
     "Relay 4",      // relay_4
     "Relay 5",      // relay_5
     "Relay 6"       // relay_6

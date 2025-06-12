@@ -9,13 +9,9 @@ data class Panel(
     val location: String = "",
     val esp32_id: String = "",
     val clientName: String = "",
-    val clientDisplayName: String = "",  // NUEVO CAMPO
+    val clientDisplayName: String = "",
     val lastUpdate: Long = System.currentTimeMillis(),
-    var relays: List<Relay> = listOf(
-        Relay(RELAY_ALARM, STATUS_DISC),
-        Relay(RELAY_PROBLEM, STATUS_DISC),
-        Relay(RELAY_SUPERVISION, STATUS_DISC)
-    ),
+    var relays: List<Relay> = emptyList(),
     var esp32Status: String = ESP32Device.STATUS_OFFLINE
 ) : Serializable {
 
@@ -76,10 +72,6 @@ data class Panel(
         const val STATUS_OK = "OK"
         const val STATUS_DISC = "DISC"
 
-        const val RELAY_ALARM = "Alarma"
-        const val RELAY_PROBLEM = "Problema"
-        const val RELAY_SUPERVISION = "Supervision"
-
         fun createNew(
             name: String,
             location: String,
@@ -91,7 +83,8 @@ data class Panel(
             location = location,
             clientName = clientName,
             clientDisplayName = clientDisplayName,
-            esp32_id = esp32Id
+            esp32_id = esp32Id,
+            relays = emptyList()
         )
     }
 }

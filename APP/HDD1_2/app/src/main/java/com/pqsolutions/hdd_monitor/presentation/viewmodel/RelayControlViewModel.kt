@@ -62,7 +62,6 @@ class RelayControlViewModel @Inject constructor(
      * Carga los paneles - simplificado para evitar race conditions
      */
     fun loadPanels() {
-        // Cancelar job anterior solo si existe y está activo
         loadingJob?.let { job ->
             if (job.isActive) {
                 job.cancel()
@@ -74,7 +73,6 @@ class RelayControlViewModel @Inject constructor(
                 Log.d(TAG, "Iniciando carga de paneles")
                 _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
-                // Obtener usuario actual
                 val currentUser = userRepository.getCurrentUser()
                 if (currentUser == null) {
                     _uiState.value = _uiState.value.copy(
@@ -86,23 +84,19 @@ class RelayControlViewModel @Inject constructor(
 
                 Log.d(TAG, "Usuario: ${currentUser.name}, Rol: ${currentUser.role}")
 
-                // Determinar cliente
                 val clientDocName = when (currentUser.role) {
                     UserRole.USER -> currentUser.clientDocName
-                    UserRole.ADMIN -> null // Admin ve todos los clientes
+                    UserRole.ADMIN -> null
                 }
 
-                // Cargar nombres de clientes
                 val clientsMap = loadClientNames(clientDocName)
                 _uiState.value = _uiState.value.copy(clientNames = clientsMap)
 
-                // Observar paneles con manejo mejorado de errores
                 panelRepository.getPanels(clientDocName)
                     .catch { error ->
-                        // Verificar si el error es por cancelación de corrutina
                         if (error is kotlinx.coroutines.CancellationException) {
                             Log.d(TAG, "Carga de paneles cancelada (normal)")
-                            return@catch // No propagar CancellationException
+                            return@catch
                         }
 
                         Log.e(TAG, "Error en flow de paneles", error)
@@ -112,7 +106,6 @@ class RelayControlViewModel @Inject constructor(
                         )
                     }
                     .collect { panels ->
-                        // Verificar si la corrutina sigue activa antes de actualizar UI
                         if (!currentCoroutineContext().isActive) {
                             Log.d(TAG, "Corrutina cancelada, no actualizando UI")
                             return@collect
@@ -120,12 +113,8 @@ class RelayControlViewModel @Inject constructor(
 
                         Log.d(TAG, "Paneles recibidos: ${panels.size}")
 
-                        // Filtrar paneles válidos
-                        val validPanels = panels.filter { panel ->
-                            panel.esp32_id.isNotEmpty()
-                        }
+                        val validPanels = panels
 
-                        // Agrupar por cliente
                         val groupedPanels = validPanels.groupBy { panel ->
                             clientsMap[panel.clientName] ?: panel.clientName
                         }
@@ -141,10 +130,9 @@ class RelayControlViewModel @Inject constructor(
                     }
 
             } catch (e: Exception) {
-                // Manejar cancelación de forma especial
                 if (e is kotlinx.coroutines.CancellationException) {
                     Log.d(TAG, "Carga de paneles cancelada")
-                    return@launch // No actualizar UI en caso de cancelación
+                    return@launch
                 }
 
                 Log.e(TAG, "Error cargando paneles", e)

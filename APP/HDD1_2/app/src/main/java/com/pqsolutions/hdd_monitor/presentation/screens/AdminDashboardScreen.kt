@@ -171,7 +171,6 @@ fun AdminDashboardScreen(
                         .weight(1f)
                         .padding(horizontal = 16.dp)
                 ) {
-                    // Mostrar mensaje cuando no hay paneles o están cargando
                     if (uiState.isLoading) {
                         item {
                             Text(
@@ -199,38 +198,14 @@ fun AdminDashboardScreen(
                             )
                         }
 
-                        // Para cada panel, procesar según el estado de sus relays
                         clientPanels.forEach { panel ->
-                            // Si el ESP32 está OFFLINE o todos los relays están OK, mostrar un solo panel
-                            if (panel.isESP32Offline() || panel.relays.none { it.status == Panel.STATUS_DISC }) {
-                                item(key = "${panel.documentName}_single") {
-                                    AdminPanelItem(panel)
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                }
-                            } else {
-                                // Para los paneles con relays en DISC, mostrar un PanelItem por cada relay en DISC
-                                // dentro de un único item para mantenerlos agrupados
-                                val relaysInDisc = panel.relays.filter { it.status == Panel.STATUS_DISC }
-
-                                item(key = "${panel.documentName}_disc_group") {
-                                    Column {
-                                        relaysInDisc.forEach { relay ->
-                                            val isAlarmRelay = relay.name == Panel.RELAY_ALARM
-
-                                            AdminPanelItemForRelay(
-                                                panel = panel,
-                                                relay = relay,
-                                                isAlarmRelay = isAlarmRelay
-                                            )
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                        }
-                                    }
-                                }
+                            item(key = panel.documentName) {
+                                AdminPanelItem(panel)
+                                Spacer(modifier = Modifier.height(8.dp))
                             }
                         }
                     }
 
-                    // Mostrar error si existe
                     if (uiState.error != null) {
                         item {
                             Text(
@@ -312,14 +287,12 @@ private fun DashboardButton(onClick: () -> Unit, text: String) {
 
 @Composable
 fun AdminPanelItem(panel: Panel) {
-    Log.d(TAG, "Rendering AdminPanelItem: ${panel.name}, Status: ${panel.hasIssues}")
     var expanded by remember { mutableStateOf(false) }
 
-    // Determinar color basado en estado del ESP32 primero, luego en relays
     val backgroundColor = when {
         panel.isESP32Offline() -> PanelColors.PanelBackgroundOffline
-        panel.hasIssues -> Color(0xFFFFEBEE) // Rojo claro
-        else -> Color(0xFFE8F5E9) // Verde claro
+        panel.hasIssues -> Color(0xFFFFEBEE)
+        else -> Color(0xFFE8F5E9)
     }
 
     Card(
@@ -334,7 +307,6 @@ fun AdminPanelItem(panel: Panel) {
             Text(text = "Ubicación: ${panel.location}", style = MaterialTheme.typography.bodyMedium)
             Text(text = "ID ESP32: ${panel.esp32_id}", style = MaterialTheme.typography.bodyMedium)
 
-            // Estado especial para ESP32 OFFLINE
             if (panel.isESP32Offline()) {
                 Text(
                     text = "Estado: ESP32 OFFLINE",
@@ -344,7 +316,7 @@ fun AdminPanelItem(panel: Panel) {
                 )
             } else {
                 Text(
-                    text = "Estado: ${if (panel.hasIssues) panel.relaysInDisc else "OK"}",
+                    text = "Estado: ${if (panel.hasIssues) "Relays en DISC" else "OK"}",
                     color = if (panel.hasIssues) Color.Red else Color.Green,
                     style = MaterialTheme.typography.bodyMedium
                 )

@@ -2,18 +2,17 @@
 #include "config_manager.h"
 #include "esp_log.h"
 #include "esp_system.h"
-#include "esp_mac.h" // Añade esta cabecera para esp_efuse_mac_get_default
-#include "nvs_flash.h" // Asegúrate de incluir esta cabecera para los códigos NVS
+#include "esp_mac.h"
+#include "nvs_flash.h"
 #include <string.h>
 #include <stdbool.h>
 
 static const char *TAG = "ESP32_ID_MGR";
 static const char *ID_KEY = "esp32_id";
-// static const char *ID_HISTORY_KEY = "id_history"; // Comentado porque no se usa
 static const char *ID_EVENT_KEY = "id_event";
 
-static char esp32_id[ESP32_ID_LENGTH + 1] = {0};
-static char mac_address[ESP32_MAC_STR_LENGTH + 1] = {0};
+static char esp32_id[ESP32_ID_BUFFER_SIZE] = {0};
+static char mac_address[ESP32_MAC_BUFFER_SIZE] = {0};  // Para MAC sin separadores
 static bool is_initialized = false;
 static bool is_valid = false;
 
@@ -35,14 +34,14 @@ static esp_err_t get_mac_address(char *mac_out, size_t max_len) {
 
 // Genera un ID único basado en la dirección MAC
 static esp_err_t generate_unique_id(char *id_out, size_t max_len) {
-    char mac[ESP32_MAC_STR_LENGTH + 1];
+    char mac[ESP32_MAC_BUFFER_SIZE];
     esp_err_t err = get_mac_address(mac, sizeof(mac));
     if (err != ESP_OK) {
         return err;
     }
     
     // Crea ID usando el formato del código original: last_4_mac + "AC" + first_2_mac
-    if (max_len < ESP32_ID_LENGTH + 1) {
+    if (max_len < ESP32_ID_BUFFER_SIZE) {
         ESP_LOGE(TAG, "Buffer too small for ID");
         return ESP_ERR_INVALID_SIZE;
     }
@@ -132,7 +131,7 @@ esp_err_t esp32_id_manager_get_id(char *id_out, size_t max_len) {
         return ESP_ERR_INVALID_STATE;
     }
     
-    if (max_len < ESP32_ID_LENGTH + 1) {
+    if (max_len < ESP32_ID_BUFFER_SIZE) {
         ESP_LOGE(TAG, "Buffer too small for ID");
         return ESP_ERR_INVALID_SIZE;
     }
@@ -148,7 +147,7 @@ esp_err_t esp32_id_manager_get_mac(char *mac_out, size_t max_len) {
         return ESP_ERR_INVALID_STATE;
     }
     
-    if (max_len < ESP32_MAC_STR_LENGTH + 1) {
+    if (max_len < ESP32_MAC_BUFFER_SIZE) {
         ESP_LOGE(TAG, "Buffer too small for MAC address");
         return ESP_ERR_INVALID_SIZE;
     }
@@ -168,7 +167,7 @@ esp_err_t esp32_id_manager_reset(void) {
     
     // Borra el ID existente
     esp_err_t err = config_manager_erase_key(ID_KEY);
-    if (err != ESP_OK && err != ESP_ERR_NOT_FOUND) { // Corregido aquí - ESP_ERR_NOT_FOUND en lugar de ESP_ERR_NVS_NOT_FOUND
+    if (err != ESP_OK && err != ESP_ERR_NOT_FOUND) {
         ESP_LOGE(TAG, "Failed to erase ID: %s", esp_err_to_name(err));
         return err;
     }

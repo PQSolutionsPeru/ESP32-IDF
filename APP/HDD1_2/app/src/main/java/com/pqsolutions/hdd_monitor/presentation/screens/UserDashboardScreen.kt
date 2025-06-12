@@ -159,28 +159,9 @@ fun UserDashboardScreen(
                         }
                     } else {
                         uiState.panels.forEach { panel ->
-                            if (panel.isESP32Offline() || panel.relays.none { it.status == Panel.STATUS_DISC }) {
-                                item(key = "${panel.documentName}_single") {
-                                    UserPanelItem(panel)
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                }
-                            } else {
-                                val relaysInDisc = panel.relays.filter { it.status == Panel.STATUS_DISC }
-
-                                item(key = "${panel.documentName}_disc_group") {
-                                    Column {
-                                        relaysInDisc.forEach { relay ->
-                                            val isAlarmRelay = relay.name == Panel.RELAY_ALARM
-
-                                            UserPanelItemForRelay(
-                                                panel = panel,
-                                                relay = relay,
-                                                isAlarmRelay = isAlarmRelay
-                                            )
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                        }
-                                    }
-                                }
+                            item(key = panel.documentName) {
+                                UserPanelItem(panel)
+                                Spacer(modifier = Modifier.height(8.dp))
                             }
                         }
                     }
@@ -263,8 +244,6 @@ private fun EmptyPanelsContent() {
 
 @Composable
 fun UserPanelItem(panel: Panel) {
-    Log.d(TAG, "Rendering UserPanelItem: ${panel.name}, ESP32Status: ${panel.esp32Status}, " +
-            "isESP32Offline: ${panel.isESP32Offline()}, hasIssues: ${panel.hasIssues}")
     var expanded by remember { mutableStateOf(false) }
 
     val backgroundColor = when {
@@ -293,7 +272,7 @@ fun UserPanelItem(panel: Panel) {
                 )
             } else {
                 Text(
-                    text = "Estado: ${if (panel.hasIssues) panel.relaysInDisc else "OK"}",
+                    text = "Estado: ${if (panel.hasIssues) "Relays en DISC" else "OK"}",
                     color = if (panel.hasIssues) Color.Red else Color.Green,
                     style = MaterialTheme.typography.bodyMedium
                 )
