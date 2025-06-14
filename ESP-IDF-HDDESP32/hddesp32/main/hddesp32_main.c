@@ -18,6 +18,7 @@
 #include "esp_task_wdt.h"
 #include "config_processor.h"
 #include "esp_timer.h"
+#include "cJSON.h"
 
 static const char *TAG = "HDDESP32";
 
@@ -155,12 +156,16 @@ static void relay_state_change_callback(const relay_event_t *event, void *user_d
     int len = snprintf(json_buffer, 512,
                       "{"
                       "\"relay\":\"%s\","
-                      "\"state\":\"%s\","
-                      "\"timestamp\":%lld"
+                      "\"status\":\"%s\","
+                      "\"timestamp\":%lld,"
+                      "\"contact_type\":\"%s\","
+                      "\"old_status\":\"%s\""
                       "}",
                       event->relay_id,
                       (event->new_state == RELAY_STATE_OK) ? "OK" : "DISC",
-                      (long long)timestamp_ms);
+                      (long long)timestamp_ms,
+                      (event->contact_type == RELAY_CONTACT_NC) ? "NC" : "NO",
+                      (event->old_state == RELAY_STATE_OK) ? "OK" : "DISC");
     
     if (len > 0 && len < 512) {
         char relay_topic[MQTT_TOPIC_MAX_LENGTH];
@@ -257,18 +262,27 @@ static void mqtt_state_callback(mqtt_manager_state_t state, void *user_data) {
 }
 
 static void mqtt_message_callback(const char *topic, const char *data, int data_len, void *user_data) {
-    ESP_LOGI(TAG, "MQTT message: %s (%d bytes)", topic, data_len);
+    ESP_LOGI(TAG, "MQTT message: %s (%d bytes)", topic ? topic : "NULL", data_len);
+    
+    if (!topic || !data) {
+        ESP_LOGE(TAG, "Invalid MQTT message: topic or data is NULL");
+        return;
+    }
     
     if (g_watchdog_available) {
-        esp_err_t ret = watchdog_manager_report_activity(WATCHDOG_CHECK_MQTT);
-        if (ret != ESP_OK) {
-            ESP_LOGD(TAG, "Could not report MQTT activity to watchdog");
-        }
+        watchdog_manager_report_activity(WATCHDOG_CHECK_MQTT);
     }
     
     size_t free_heap = esp_get_free_heap_size();
-    if (free_heap < 20000) {
-        ESP_LOGW(TAG, "Insufficient memory for MQTT message processing: %zu bytes", free_heap);
+    if (free_heap < 40000) {
+        ESP_LOGW(TAG, "Low memory: %zu bytes", free_heap);
+        heap_caps_check_integrity_all(true);
+        vTaskDelay(pdMS_TO_TICKS(100));
+        
+        if (strstr(topic, "/config/") != NULL) {
+            ESP_LOGE(TAG, "Cannot process config with low memory");
+            mqtt_manager_send_config_response(false, "Insufficient memory");
+        }
         return;
     }
     
@@ -282,107 +296,67 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
     snprintf(deleted_topic, sizeof(deleted_topic), "esp32/notify/%s/deleted", esp32_id);
     
     if (strcmp(topic, deleted_topic) == 0) {
-        ESP_LOGW(TAG, "Deletion notification received - clearing configuration and re-registering");
-        
+        ESP_LOGW(TAG, "Deletion notification received");
         config_manager_erase_key("client_id");
         config_manager_erase_key("panel_id");
         config_manager_erase_key("panel_name");
         config_manager_erase_key("location");
-        
         mqtt_manager_clear_panel_config();
-        
-        char status_json[256];
-        char timestamp_str[32];
-        
-        if (time_manager_is_synchronized()) {
-            time_manager_get_timestamp(timestamp_str, sizeof(timestamp_str));
-        } else {
-            snprintf(timestamp_str, sizeof(timestamp_str), "%lld", (long long)(esp_timer_get_time() / 1000));
-        }
-        
-        snprintf(status_json, sizeof(status_json),
-                "{\"esp32_id\":\"%s\",\"status\":\"AWAITING_CONFIG\",\"timestamp\":%s,\"type\":\"status_update\"}",
-                esp32_id, timestamp_str);
-        
-        char status_topic[128];
-        snprintf(status_topic, sizeof(status_topic), "system/status/%s", esp32_id);
-        mqtt_manager_publish(status_topic, status_json, strlen(status_json), 1, false);
-        
-        ESP_LOGI(TAG, "Published AWAITING_CONFIG status after deletion");
         
         if (g_relay_manager_initialized) {
             relay_manager_deinit();
             g_relay_manager_initialized = false;
-            ESP_LOGI(TAG, "Relay manager deinitialized after deletion");
         }
         
         time_manager_reset_network_info_sent();
         g_need_reregister = true;
-        
         vTaskDelay(pdMS_TO_TICKS(1000));
-        
-        char network_json[512];
-        char ip_address[16] = "0.0.0.0";
-        wifi_manager_get_ip(ip_address, sizeof(ip_address));
-        
-        char mac_address[ESP32_MAC_BUFFER_SIZE];
-        esp32_id_manager_get_mac(mac_address, sizeof(mac_address));
-        
-        snprintf(network_json, sizeof(network_json),
-                "{\"esp32_id\":\"%s\",\"MAC\":\"%s\",\"IP\":\"%s\",\"status\":\"AWAITING_CONFIG\",\"timestamp\":%s}",
-                esp32_id, mac_address, ip_address, timestamp_str);
-        
-        mqtt_manager_publish("esp32/network_info", network_json, strlen(network_json), 0, false);
-        
-        ESP_LOGI(TAG, "Re-registration process completed - ESP32 is now AWAITING_CONFIG");
-        
+        mqtt_manager_send_network_info();
         return;
     }
     
-    if (strstr(topic, "esp32/config/") && !strstr(topic, "/relay_config") && !strstr(topic, "/response")) {
+    char config_topic[128];
+    snprintf(config_topic, sizeof(config_topic), "esp32/config/%s", esp32_id);
+    
+    if (strcmp(topic, config_topic) == 0) {
         ESP_LOGI(TAG, "Configuration message received");
         
-        char *json_buffer = heap_caps_malloc(data_len + 1, MALLOC_CAP_8BIT);
-        if (!json_buffer) {
-            ESP_LOGE(TAG, "Failed to allocate buffer for configuration");
-            return;
-        }
+        esp_err_t ret = process_esp32_configuration(data);
         
-        memcpy(json_buffer, data, data_len);
-        json_buffer[data_len] = '\0';
-        
-        esp_err_t ret = process_esp32_configuration(json_buffer);
         if (ret == ESP_OK) {
-            ESP_LOGI(TAG, "Configuration processed successfully");
+            ESP_LOGI(TAG, "Configuration accepted");
             
-            if (g_relay_manager_initialized) {
-                relay_manager_check_all_states(true);
+            if (!g_relay_manager_initialized) {
+                vTaskDelay(pdMS_TO_TICKS(500));
+                ESP_LOGI(TAG, "Initializing Relay Manager");
+                ret = relay_manager_init();
+                if (ret == ESP_OK) {
+                    relay_manager_set_state_callback(relay_state_change_callback, NULL);
+                    relay_manager_set_mqtt_callback(relay_mqtt_command_callback, NULL);
+                    g_relay_manager_initialized = true;
+                }
             }
-        } else {
-            ESP_LOGE(TAG, "Failed to process configuration: %s", esp_err_to_name(ret));
         }
-        
-        free(json_buffer);
-    }
-    else if (strstr(topic, "esp32/config/") && strstr(topic, "/reset")) {
-        ESP_LOGW(TAG, "Reset command received");
-        
-        config_manager_erase_key("client_id");
-        config_manager_erase_key("panel_id");
-        config_manager_erase_key("panel_name");
-        config_manager_erase_key("location");
-        
-        mqtt_manager_send_config_response(true, "Configuration reset, restarting...");
-        
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        
-        esp_restart();
     }
     else if (strstr(topic, "/relay_config") && g_relay_manager_initialized) {
-        ESP_LOGI(TAG, "Relay config command received");
-        esp_err_t ret = relay_manager_process_mqtt_command(data);
-        if (ret != ESP_OK) {
-            ESP_LOGW(TAG, "Failed to process relay command: %s", esp_err_to_name(ret));
+        cJSON *json = cJSON_ParseWithLength(data, data_len);
+        if (json) {
+            cJSON *command = cJSON_GetObjectItem(json, "command");
+            cJSON *relay_id = cJSON_GetObjectItem(json, "relay_id");
+            
+            if (command && relay_id && 
+                strcmp(cJSON_GetStringValue(command), "update_config") == 0) {
+                
+                const char *relay_name = cJSON_GetStringValue(relay_id);
+                cJSON *is_active = cJSON_GetObjectItem(json, "is_active");
+                
+                if (relay_name && is_active) {
+                    relay_manager_set_active(relay_name, cJSON_IsTrue(is_active));
+                    ESP_LOGI(TAG, "Relay %s %s", relay_name,
+                            cJSON_IsTrue(is_active) ? "ACTIVATED" : "DEACTIVATED");
+                }
+            }
+            cJSON_Delete(json);
         }
     }
 }

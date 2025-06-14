@@ -215,6 +215,57 @@ class EventReminderChecker:
         except Exception as e:
             logging.error(f"Error enviando recordatorio para evento {event_id}: {e}")
 
+    def watch_relay_configurations(self):
+        try:
+            clients_ref = self.db.collection('hdd-monitor/accounts/clients')
+            for client in clients_ref.stream():
+                panels_ref = clients_ref.document(client.id).collection('panels')
+                for panel in panels_ref.stream():
+                    panel_data = panel.to_dict()
+                    esp32_id = panel_data.get('esp32_id')
+                    if not esp32_id:
+                        continue
+                        
+                    relays_ref = panels_ref.document(panel.id).collection('relays')
+                    
+                    def create_config_handler(client_id, panel_id, esp32_id):
+                        def on_relay_config_change(doc_snapshot, changes, read_time):
+                            for change in changes:
+                                if change.type.name == 'MODIFIED':
+                                    doc = change.document
+                                    new_data = doc.to_dict()
+                                    old_data = self._relay_states.get(doc.reference.path, {})
+                                    
+                                    if (old_data.get('isActive') != new_data.get('isActive') or
+                                        old_data.get('customName') != new_data.get('customName') or
+                                        old_data.get('contactType') != new_data.get('contactType')):
+                                        
+                                        command = {
+                                            'command': 'update_config',
+                                            'relay_id': doc.id,
+                                            'is_active': new_data.get('isActive', True),
+                                            'contact_type': new_data.get('contactType', 'NO'),
+                                            'custom_name': new_data.get('customName', '')
+                                        }
+                                        
+                                        topic = f"clients/{client_id}/panels/{panel_id}/relay_config"
+                                        self.mqtt_client.client.publish(
+                                            topic,
+                                            json.dumps(command),
+                                            qos=2
+                                        )
+                                        logging.info(f"Configuración de relay enviada al ESP32: {command}")
+                                    
+                                    self._relay_states[doc.reference.path] = new_data
+                                    
+                        return on_relay_config_change
+                    
+                    watch = relays_ref.on_snapshot(create_config_handler(client.id, panel.id, esp32_id))
+                    self._watch_references.append(watch)
+                    
+        except Exception as e:
+            logging.error(f"Error iniciando observador de configuraciones: {e}")
+
     def run(self):
         """Ejecuta el verificador de recordatorios en bucle continuo"""
         logging.info("Iniciando verificador de recordatorios de eventos")

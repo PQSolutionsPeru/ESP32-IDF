@@ -1,4 +1,5 @@
 #include "mqtt_manager.h"
+#include "esp32_id_manager.h"
 #include <string.h>
 #include <stdio.h>
 #include <inttypes.h>
@@ -21,7 +22,6 @@
 #include "mqtt_ssl_setup.h"
 #include "esp_random.h"
 #include "config_manager.h"
-#include "esp32_id_manager.h"
 #include "wifi_manager.h"
 #include "time_manager.h"
 #include "esp_task_wdt.h"
@@ -38,7 +38,7 @@
 #define DEFAULT_KEEPALIVE 120
 #define DEFAULT_RECONNECT_TIMEOUT_MS 10000
 #define DEFAULT_MAX_RETRIES 3
-#define DEFAULT_BUFFER_SIZE 512
+#define DEFAULT_BUFFER_SIZE 1536
 #define DEFAULT_MAX_QUEUE_SIZE 5  
 #define DEFAULT_STATUS_INTERVAL_MS 300000
 
@@ -149,16 +149,19 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             
             if (strlen(ctx->esp32_id) > 0) {
                 snprintf(ctx->config_topic, sizeof(ctx->config_topic), "esp32/config/%s", ctx->esp32_id);
-                mqtt_manager_subscribe(ctx->config_topic, 0);
+                mqtt_manager_subscribe(ctx->config_topic, 2);
                 
                 char reset_topic[MQTT_TOPIC_MAX_LENGTH];
                 snprintf(reset_topic, sizeof(reset_topic), "esp32/config/%s/reset", ctx->esp32_id);
-                mqtt_manager_subscribe(reset_topic, 0);
+                mqtt_manager_subscribe(reset_topic, 2);
                 
                 char deleted_topic[MQTT_TOPIC_MAX_LENGTH];
                 snprintf(deleted_topic, sizeof(deleted_topic), "esp32/notify/%s/deleted", ctx->esp32_id);
-                mqtt_manager_subscribe(deleted_topic, 1);
+                mqtt_manager_subscribe(deleted_topic, 2);
                 ESP_LOGI(TAG, "Subscribed to deletion notifications: %s", deleted_topic);
+                
+                mqtt_manager_subscribe("clients/+/panels/+/relay_config", 2);
+                mqtt_manager_subscribe("clients/+/panels/+/relays", 2);
             }
             
             mqtt_pending_message_t pending_msg;
@@ -195,18 +198,32 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             break;
             
         case MQTT_EVENT_DATA:
-            if (ctx->message_callback && event->topic_len < MQTT_TOPIC_MAX_LENGTH && event->data_len < DEFAULT_BUFFER_SIZE) {
-                char *topic_buf = heap_caps_malloc(MQTT_TOPIC_MAX_LENGTH, MALLOC_CAP_8BIT);
-                char *data_buf = heap_caps_malloc(DEFAULT_BUFFER_SIZE, MALLOC_CAP_8BIT);
+            if (ctx->message_callback) {
+                char *topic_buf = NULL;
+                char *data_buf = NULL;
                 
-                if (topic_buf && data_buf) {
-                    memcpy(topic_buf, event->topic, event->topic_len);
-                    topic_buf[event->topic_len] = '\0';
-                    
+                if (event->topic_len > 0 && event->topic_len < 256) {
+                    topic_buf = heap_caps_malloc(event->topic_len + 1, MALLOC_CAP_8BIT);
+                    if (topic_buf) {
+                        memcpy(topic_buf, event->topic, event->topic_len);
+                        topic_buf[event->topic_len] = '\0';
+                    }
+                }
+                
+                size_t total_size = event->total_data_len > 0 ? event->total_data_len : event->data_len;
+                data_buf = heap_caps_malloc(total_size + 1, MALLOC_CAP_8BIT);
+                
+                if (data_buf) {
                     memcpy(data_buf, event->data, event->data_len);
                     data_buf[event->data_len] = '\0';
                     
-                    ctx->message_callback(topic_buf, data_buf, event->data_len, ctx->message_user_data);
+                    if (event->current_data_offset == 0 && event->total_data_len == event->data_len) {
+                        if (topic_buf) {
+                            ctx->message_callback(topic_buf, data_buf, event->data_len, ctx->message_user_data);
+                        }
+                    } else {
+                        ESP_LOGW(TAG, "Fragmented message received, not supported yet");
+                    }
                 }
                 
                 if (topic_buf) {
@@ -445,6 +462,8 @@ esp_err_t mqtt_manager_connect(void) {
         mqtt_cfg.credentials.authentication.password = ctx->password;
         mqtt_cfg.session.keepalive = DEFAULT_KEEPALIVE;
         mqtt_cfg.session.disable_clean_session = false;
+        mqtt_cfg.buffer.size = 2048;
+        mqtt_cfg.buffer.out_size = 2048;
         
         mqtt_cfg.network.timeout_ms = 60000;
         mqtt_cfg.network.reconnect_timeout_ms = 30000;
@@ -998,18 +1017,30 @@ esp_err_t mqtt_manager_send_config_response(bool success, const char *message) {
         return ESP_ERR_INVALID_STATE;
     }
     
+    if (!mqtt_manager_is_connected()) {
+        ESP_LOGW(TAG, "Not connected, cannot send config response");
+        return ESP_ERR_INVALID_STATE;
+    }
+    
     char topic[MQTT_TOPIC_MAX_LENGTH];
     snprintf(topic, sizeof(topic), "esp32/config/%s/response", ctx->esp32_id);
     
-    char json_buffer[256];
-    snprintf(json_buffer, sizeof(json_buffer),
+    char *json_buffer = malloc(256);
+    if (!json_buffer) {
+        return ESP_ERR_NO_MEM;
+    }
+    
+    snprintf(json_buffer, 256,
              "{\"esp32_id\":\"%s\",\"status\":\"%s\",\"message\":\"%s\",\"timestamp\":%lld}",
              ctx->esp32_id,
              success ? "CONFIG_ACCEPTED" : "CONFIG_ERROR",
              message ? message : (success ? "Configuration applied successfully" : "Configuration failed"),
              (long long)(esp_timer_get_time() / 1000));
     
-    return mqtt_manager_publish(topic, json_buffer, strlen(json_buffer), 1, false);
+    esp_err_t ret = mqtt_manager_publish(topic, json_buffer, strlen(json_buffer), 1, false);
+    
+    free(json_buffer);
+    return ret;
 }
 
 esp_err_t mqtt_manager_clear_panel_config(void) {

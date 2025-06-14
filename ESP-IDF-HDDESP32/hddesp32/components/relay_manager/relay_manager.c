@@ -81,7 +81,7 @@ static relay_manager_context_t s_relay_ctx = {0};
 // Funciones internas
 static esp_err_t load_relay_config(void);
 static esp_err_t save_relay_config(void);
-static void IRAM_ATTR gpio_isr_handler(void *arg);
+static void gpio_isr_handler(void *arg);
 static void relay_event_task(void *pvParameters);
 static relay_state_t gpio_to_logical_state(int gpio_level, relay_contact_type_t contact_type);
 static const char* relay_state_to_string(relay_state_t state);

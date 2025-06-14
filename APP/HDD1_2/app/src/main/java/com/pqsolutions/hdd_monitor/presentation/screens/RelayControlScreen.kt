@@ -45,12 +45,10 @@ fun RelayControlScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    // Estados para diálogos
     var showRelayConfigDialog by remember { mutableStateOf(false) }
     var selectedPanel by remember { mutableStateOf<Panel?>(null) }
     var selectedRelay by remember { mutableStateOf<Relay?>(null) }
 
-    // CAMBIO: Usar DisposableEffect en lugar de LaunchedEffect
     DisposableEffect(Unit) {
         Log.d(TAG, "RelayControlScreen iniciado - Cargando paneles")
         viewModel.loadPanels()
@@ -61,10 +59,8 @@ fun RelayControlScreen(
         }
     }
 
-    // Limpiar error cuando el usuario toca algo
     LaunchedEffect(uiState.error) {
         if (uiState.error != null) {
-            // Auto-limpiar error después de 5 segundos
             kotlinx.coroutines.delay(5000)
             viewModel.clearError()
         }
@@ -77,7 +73,6 @@ fun RelayControlScreen(
                     title = stringResource(R.string.relay_control_title),
                     onBackClick = onBackClick,
                     actions = {
-                        // Botón de refresh
                         IconButton(
                             onClick = {
                                 performHapticFeedback(context)
@@ -90,7 +85,6 @@ fun RelayControlScreen(
                             )
                         }
 
-                        // Campana de notificaciones
                         AnimatedNotificationBell(
                             hasNewNotifications = hasPendingNotifications,
                             onClick = {
@@ -125,10 +119,6 @@ fun RelayControlScreen(
                     else -> {
                         PanelsWithRelaysSection(
                             groupedPanels = uiState.groupedPanels,
-                            onRelayToggle = { panel, relay ->
-                                Log.d(TAG, "Toggle relay ${relay.name} del panel ${panel.name}")
-                                viewModel.toggleRelay(panel, relay)
-                            },
                             onRelayConfig = { panel, relay ->
                                 Log.d(TAG, "Configurar relay ${relay.name} del panel ${panel.name}")
                                 selectedPanel = panel
@@ -139,7 +129,6 @@ fun RelayControlScreen(
                     }
                 }
 
-                // Mostrar estado de operación si hay alguna en progreso
                 AnimatedVisibility(visible = uiState.operationInProgress) {
                     Card(
                         modifier = Modifier
@@ -161,7 +150,7 @@ fun RelayControlScreen(
                                 strokeWidth = 2.dp
                             )
                             Text(
-                                text = "Enviando comando...",
+                                text = "Actualizando configuración...",
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
@@ -171,7 +160,6 @@ fun RelayControlScreen(
         }
     }
 
-    // Diálogo de configuración de relay
     if (showRelayConfigDialog && selectedPanel != null && selectedRelay != null) {
         RelayConfigDialog(
             panel = selectedPanel!!,
@@ -280,7 +268,6 @@ private fun EmptyStateSection() {
 @Composable
 private fun PanelsWithRelaysSection(
     groupedPanels: Map<String, List<Panel>>,
-    onRelayToggle: (Panel, Relay) -> Unit,
     onRelayConfig: (Panel, Relay) -> Unit
 ) {
     LazyColumn(
@@ -303,7 +290,6 @@ private fun PanelsWithRelaysSection(
             ) { panel ->
                 PanelRelayCard(
                     panel = panel,
-                    onRelayToggle = onRelayToggle,
                     onRelayConfig = onRelayConfig
                 )
             }
@@ -314,13 +300,11 @@ private fun PanelsWithRelaysSection(
 @Composable
 private fun PanelRelayCard(
     panel: Panel,
-    onRelayToggle: (Panel, Relay) -> Unit,
     onRelayConfig: (Panel, Relay) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    // Determinar color de fondo basado en estado del ESP32
     val backgroundColor = when {
         panel.isESP32Offline() -> PanelColors.PanelBackgroundOffline
         panel.hasIssues -> PanelColors.PanelBackgroundDisc
@@ -338,7 +322,6 @@ private fun PanelRelayCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // Header del panel
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -362,7 +345,6 @@ private fun PanelRelayCard(
                     )
                 }
 
-                // Estado del ESP32
                 StatusChip(
                     status = if (panel.isESP32Offline()) "OFFLINE" else "ONLINE",
                     isOnline = !panel.isESP32Offline()
@@ -371,7 +353,6 @@ private fun PanelRelayCard(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Botón para expandir/contraer
             TextButton(
                 onClick = {
                     performHapticFeedback(context)
@@ -384,7 +365,6 @@ private fun PanelRelayCard(
                 )
             }
 
-            // Lista de relays (expandible)
             AnimatedVisibility(visible = expanded) {
                 Column(
                     modifier = Modifier.padding(top = 8.dp),
@@ -392,7 +372,7 @@ private fun PanelRelayCard(
                 ) {
                     if (panel.isESP32Offline()) {
                         Text(
-                            text = "ESP32 desconectado - Control no disponible",
+                            text = "ESP32 desconectado - Monitoreo no disponible",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.error,
                             modifier = Modifier.padding(8.dp)
@@ -402,7 +382,6 @@ private fun PanelRelayCard(
                             RelayControlItem(
                                 panel = panel,
                                 relay = relay,
-                                onToggle = onRelayToggle,
                                 onConfig = onRelayConfig,
                                 enabled = !panel.isESP32Offline()
                             )
@@ -418,16 +397,11 @@ private fun PanelRelayCard(
 private fun RelayControlItem(
     panel: Panel,
     relay: Relay,
-    onToggle: (Panel, Relay) -> Unit,
     onConfig: (Panel, Relay) -> Unit,
     enabled: Boolean
 ) {
     val context = LocalContext.current
 
-    // Determinar si el relay puede ser controlado
-    val canControl = enabled && relay.isActive && relay.isControllable
-
-    // Color de fondo según estado y configuración
     val backgroundColor = when {
         !relay.isActive -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         !enabled -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
@@ -449,15 +423,13 @@ private fun RelayControlItem(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Información del relay (expandida)
             Column(modifier = Modifier.weight(1f)) {
-                // Nombre (personalizado o original)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = relay.displayName, // Usa displayName que ya maneja custom vs original
+                        text = relay.displayName,
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium,
                         color = if (relay.isActive)
@@ -466,9 +438,7 @@ private fun RelayControlItem(
                             MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
 
-                    // Indicadores de configuración
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        // Indicador de nombre personalizado
                         if (!relay.customName.isNullOrBlank() && relay.customName != relay.name) {
                             Surface(
                                 color = MaterialTheme.colorScheme.secondaryContainer,
@@ -483,7 +453,6 @@ private fun RelayControlItem(
                             }
                         }
 
-                        // Indicador de tipo de contacto
                         if (relay.contactType != "NO") {
                             Surface(
                                 color = MaterialTheme.colorScheme.tertiaryContainer,
@@ -500,12 +469,10 @@ private fun RelayControlItem(
                     }
                 }
 
-                // Información de estado y configuración
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Estado del relay
                     Text(
                         text = "Estado: ${relay.status}",
                         style = MaterialTheme.typography.bodySmall,
@@ -516,31 +483,20 @@ private fun RelayControlItem(
                         }
                     )
 
-                    // Separador
                     Text(
                         text = "•",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    // Estado de configuración
                     Text(
-                        text = when {
-                            !relay.isActive -> "Deshabilitado"
-                            !relay.isControllable -> "Solo lectura"
-                            else -> "Controlable"
-                        },
+                        text = if (!relay.isActive) "Monitoreo deshabilitado" else "Monitoreo activo",
                         style = MaterialTheme.typography.bodySmall,
-                        color = when {
-                            !relay.isActive -> MaterialTheme.colorScheme.error
-                            !relay.isControllable -> MaterialTheme.colorScheme.outline
-                            else -> MaterialTheme.colorScheme.primary
-                        },
-                        fontWeight = if (!relay.isActive || !relay.isControllable) FontWeight.Medium else FontWeight.Normal
+                        color = if (!relay.isActive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium
                     )
                 }
 
-                // Nombre original si es diferente al personalizado
                 if (!relay.customName.isNullOrBlank() && relay.customName != relay.name) {
                     Text(
                         text = "Original: ${relay.name}",
@@ -549,7 +505,6 @@ private fun RelayControlItem(
                     )
                 }
 
-                // Fecha de última actualización
                 relay.date_time?.let { dateTime ->
                     Text(
                         text = "Actualizado: $dateTime",
@@ -559,12 +514,10 @@ private fun RelayControlItem(
                 }
             }
 
-            // Controles
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Botón de configuración (siempre disponible)
                 IconButton(
                     onClick = {
                         performHapticFeedback(context)
@@ -578,20 +531,7 @@ private fun RelayControlItem(
                     )
                 }
 
-                // Switch para toggle del relay (solo si es controlable)
-                if (relay.isActive) {
-                    Switch(
-                        checked = relay.status == "OK",
-                        onCheckedChange = { _ ->
-                            if (canControl) {
-                                performHapticFeedback(context)
-                                onToggle(panel, relay)
-                            }
-                        },
-                        enabled = canControl
-                    )
-                } else {
-                    // Indicador de relay deshabilitado
+                if (!relay.isActive) {
                     Surface(
                         color = MaterialTheme.colorScheme.surfaceVariant,
                         shape = MaterialTheme.shapes.small
@@ -617,75 +557,6 @@ private fun RelayControlItem(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun RelayConfigurationIndicators(
-    relay: Relay,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        // Indicador de relay personalizado
-        if (!relay.customName.isNullOrBlank() && relay.customName != relay.name) {
-            ConfigurationChip(
-                text = "CUSTOM",
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                textColor = MaterialTheme.colorScheme.onSecondaryContainer
-            )
-        }
-
-        // Indicador de tipo de contacto (solo si no es NO por defecto)
-        if (relay.contactType == "NC") {
-            ConfigurationChip(
-                text = "NC",
-                color = MaterialTheme.colorScheme.tertiaryContainer,
-                textColor = MaterialTheme.colorScheme.onTertiaryContainer
-            )
-        }
-
-        // Indicador de solo lectura
-        if (relay.isActive && !relay.isControllable) {
-            ConfigurationChip(
-                text = "READ-ONLY",
-                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f),
-                textColor = MaterialTheme.colorScheme.outline
-            )
-        }
-
-        // Indicador de deshabilitado
-        if (!relay.isActive) {
-            ConfigurationChip(
-                text = "DISABLED",
-                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
-                textColor = MaterialTheme.colorScheme.error
-            )
-        }
-    }
-}
-
-@Composable
-private fun ConfigurationChip(
-    text: String,
-    color: Color,
-    textColor: Color,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        color = color,
-        shape = MaterialTheme.shapes.extraSmall,
-        modifier = modifier
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-            style = MaterialTheme.typography.labelSmall,
-            color = textColor,
-            fontWeight = FontWeight.Medium
-        )
     }
 }
 

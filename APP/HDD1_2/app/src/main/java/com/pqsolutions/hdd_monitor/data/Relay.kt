@@ -8,8 +8,7 @@ data class Relay(
     val date_time: String? = null,
     val customName: String? = null,
     val isActive: Boolean = true,
-    val isControllable: Boolean = true,
-    val contactType: String = "NO", // NO (Normally Open) or NC (Normally Closed)
+    val contactType: String = "NO",
     val lastCommandSent: Long? = null,
     val commandSource: String? = null
 ) : Serializable {
@@ -17,16 +16,12 @@ data class Relay(
     val displayName: String
         get() = customName?.takeIf { it.isNotBlank() } ?: name
 
-    val canBeControlled: Boolean
-        get() = isActive && isControllable
-
     fun toMap(): Map<String, Any?> = mapOf(
         "name" to name,
         "status" to status,
         "date_time" to date_time,
         "customName" to customName,
         "isActive" to isActive,
-        "isControllable" to isControllable,
         "contactType" to contactType,
         "lastCommandSent" to lastCommandSent,
         "commandSource" to commandSource
@@ -35,13 +30,8 @@ data class Relay(
     companion object {
         const val STATUS_OK = "OK"
         const val STATUS_DISC = "DISC"
-
-        const val CONTACT_TYPE_NO = "NO" // Normally Open
-        const val CONTACT_TYPE_NC = "NC" // Normally Closed
-
-        const val COMMAND_SOURCE_APP = "app"
-        const val COMMAND_SOURCE_WEB = "web"
-        const val COMMAND_SOURCE_ESP32 = "esp32"
+        const val CONTACT_TYPE_NO = "NO"
+        const val CONTACT_TYPE_NC = "NC"
 
         fun fromMap(map: Map<String, Any?>): Relay = Relay(
             name = map["name"]?.toString() ?: "",
@@ -49,7 +39,6 @@ data class Relay(
             date_time = map["date_time"]?.toString(),
             customName = map["customName"]?.toString(),
             isActive = map["isActive"] as? Boolean ?: true,
-            isControllable = map["isControllable"] as? Boolean ?: true,
             contactType = map["contactType"]?.toString() ?: CONTACT_TYPE_NO,
             lastCommandSent = map["lastCommandSent"] as? Long,
             commandSource = map["commandSource"]?.toString()

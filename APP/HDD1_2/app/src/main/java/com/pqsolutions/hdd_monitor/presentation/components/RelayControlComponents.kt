@@ -39,10 +39,8 @@ fun RelayConfigDialog(
     onDismiss: () -> Unit,
     onConfirm: (Relay) -> Unit
 ) {
-    // Estados del formulario
     var customName by remember { mutableStateOf(relay.customName ?: relay.name) }
     var isActive by remember { mutableStateOf(relay.isActive) }
-    var isControllable by remember { mutableStateOf(relay.isControllable) }
     var contactType by remember { mutableStateOf(relay.contactType) }
     var showContactTypeDropdown by remember { mutableStateOf(false) }
 
@@ -159,59 +157,6 @@ fun RelayConfigDialog(
                         Switch(
                             checked = isActive,
                             onCheckedChange = { isActive = it }
-                        )
-                    }
-                }
-
-                // Switch para control remoto
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isControllable && isActive)
-                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
-                        else
-                            MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.PhoneAndroid,
-                                    contentDescription = null,
-                                    tint = if (isControllable && isActive)
-                                        MaterialTheme.colorScheme.primary
-                                    else
-                                        MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Text(
-                                    text = "Control Remoto",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                            Text(
-                                text = if (isControllable && isActive)
-                                    "Se puede controlar desde la app"
-                                else
-                                    "Solo lectura desde la app",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = isControllable,
-                            onCheckedChange = { isControllable = it },
-                            enabled = isActive
                         )
                     }
                 }
@@ -378,7 +323,6 @@ fun RelayConfigDialog(
                     val updatedRelay = relay.copy(
                         customName = customName.trim().takeIf { it.isNotEmpty() && it != relay.name },
                         isActive = isActive,
-                        isControllable = isControllable,
                         contactType = contactType
                     )
                     onConfirm(updatedRelay)
@@ -395,18 +339,7 @@ fun RelayConfigDialog(
             }
         },
         dismissButton = {
-            TextButton(
-                onClick = {
-                    performHapticFeedback(context)
-                    onDismiss()
-                }
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
+            TextButton(onClick = onDismiss) {
                 Text("Cancelar")
             }
         }

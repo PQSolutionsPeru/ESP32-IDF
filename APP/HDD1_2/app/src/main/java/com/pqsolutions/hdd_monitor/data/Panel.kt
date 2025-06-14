@@ -28,9 +28,6 @@ data class Panel(
     val activeRelays: List<Relay>
         get() = relays.filter { it.isActive }
 
-    val controllableRelays: List<Relay>
-        get() = relays.filter { it.isControllable && it.isActive }
-
     fun toMap(): Map<String, Any?> = mapOf(
         "documentName" to documentName,
         "name" to name,
@@ -56,8 +53,7 @@ data class Panel(
             if (relay.name == relayName) {
                 relay.copy(
                     customName = newCustomName.takeIf { it.isNotBlank() },
-                    isActive = isActive,
-                    isControllable = isControllable
+                    isActive = isActive
                 )
             } else relay
         }
