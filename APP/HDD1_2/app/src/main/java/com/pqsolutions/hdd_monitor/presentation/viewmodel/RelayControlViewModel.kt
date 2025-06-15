@@ -151,14 +151,17 @@ class RelayControlViewModel @Inject constructor(
 
                 _uiState.value = _uiState.value.copy(operationInProgress = true)
 
-                val updateData = buildMap<String, Any> {
-                    put("isActive", updatedRelay.isActive)
-                    put("contactType", updatedRelay.contactType)
-                    put("lastUpdate", com.google.firebase.firestore.FieldValue.serverTimestamp())
+                val updateData = mutableMapOf<String, Any>(
+                    "isActive" to updatedRelay.isActive,
+                    "contactType" to updatedRelay.contactType,
+                    "lastUpdate" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                )
 
-                    updatedRelay.customName?.takeIf { it.isNotBlank() }?.let { name ->
-                        put("customName", name.trim())
-                    } ?: put("customName", com.google.firebase.firestore.FieldValue.delete())
+                val customName = updatedRelay.customName?.trim()
+                if (!customName.isNullOrBlank() && customName != updatedRelay.name) {
+                    updateData["customName"] = customName
+                } else {
+                    updateData["customName"] = com.google.firebase.firestore.FieldValue.delete()
                 }
 
                 firestore.document("hdd-monitor/accounts/clients/${panel.clientName}/panels/${panel.documentName}/relays/${updatedRelay.name}")

@@ -343,17 +343,35 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
         if (json) {
             cJSON *command = cJSON_GetObjectItem(json, "command");
             cJSON *relay_id = cJSON_GetObjectItem(json, "relay_id");
+            cJSON *is_active = cJSON_GetObjectItem(json, "is_active");
             
             if (command && relay_id && 
                 strcmp(cJSON_GetStringValue(command), "update_config") == 0) {
                 
                 const char *relay_name = cJSON_GetStringValue(relay_id);
-                cJSON *is_active = cJSON_GetObjectItem(json, "is_active");
                 
                 if (relay_name && is_active) {
                     relay_manager_set_active(relay_name, cJSON_IsTrue(is_active));
                     ESP_LOGI(TAG, "Relay %s %s", relay_name,
                             cJSON_IsTrue(is_active) ? "ACTIVATED" : "DEACTIVATED");
+                    
+                    cJSON *contact_type = cJSON_GetObjectItem(json, "contact_type");
+                    if (contact_type && cJSON_IsString(contact_type)) {
+                        const char *type_str = cJSON_GetStringValue(contact_type);
+                        relay_contact_type_t type = strcmp(type_str, "NC") == 0 ? 
+                                                RELAY_CONTACT_NC : RELAY_CONTACT_NO;
+                        relay_manager_set_contact_type(relay_name, type);
+                        ESP_LOGI(TAG, "Relay %s contact type set to %s", relay_name, type_str);
+                    }
+                    
+                    cJSON *custom_name = cJSON_GetObjectItem(json, "custom_name");
+                    if (custom_name && cJSON_IsString(custom_name)) {
+                        const char *name_str = cJSON_GetStringValue(custom_name);
+                        if (name_str && strlen(name_str) > 0) {
+                            relay_manager_set_name(relay_name, name_str);
+                            ESP_LOGI(TAG, "Relay %s custom name set to '%s'", relay_name, name_str);
+                        }
+                    }
                 }
             }
             cJSON_Delete(json);

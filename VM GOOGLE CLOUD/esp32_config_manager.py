@@ -121,10 +121,52 @@ class ESP32ConfigManager:
                 'lastUpdate': datetime.now(pytz.UTC)
             })
             
+            self._create_initial_relays(client_id, panel_id, esp32_id)
+        
             logging.info(f"Configuración enviada a ESP32 {esp32_id}")
-
+            
         except Exception as e:
             logging.error(f"Error enviando configuración: {e}", exc_info=True)
+
+    def _create_initial_relays(self, client_id: str, panel_id: str, esp32_id: str):
+        """Crea los documentos iniciales de los 6 relays para un panel"""
+        try:
+            relays_ref = self.db.collection(f'hdd-monitor/accounts/clients/{client_id}/panels/{panel_id}/relays')
+            
+            # Definir los 6 relays por defecto
+            default_relays = [
+                {'id': 'relay_1', 'name': 'Relay 1'},
+                {'id': 'relay_2', 'name': 'Relay 2'},
+                {'id': 'relay_3', 'name': 'Relay 3'},
+                {'id': 'relay_4', 'name': 'Relay 4'},
+                {'id': 'relay_5', 'name': 'Relay 5'},
+                {'id': 'relay_6', 'name': 'Relay 6'}
+            ]
+            
+            # Crear cada relay si no existe
+            for relay in default_relays:
+                relay_doc = relays_ref.document(relay['id'])
+                
+                # Verificar si ya existe
+                if not relay_doc.get().exists:
+                    relay_data = {
+                        'name': relay['name'],
+                        'customName': '',
+                        'status': 'DISC',  # Estado inicial desconectado
+                        'isActive': False,  # Desactivado por defecto
+                        'contactType': 'NO',  # Normally Open por defecto
+                        'date_time': datetime.now(pytz.timezone('America/Lima')).strftime('%d/%m/%Y, %H:%M'),
+                        'lastUpdate': firestore.SERVER_TIMESTAMP,
+                        'created': firestore.SERVER_TIMESTAMP
+                    }
+                    
+                    relay_doc.set(relay_data)
+                    logging.info(f"Relay {relay['id']} creado para panel {panel_id}")
+            
+            logging.info(f"Relays iniciales creados para panel {panel_id} del cliente {client_id}")
+            
+        except Exception as e:
+            logging.error(f"Error creando relays iniciales: {e}", exc_info=True)
 
     def _handle_config_response(self, esp32_id: str, payload: Dict[str, Any]):
         try:

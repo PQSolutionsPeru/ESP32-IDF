@@ -39,7 +39,15 @@ fun RelayConfigDialog(
     onDismiss: () -> Unit,
     onConfirm: (Relay) -> Unit
 ) {
-    var customName by remember { mutableStateOf(relay.customName ?: relay.name) }
+    var customName by remember {
+        mutableStateOf(
+            if (!relay.customName.isNullOrBlank() && relay.customName != relay.name) {
+                relay.customName!!
+            } else {
+                ""
+            }
+        )
+    }
     var isActive by remember { mutableStateOf(relay.isActive) }
     var contactType by remember { mutableStateOf(relay.contactType) }
     var showContactTypeDropdown by remember { mutableStateOf(false) }
@@ -320,14 +328,16 @@ fun RelayConfigDialog(
             Button(
                 onClick = {
                     performHapticFeedback(context)
+                    val finalCustomName = customName.trim().takeIf {
+                        it.isNotEmpty() && it != relay.name
+                    }
                     val updatedRelay = relay.copy(
-                        customName = customName.trim().takeIf { it.isNotEmpty() && it != relay.name },
+                        customName = finalCustomName,
                         isActive = isActive,
                         contactType = contactType
                     )
                     onConfirm(updatedRelay)
-                },
-                enabled = customName.trim().isNotEmpty()
+                }
             ) {
                 Icon(
                     imageVector = Icons.Default.Check,
