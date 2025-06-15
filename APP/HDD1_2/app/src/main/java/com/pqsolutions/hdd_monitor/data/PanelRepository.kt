@@ -166,6 +166,29 @@ class PanelRepository @Inject constructor(
         }
     }.flowOn(Dispatchers.IO)
 
+    private suspend fun getCurrentPanelsForClient(clientDocName: String): List<Panel> {
+        return try {
+            val panelsSnapshot = firestore
+                .collection("$BASE_PATH/$clientDocName/panels")
+                .get(Source.CACHE) // Usar caché para rapidez
+                .await()
+
+            val clientDisplayName = getClientDisplayName(clientDocName)
+
+            panelsSnapshot.documents.mapNotNull { doc ->
+                doc.toObject(Panel::class.java)?.copy(
+                    documentName = doc.id,
+                    clientName = clientDocName,
+                    clientDisplayName = clientDisplayName,
+                    lastUpdate = doc.getLong("lastUpdate") ?: System.currentTimeMillis()
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting current panels for client", e)
+            emptyList()
+        }
+    }
+
     private suspend fun setupRelayListenerAsync(clientDocName: String, panel: Panel) {
         val relayListenerId = "relays_${clientDocName}_${panel.documentName}"
 
@@ -175,6 +198,7 @@ class PanelRepository @Inject constructor(
         }
 
         try {
+            // Cargar relays iniciales
             val relaysSnapshot = firestore
                 .collection("$BASE_PATH/$clientDocName/panels/${panel.documentName}/relays")
                 .get(Source.SERVER)
@@ -202,6 +226,8 @@ class PanelRepository @Inject constructor(
                     }
 
                     if (snapshot != null) {
+                        var hasChanges = false
+
                         val updatedRelays = snapshot.documents.mapNotNull { doc ->
                             try {
                                 val relayData = doc.data ?: emptyMap()
@@ -211,11 +237,13 @@ class PanelRepository @Inject constructor(
                                 val oldStatus = relayStatusCache[cacheKey]?.get("status")
 
                                 if (oldStatus != null && oldStatus != relay.status) {
+                                    hasChanges = true
                                     StatusUpdateManager.emitRelayStatusUpdateSync(
                                         panel.documentName,
                                         doc.id,
                                         relay.status
                                     )
+                                    Log.d(TAG, "Relay status changed: ${relay.name} from $oldStatus to ${relay.status}")
                                 }
 
                                 relayStatusCache[cacheKey] = mapOf(
@@ -231,6 +259,22 @@ class PanelRepository @Inject constructor(
                         }
 
                         panel.relays = updatedRelays
+
+                        // NUEVO: Si hubo cambios, notificar al Flow
+                        if (hasChanges) {
+                            coroutineScope.launch {
+                                // Obtener la lista actual de paneles del cliente
+                                val flowKey = "panels_$clientDocName"
+                                val sharedFlow = panelsFlows[flowKey]
+
+                                if (sharedFlow != null) {
+                                    // Emitir la lista completa de paneles actualizada
+                                    // Esto forzará la recomposición en el UI
+                                    val currentPanels = getCurrentPanelsForClient(clientDocName)
+                                    sharedFlow.tryEmit(currentPanels)
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -416,6 +460,11 @@ class PanelRepository @Inject constructor(
                     }
                 }
             }
+    }
+
+    private fun notifyPanelUpdate(clientDocName: String?, panels: List<Panel>) {
+        val flowKey = "panels_${clientDocName ?: "all"}"
+        panelsFlows[flowKey]?.tryEmit(panels.toList())
     }
 
     private suspend fun getClientDisplayName(clientDocName: String): String {

@@ -34,10 +34,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.pqsolutions.hdd_monitor.R
@@ -315,9 +317,13 @@ fun AdminPanelItem(panel: Panel) {
                     style = MaterialTheme.typography.bodyMedium
                 )
             } else {
+                // CAMBIO: Usar activeRelays para contar solo relays activos en DISC
+                val activeRelaysInDisc = panel.activeRelays.count { it.status == "DISC" }
+                val hasActiveIssues = activeRelaysInDisc > 0
+
                 Text(
-                    text = "Estado: ${if (panel.hasIssues) "Relays en DISC" else "OK"}",
-                    color = if (panel.hasIssues) Color.Red else Color.Green,
+                    text = "Estado: ${if (hasActiveIssues) "$activeRelaysInDisc relay(s) en DISC" else "OK"}",
+                    color = if (hasActiveIssues) Color.Red else Color.Green,
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
@@ -332,9 +338,18 @@ fun AdminPanelItem(panel: Panel) {
                         color = PanelColors.StatusDisc
                     )
                 } else {
-                    Text("Detalles de relays:", style = MaterialTheme.typography.bodyMedium)
-                    panel.relays.forEach { relay ->
+                    Text("Detalles de relays activos:", style = MaterialTheme.typography.bodyMedium)
+                    // CAMBIO: Mostrar solo relays activos
+                    panel.activeRelays.forEach { relay ->
                         AdminRelayStatus(relay)
+                    }
+
+                    if (panel.activeRelays.isEmpty()) {
+                        Text(
+                            "No hay relays habilitados para monitoreo",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -425,12 +440,27 @@ fun AdminPanelItemForRelay(
 
 @Composable
 fun AdminRelayStatus(relay: Relay) {
-    Log.d(TAG, "Rendering AdminRelayStatus: ${relay.name}, Status: ${relay.status}")
+    Log.d(TAG, "Rendering AdminRelayStatus: ${relay.displayName}, Status: ${relay.status}, Type: ${relay.contactType}")
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(text = relay.name, style = MaterialTheme.typography.bodySmall)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = relay.displayName,
+                style = MaterialTheme.typography.bodySmall
+            )
+            if (relay.contactType != "NO") {
+                Text(
+                    text = "(${relay.contactType})",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
         Text(
             text = relay.status,
             color = when (relay.status) {
@@ -438,7 +468,8 @@ fun AdminRelayStatus(relay: Relay) {
                 "DISC" -> Color.Red
                 else -> Color.Yellow
             },
-            style = MaterialTheme.typography.bodySmall
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Bold
         )
     }
 }

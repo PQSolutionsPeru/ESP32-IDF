@@ -24,6 +24,8 @@ import com.pqsolutions.hdd_monitor.data.Relay
 import com.pqsolutions.hdd_monitor.presentation.components.AnimatedNotificationBell
 import com.pqsolutions.hdd_monitor.presentation.components.AppTopBar
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.filled.Block
 import com.pqsolutions.hdd_monitor.presentation.theme.HDD1_2Theme
@@ -402,6 +404,33 @@ private fun RelayControlItem(
 ) {
     val context = LocalContext.current
 
+    @Composable
+    fun getRelayDisplayColor(relay: Relay): Pair<Color, String> {
+        if (!relay.isActive || !enabled) {
+            return Pair(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), "INACTIVO")
+        }
+
+        return when (relay.contactType) {
+            "NC" -> { // Normally Closed
+                when (relay.status) {
+                    "OK" -> Pair(MaterialTheme.colorScheme.primary, "OK") // Verde
+                    "DISC" -> Pair(MaterialTheme.colorScheme.error, "DISC") // Rojo
+                    else -> Pair(MaterialTheme.colorScheme.onSurfaceVariant, relay.status)
+                }
+            }
+            "NO" -> { // Normally Open
+                when (relay.status) {
+                    "OK" -> Pair(MaterialTheme.colorScheme.primary, "OK") // Verde
+                    "DISC" -> Pair(MaterialTheme.colorScheme.error, "DISC") // Rojo
+                    else -> Pair(MaterialTheme.colorScheme.onSurfaceVariant, relay.status)
+                }
+            }
+            else -> Pair(MaterialTheme.colorScheme.onSurfaceVariant, relay.status)
+        }
+    }
+
+    val (statusColor, displayStatus) = getRelayDisplayColor(relay)
+
     val backgroundColor = when {
         !relay.isActive -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         !enabled -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
@@ -473,15 +502,28 @@ private fun RelayControlItem(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Estado: ${relay.status}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = when (relay.status) {
-                            "OK" -> MaterialTheme.colorScheme.primary
-                            "DISC" -> MaterialTheme.colorScheme.error
-                            else -> MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-                    )
+                    // CORREGIDO: Mostrar estado con color correcto
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        // Indicador visual de estado
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(
+                                    color = statusColor,
+                                    shape = CircleShape
+                                )
+                        )
+
+                        Text(
+                            text = "Estado: $displayStatus",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = statusColor,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
 
                     Text(
                         text = "•",

@@ -364,6 +364,9 @@ private fun RelayStatusRow(
     relay: Relay,
     modifier: Modifier = Modifier
 ) {
+    // Solo mostrar si el relay está activo
+    if (!relay.isActive) return
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -371,10 +374,22 @@ private fun RelayStatusRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = relay.name,
-            style = MaterialTheme.typography.bodyMedium
-        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = relay.displayName,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            if (relay.contactType != "NO") {
+                Text(
+                    text = "(${relay.contactType})",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
         RelayStatusChip(status = relay.status)
     }
 }

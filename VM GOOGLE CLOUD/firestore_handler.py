@@ -525,7 +525,7 @@ class FirestoreHandler:
             client_id = parts[1]
             panel_id = parts[3]
             
-            if 'relay' in payload and 'state' in payload:
+            if 'relay' in payload and 'status' in payload:
                 self._update_relay_state(client_id, panel_id, payload)
                 
         except Exception as e:
@@ -535,7 +535,7 @@ class FirestoreHandler:
         """Actualiza el estado de un relay y envía notificaciones"""
         try:
             relay_name = payload['relay']
-            new_state = payload['state']
+            new_state = payload['status']
             
             panel_ref = self.db.document(f'hdd-monitor/accounts/clients/{client_id}/panels/{panel_id}')
             relay_ref = panel_ref.collection('relays').document(relay_name)
@@ -549,15 +549,14 @@ class FirestoreHandler:
             old_data = relay_snap.to_dict() if relay_snap.exists else {'status': None}
             
             if old_data.get('status') != new_state:
-                update_id = f"mqtt_{client_id}_{panel_id}_{relay_name}_{int(time.time() * 1000)}"
-                
                 new_data = {
                     'status': new_state,
                     'date_time': datetime.now(pytz.timezone('America/Lima')).strftime('%d/%m/%Y, %H:%M'),
-                    'lastUpdate': firestore.SERVER_TIMESTAMP,
-                    'source': 'mqtt',
-                    'updateId': update_id
+                    'lastUpdate': firestore.SERVER_TIMESTAMP
                 }
+                
+                if 'contact_type' in payload:
+                    new_data['contactType'] = payload['contact_type']
                 
                 logging.info(f"Cambio de estado en relay {relay_name}:")
                 logging.info(f"Estado anterior en BD: {old_data.get('status')}")
@@ -565,12 +564,7 @@ class FirestoreHandler:
                 
                 try:
                     logging.info(f"Enviando notificación directa para cambio de relay {relay_name}")
-                    self.notification_handler.process_relay_update(
-                        relay_ref, 
-                        old_data, 
-                        new_data, 
-                        update_id=update_id
-                    )
+                    self.notification_handler.process_relay_update(relay_ref, old_data, new_data)
                 except Exception as e:
                     logging.error(f"Error enviando notificación directa: {e}", exc_info=True)
                 

@@ -23,7 +23,7 @@ data class Panel(
             .joinToString(", ") { it.displayName }
 
     val hasIssues: Boolean
-        get() = !overallStatus
+        get() = !isESP32Offline() && activeRelays.any { it.status == STATUS_DISC }
 
     val activeRelays: List<Relay>
         get() = relays.filter { it.isActive }
