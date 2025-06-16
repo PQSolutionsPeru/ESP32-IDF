@@ -142,7 +142,7 @@ static void health_check_timer_callback(TimerHandle_t xTimer) {
             }
             
             size_t free_heap = esp_get_free_heap_size();
-            if (free_heap < 25000) {
+            if (free_heap < 15000) {
                 ESP_LOGE(TAG, "Critical memory situation, forcing system reset");
                 watchdog_manager_force_reset("critical_memory_shortage");
             }
@@ -225,22 +225,7 @@ static watchdog_health_status_t check_memory_health(void) {
     if (free_heap < critical_threshold || min_free < critical_threshold) {
         ESP_LOGE(TAG, "CRITICAL memory: free=%zu min=%zu threshold=%" PRIu32, 
                 free_heap, min_free, critical_threshold);
-        
-        if (mqtt_manager_is_connected()) {
-            mqtt_manager_emergency_memory_cleanup();
-        }
-        
-        heap_caps_check_integrity_all(true);
-        
-        size_t free_after = esp_get_free_heap_size();
-        ESP_LOGI(TAG, "Memory after cleanup: %zu bytes (recovered: %d)", 
-                free_after, (int)(free_after - free_heap));
-        
-        if (free_after < critical_threshold) {
-            return WATCHDOG_HEALTH_CRITICAL;
-        } else {
-            return WATCHDOG_HEALTH_WARNING;
-        }
+        return WATCHDOG_HEALTH_CRITICAL;
         
     } else if (free_heap < warning_threshold || min_free < warning_threshold) {
         ESP_LOGW(TAG, "Low memory: free=%zu min=%zu threshold=%" PRIu32, 

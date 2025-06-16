@@ -1,3 +1,8 @@
+por qué se sigue este proceso? es necesario para manetner el ESP32 en óptimas condiciones funcionando bien las 24 horas?
+Recibes una notificación de eliminación y llamas a relay_manager_deinit()
+Inmediatamente reinicias el Relay Manager
+
+
 EL DASHBOARD, YA SEA DE USUARIO O DE ADMINISTRADOR, NO REFLEJA EN TIEMPO REAL LO QUE ESTÁ EN LA BD
 
 AUMENTAR EL TIEMPO ENTRE REINTENTOS PARA QUE EL AP NO SE REINICIE
@@ -29,15 +34,7 @@ INVESTIGAR LAS FUINCIONES O VARIABLES NO USADAS EN ANDROID STUDIO Y EN EL ESP32.
 
 POR QUÉ EN esp32_config_manager.py HAY EN ESP32_STATES LOS VALORES 'REGISTERED': 'REGISTERED' Y TAMBIÉN 'status': ESP32_STATES['REGISTERED']?
 
-POR QUÉ AL HACER BUILD EN EL ESP32 SALE ESTO? 
-I (867) HDDESP32: Phase 3: Callback configuration
-I (877) MQTT_MGR: Setting credentials for ESP32 ID: 42A8ACA0
-E (877) ESP32_ID_MGR: Buffer too small for MAC address
-I (887) MQTT_MGR: Credentials configured
-I (887) HDDESP32: Phase 4: WiFi connection
 
-
-dame soluciones permanentes, para ESP-IDF v5.4.1 y en C puro; además, damelos archivos a corregir pero completos y ya corregidos
 
 
 
@@ -159,4 +156,4 @@ Qué archivos necesitas ver para corregirlo? también, no deben estar hardcodead
 
 
 
-comparto los archivos, dame las funciones completas y corregidas (no los archivos kt) sin comentarios en el código y sin complicarlo, solo corrige para que todo funcione bien; o sea, eliminar el control remoto y hacer que solo se pueda habilitar/deshabilitar el monitoreo, personalizar los relays en nombre y también que el ESP32 reciba los mensajes mediante la VM para que active el monitoreo de relay, se suscriba a los tópicos de relay y también que el ESP32 envíe mensajes cuando algún relay cambie, para que la APP también notifique y muestre cuando un relay ha cambiado (ya tengo funciones de notificación en la VM)
+comparto lo solicitado; si hay funciones a corregir entonces dámelas completas y ya corregidas, sin comentarios en el código y explícame dónde estaba el problema

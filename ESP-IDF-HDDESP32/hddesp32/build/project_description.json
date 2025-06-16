@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "hddesp32",
-    "project_version":    "042f068c-dirty",
+    "project_version":    "045d40fb-dirty",
     "project_path":       "E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32",
     "idf_path":           "C:/Espressif/frameworks/esp-idf-v5.4.1",
     "build_dir":          "E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build",

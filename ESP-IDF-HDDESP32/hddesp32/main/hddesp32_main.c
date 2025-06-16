@@ -29,38 +29,19 @@ static bool g_watchdog_available = false;
 static bool g_relay_manager_initialized = false;
 static bool g_need_reregister = false;
 
-static void force_heap_cleanup(void) {
-    for (int i = 0; i < 3; i++) {
-        heap_caps_check_integrity_all(true);
-        vTaskDelay(pdMS_TO_TICKS(10));
-    }
-}
+static char g_relay_json_buffer[256];
+static char g_mqtt_temp_topic[128];
+static char g_mqtt_temp_data[400];
+static char g_esp32_id_buffer[ESP32_ID_LENGTH + 1];
 
-static void print_memory_info(void) {
+static void print_memory_info_simple(void) {
     size_t free_heap = esp_get_free_heap_size();
     size_t min_heap = esp_get_minimum_free_heap_size();
-    size_t largest_block = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
     
-    ESP_LOGI(TAG, "=== Memory Status ===");
-    ESP_LOGI(TAG, "Free heap: %zu bytes", free_heap);
-    ESP_LOGI(TAG, "Minimum free heap: %zu bytes", min_heap);
-    ESP_LOGI(TAG, "Largest free block: %zu bytes", largest_block);
+    ESP_LOGI(TAG, "Memory: free=%zu min=%zu", free_heap, min_heap);
     
     if (g_watchdog_available) {
-        esp_err_t ret = watchdog_manager_report_activity(WATCHDOG_CHECK_MEMORY);
-        if (ret != ESP_OK) {
-            ESP_LOGD(TAG, "Could not report memory activity to watchdog");
-        }
-    }
-    
-    if (free_heap < 50000) {
-        ESP_LOGW(TAG, "Low memory warning: %zu bytes", free_heap);
-        if (free_heap < 30000 && g_watchdog_available) {
-            esp_err_t mode_ret = watchdog_manager_set_mode(WATCHDOG_MODE_CRITICAL);
-            if (mode_ret != ESP_OK) {
-                ESP_LOGD(TAG, "Could not set watchdog to critical mode");
-            }
-        }
+        watchdog_manager_report_activity(WATCHDOG_CHECK_MEMORY);
     }
 }
 
@@ -88,7 +69,6 @@ static void watchdog_event_callback(watchdog_health_status_t status, watchdog_ch
         switch (check_type) {
             case WATCHDOG_CHECK_MEMORY:
                 ESP_LOGE(TAG, "Critical memory situation detected");
-                mqtt_manager_emergency_memory_cleanup();
                 break;
                 
             case WATCHDOG_CHECK_WIFI:
@@ -105,9 +85,8 @@ static void watchdog_event_callback(watchdog_health_status_t status, watchdog_ch
                 
             case WATCHDOG_CHECK_MQTT:
                 ESP_LOGE(TAG, "Critical MQTT failure detected");
-                char esp32_id[ESP32_ID_LENGTH + 1];
-                if (esp32_id_manager_get_id(esp32_id, sizeof(esp32_id)) == ESP_OK) {
-                    mqtt_manager_set_esp32_id(esp32_id);
+                if (esp32_id_manager_get_id(g_esp32_id_buffer, sizeof(g_esp32_id_buffer)) == ESP_OK) {
+                    mqtt_manager_set_esp32_id(g_esp32_id_buffer);
                     mqtt_manager_connect();
                 }
                 break;
@@ -122,8 +101,7 @@ static void watchdog_event_callback(watchdog_health_status_t status, watchdog_ch
 }
 
 static void relay_state_change_callback(const relay_event_t *event, void *user_data) {
-    if (!g_mqtt_connected) {
-        ESP_LOGD(TAG, "MQTT not connected, skipping relay event");
+    if (!g_mqtt_connected || !event) {
         return;
     }
     
@@ -131,31 +109,18 @@ static void relay_state_change_callback(const relay_event_t *event, void *user_d
         watchdog_manager_report_activity(WATCHDOG_CHECK_TASKS);
     }
     
-    size_t free_heap = esp_get_free_heap_size();
-    if (free_heap < 20000) {
-        ESP_LOGW(TAG, "Insufficient memory for relay event: %zu bytes", free_heap);
-        return;
-    }
-    
-    char esp32_id[ESP32_ID_LENGTH + 1];
-    if (esp32_id_manager_get_id(esp32_id, sizeof(esp32_id)) != ESP_OK) {
+    if (esp32_id_manager_get_id(g_esp32_id_buffer, sizeof(g_esp32_id_buffer)) != ESP_OK) {
         ESP_LOGE(TAG, "Could not get ESP32 ID for relay event");
         return;
     }
     
-    char *json_buffer = heap_caps_malloc(512, MALLOC_CAP_8BIT);
-    if (!json_buffer) {
-        ESP_LOGE(TAG, "Failed to allocate relay event buffer");
-        return;
-    }
-    
-    memset(json_buffer, 0, 512);
+    memset(g_relay_json_buffer, 0, sizeof(g_relay_json_buffer));
     
     int64_t timestamp_ms = event->timestamp / 1000;
     
-    int len = snprintf(json_buffer, 512,
+    int len = snprintf(g_relay_json_buffer, sizeof(g_relay_json_buffer),
                       "{"
-                      "\"relay\":\"%s\","
+                      "\"relay\":\"%.16s\","
                       "\"status\":\"%s\","
                       "\"timestamp\":%lld,"
                       "\"contact_type\":\"%s\","
@@ -167,41 +132,27 @@ static void relay_state_change_callback(const relay_event_t *event, void *user_d
                       (event->contact_type == RELAY_CONTACT_NC) ? "NC" : "NO",
                       (event->old_state == RELAY_STATE_OK) ? "OK" : "DISC");
     
-    if (len > 0 && len < 512) {
+    if (len > 0 && len < sizeof(g_relay_json_buffer)) {
         char relay_topic[MQTT_TOPIC_MAX_LENGTH];
         esp_err_t topic_ret = mqtt_manager_get_panel_topic(relay_topic, sizeof(relay_topic), "relays");
         
         if (topic_ret == ESP_OK) {
-            esp_err_t ret = mqtt_manager_publish_json(relay_topic, json_buffer, 1, false);
+            esp_err_t ret = mqtt_manager_publish_json(relay_topic, g_relay_json_buffer, 1, false);
             if (ret == ESP_OK) {
-                ESP_LOGI(TAG, "Relay %s state change published to %s: %s -> %s", 
+                ESP_LOGI(TAG, "Relay %s state change published: %s -> %s", 
                         event->relay_id,
-                        relay_topic,
                         (event->old_state == RELAY_STATE_OK) ? "OK" : "DISC",
                         (event->new_state == RELAY_STATE_OK) ? "OK" : "DISC");
-            } else {
-                ESP_LOGW(TAG, "Failed to publish relay event: %s", esp_err_to_name(ret));
             }
         } else {
-            ESP_LOGW(TAG, "No panel configuration, using generic topic");
-            char generic_topic[128];
-            snprintf(generic_topic, sizeof(generic_topic), "esp32/%s/relays", esp32_id);
-            mqtt_manager_publish_json(generic_topic, json_buffer, 1, false);
+            snprintf(relay_topic, sizeof(relay_topic), "esp32/%.8s/relays", g_esp32_id_buffer);
+            mqtt_manager_publish_json(relay_topic, g_relay_json_buffer, 1, false);
         }
-    } else {
-        ESP_LOGE(TAG, "Relay event JSON too large or formatting error");
     }
-    
-    memset(json_buffer, 0, 512);
-    free(json_buffer);
-    json_buffer = NULL;
-    
-    heap_caps_check_integrity_all(true);
 }
 
 static esp_err_t relay_mqtt_command_callback(const char *topic, const char *command_json, void *user_data) {
     ESP_LOGI(TAG, "Processing relay MQTT command from topic: %s", topic);
-    ESP_LOGI(TAG, "Command JSON: %s", command_json);
     
     if (g_watchdog_available) {
         watchdog_manager_report_activity(WATCHDOG_CHECK_MQTT);
@@ -264,8 +215,8 @@ static void mqtt_state_callback(mqtt_manager_state_t state, void *user_data) {
 static void mqtt_message_callback(const char *topic, const char *data, int data_len, void *user_data) {
     ESP_LOGI(TAG, "MQTT message: %s (%d bytes)", topic ? topic : "NULL", data_len);
     
-    if (!topic || !data) {
-        ESP_LOGE(TAG, "Invalid MQTT message: topic or data is NULL");
+    if (!topic || !data || data_len <= 0) {
+        ESP_LOGE(TAG, "Invalid MQTT message");
         return;
     }
     
@@ -273,29 +224,22 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
         watchdog_manager_report_activity(WATCHDOG_CHECK_MQTT);
     }
     
-    size_t free_heap = esp_get_free_heap_size();
-    if (free_heap < 40000) {
-        ESP_LOGW(TAG, "Low memory: %zu bytes", free_heap);
-        heap_caps_check_integrity_all(true);
-        vTaskDelay(pdMS_TO_TICKS(100));
-        
-        if (strstr(topic, "/config/") != NULL) {
-            ESP_LOGE(TAG, "Cannot process config with low memory");
-            mqtt_manager_send_config_response(false, "Insufficient memory");
-        }
-        return;
+    if (data_len > sizeof(g_mqtt_temp_data) - 1) {
+        ESP_LOGW(TAG, "Message too large, truncating: %d -> %zu bytes", data_len, sizeof(g_mqtt_temp_data) - 1);
+        data_len = sizeof(g_mqtt_temp_data) - 1;
     }
     
-    char esp32_id[ESP32_ID_LENGTH + 1];
-    if (esp32_id_manager_get_id(esp32_id, sizeof(esp32_id)) != ESP_OK) {
+    memcpy(g_mqtt_temp_data, data, data_len);
+    g_mqtt_temp_data[data_len] = '\0';
+    
+    if (esp32_id_manager_get_id(g_esp32_id_buffer, sizeof(g_esp32_id_buffer)) != ESP_OK) {
         ESP_LOGE(TAG, "Could not get ESP32 ID");
         return;
     }
     
-    char deleted_topic[128];
-    snprintf(deleted_topic, sizeof(deleted_topic), "esp32/notify/%s/deleted", esp32_id);
+    snprintf(g_mqtt_temp_topic, sizeof(g_mqtt_temp_topic), "esp32/notify/%s/deleted", g_esp32_id_buffer);
     
-    if (strcmp(topic, deleted_topic) == 0) {
+    if (strcmp(topic, g_mqtt_temp_topic) == 0) {
         ESP_LOGW(TAG, "Deletion notification received");
         config_manager_erase_key("client_id");
         config_manager_erase_key("panel_id");
@@ -315,13 +259,12 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
         return;
     }
     
-    char config_topic[128];
-    snprintf(config_topic, sizeof(config_topic), "esp32/config/%s", esp32_id);
+    snprintf(g_mqtt_temp_topic, sizeof(g_mqtt_temp_topic), "esp32/config/%s", g_esp32_id_buffer);
     
-    if (strcmp(topic, config_topic) == 0) {
+    if (strcmp(topic, g_mqtt_temp_topic) == 0) {
         ESP_LOGI(TAG, "Configuration message received");
         
-        esp_err_t ret = process_esp32_configuration(data);
+        esp_err_t ret = process_esp32_configuration(g_mqtt_temp_data);
         
         if (ret == ESP_OK) {
             ESP_LOGI(TAG, "Configuration accepted");
@@ -337,15 +280,23 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
                 }
             }
         }
+        return;
     }
-    else if (strstr(topic, "/relay_config") && g_relay_manager_initialized) {
-        cJSON *json = cJSON_ParseWithLength(data, data_len);
+    
+    if (strstr(topic, "/relay_config") && g_relay_manager_initialized) {
+        if (data_len > 300) {
+            ESP_LOGW(TAG, "Relay config message too large, ignoring");
+            return;
+        }
+        
+        cJSON *json = cJSON_ParseWithLength(g_mqtt_temp_data, data_len);
         if (json) {
             cJSON *command = cJSON_GetObjectItem(json, "command");
             cJSON *relay_id = cJSON_GetObjectItem(json, "relay_id");
             cJSON *is_active = cJSON_GetObjectItem(json, "is_active");
             
             if (command && relay_id && 
+                cJSON_IsString(command) && cJSON_IsString(relay_id) &&
                 strcmp(cJSON_GetStringValue(command), "update_config") == 0) {
                 
                 const char *relay_name = cJSON_GetStringValue(relay_id);
@@ -358,18 +309,20 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
                     cJSON *contact_type = cJSON_GetObjectItem(json, "contact_type");
                     if (contact_type && cJSON_IsString(contact_type)) {
                         const char *type_str = cJSON_GetStringValue(contact_type);
-                        relay_contact_type_t type = strcmp(type_str, "NC") == 0 ? 
-                                                RELAY_CONTACT_NC : RELAY_CONTACT_NO;
-                        relay_manager_set_contact_type(relay_name, type);
-                        ESP_LOGI(TAG, "Relay %s contact type set to %s", relay_name, type_str);
+                        if (type_str) {
+                            relay_contact_type_t type = strcmp(type_str, "NC") == 0 ? 
+                                                    RELAY_CONTACT_NC : RELAY_CONTACT_NO;
+                            relay_manager_set_contact_type(relay_name, type);
+                            ESP_LOGI(TAG, "Relay %s contact type set to %s", relay_name, type_str);
+                        }
                     }
                     
                     cJSON *custom_name = cJSON_GetObjectItem(json, "custom_name");
                     if (custom_name && cJSON_IsString(custom_name)) {
                         const char *name_str = cJSON_GetStringValue(custom_name);
-                        if (name_str && strlen(name_str) > 0) {
+                        if (name_str && strlen(name_str) > 0 && strlen(name_str) < 32) {
                             relay_manager_set_name(relay_name, name_str);
-                            ESP_LOGI(TAG, "Relay %s custom name set to '%s'", relay_name, name_str);
+                            ESP_LOGI(TAG, "Relay %s custom name set to '%.30s'", relay_name, name_str);
                         }
                     }
                 }
@@ -380,8 +333,6 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
 }
 
 static void wifi_state_callback(wifi_manager_state_t state, void *user_data) {
-    char esp32_id[ESP32_ID_LENGTH + 1];
-    
     switch (state) {
         case WIFI_MANAGER_STATE_CONNECTED:
             ESP_LOGI(TAG, "WiFi connected");
@@ -393,8 +344,8 @@ static void wifi_state_callback(wifi_manager_state_t state, void *user_data) {
             
             time_manager_sync_time();
             
-            if (esp32_id_manager_get_id(esp32_id, sizeof(esp32_id)) == ESP_OK) {
-                if (mqtt_manager_set_esp32_id(esp32_id) == ESP_OK) {
+            if (esp32_id_manager_get_id(g_esp32_id_buffer, sizeof(g_esp32_id_buffer)) == ESP_OK) {
+                if (mqtt_manager_set_esp32_id(g_esp32_id_buffer) == ESP_OK) {
                     mqtt_manager_connect();
                 }
             }
@@ -444,20 +395,16 @@ static void system_monitor_task(void *pvParameters) {
     
     bool task_registered = false;
     int registration_attempts = 0;
-    const int max_attempts = 10;
     
     vTaskDelay(pdMS_TO_TICKS(2000));
     
-    while (!task_registered && registration_attempts < max_attempts) {
+    while (!task_registered && registration_attempts < 5) {
         if (g_watchdog_available) {
             esp_err_t wd_ret = watchdog_manager_register_task(NULL, "sys_monitor");
             if (wd_ret == ESP_OK) {
                 ESP_LOGI(TAG, "System monitor task registered in watchdog manager");
                 task_registered = true;
                 break;
-            } else {
-                ESP_LOGW(TAG, "Registration attempt %d failed: %s", 
-                        registration_attempts + 1, esp_err_to_name(wd_ret));
             }
         }
         
@@ -465,80 +412,33 @@ static void system_monitor_task(void *pvParameters) {
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
     
-    if (!task_registered) {
-        ESP_LOGE(TAG, "Failed to register system monitor task after %d attempts", max_attempts);
-        ESP_LOGE(TAG, "System monitor will run without watchdog protection");
-    }
-    
     uint32_t cycle_count = 0;
-    uint32_t feed_error_count = 0;
     
     while (1) {
         if (task_registered) {
             esp_err_t feed_ret = watchdog_manager_feed();
             if (feed_ret != ESP_OK) {
-                feed_error_count++;
-                ESP_LOGW(TAG, "Watchdog feed failed: %s (count: %lu)", 
-                        esp_err_to_name(feed_ret), feed_error_count);
-                
-                if (feed_error_count >= 20) {
-                    ESP_LOGE(TAG, "Too many feed failures, unregistering task");
-                    watchdog_manager_unregister_task(NULL);
-                    task_registered = false;
-                    feed_error_count = 0;
-                }
-            } else {
-                if (feed_error_count > 0) {
-                    feed_error_count = 0;
-                }
+                ESP_LOGD(TAG, "Watchdog feed failed: %s", esp_err_to_name(feed_ret));
             }
         }
         
         cycle_count++;
         
         if (cycle_count % 60 == 0 && g_relay_manager_initialized) {
-            ESP_LOGI(TAG, "Performing periodic relay check");
-            esp_err_t relay_ret = relay_manager_check_all_states(false);
-            if (relay_ret != ESP_OK) {
-                ESP_LOGW(TAG, "Relay check failed: %s", esp_err_to_name(relay_ret));
-            }
+            relay_manager_check_all_states(false);
         }
         
         if (time_manager_should_send_network_info() || g_need_reregister) {
-            ESP_LOGI(TAG, "Sending network info %s", 
-                    g_need_reregister ? "after deletion notification" : "after NTP synchronization");
+            ESP_LOGI(TAG, "Sending network info");
             esp_err_t ret = mqtt_manager_send_network_info();
             if (ret == ESP_OK) {
-                ESP_LOGI(TAG, "Network info sent successfully");
                 time_manager_mark_network_info_sent();
                 g_need_reregister = false;
-            } else {
-                ESP_LOGW(TAG, "Failed to send network info: %s", esp_err_to_name(ret));
             }
-        }
-        
-        size_t free_heap = esp_get_free_heap_size();
-        if (free_heap < 40000) {
-            ESP_LOGW(TAG, "Low memory detected: %zu bytes - Performing emergency cleanup", free_heap);
-            
-            if (mqtt_manager_is_connected()) {
-                ESP_LOGI(TAG, "Triggering MQTT memory cleanup");
-                mqtt_manager_emergency_memory_cleanup();
-            }
-            
-            force_heap_cleanup();
-            
-            size_t free_after = esp_get_free_heap_size();
-            ESP_LOGI(TAG, "Memory after cleanup: %zu bytes (recovered: %d bytes)", 
-                    free_after, (int)(free_after - free_heap));
-        }
-        
-        if (cycle_count % 360 == 0) {
-            force_heap_cleanup();
         }
         
         if (cycle_count % 120 == 0) {
-            print_memory_info();
+            print_memory_info_simple();
         }
         
         bool wifi_connected = wifi_manager_is_connected();
@@ -558,20 +458,10 @@ static void system_monitor_task(void *pvParameters) {
             }
             
             if (!time_manager_is_synchronized()) {
-                esp_err_t time_ret = time_manager_check_sync();
-                if (time_ret != ESP_OK && time_ret != ESP_ERR_NOT_FINISHED) {
-                    ESP_LOGD(TAG, "Time sync check result: %s", esp_err_to_name(time_ret));
-                }
+                time_manager_check_sync();
             }
             
-            if (free_heap > 30000) {
-                esp_err_t mqtt_ret = mqtt_manager_loop(0);
-                if (mqtt_ret != ESP_OK) {
-                    ESP_LOGD(TAG, "MQTT loop result: %s", esp_err_to_name(mqtt_ret));
-                }
-            } else {
-                ESP_LOGW(TAG, "Skipping MQTT loop due to low memory: %zu bytes", free_heap);
-            }
+            mqtt_manager_loop(0);
             
             if (mqtt_connected) {
                 if (g_watchdog_available) {
@@ -579,23 +469,15 @@ static void system_monitor_task(void *pvParameters) {
                 }
                 
                 if (cycle_count % 24 == 0) {
-                    char time_str[32];
-                    if (time_manager_get_lima_time_str(time_str, sizeof(time_str)) == ESP_OK) {
-                        ESP_LOGI(TAG, "System OK - WiFi+MQTT connected, Time: %s", time_str);
-                    } else {
-                        ESP_LOGI(TAG, "System OK - WiFi+MQTT connected");
-                    }
+                    ESP_LOGI(TAG, "System OK - WiFi+MQTT connected");
                 }
             } else {
-                if (cycle_count % 24 == 0 && free_heap > 50000) {
+                if (cycle_count % 24 == 0) {
                     ESP_LOGI(TAG, "Retrying MQTT connection");
-                    char esp32_id[ESP32_ID_LENGTH + 1];
-                    if (esp32_id_manager_get_id(esp32_id, sizeof(esp32_id)) == ESP_OK) {
-                        mqtt_manager_set_esp32_id(esp32_id);
+                    if (esp32_id_manager_get_id(g_esp32_id_buffer, sizeof(g_esp32_id_buffer)) == ESP_OK) {
+                        mqtt_manager_set_esp32_id(g_esp32_id_buffer);
                         mqtt_manager_connect();
                     }
-                } else if (free_heap <= 50000) {
-                    ESP_LOGW(TAG, "Skipping MQTT reconnect due to low memory: %zu bytes", free_heap);
                 }
             }
         } else {
@@ -605,7 +487,7 @@ static void system_monitor_task(void *pvParameters) {
             }
         }
         
-        if (g_watchdog_available) {
+        if (g_watchdog_available && cycle_count % 60 == 0) {
             watchdog_health_status_t health = watchdog_manager_check_system_health();
             if (health > WATCHDOG_HEALTH_WARNING) {
                 ESP_LOGW(TAG, "System health degraded: %d", health);
@@ -678,9 +560,8 @@ void app_main(void)
         watchdog_manager_feed();
     }
     
-    char esp32_id[ESP32_ID_LENGTH + 1];
-    ESP_ERROR_CHECK(esp32_id_manager_get_id(esp32_id, sizeof(esp32_id)));
-    ESP_LOGI(TAG, "ESP32 ID: %s", esp32_id);
+    ESP_ERROR_CHECK(esp32_id_manager_get_id(g_esp32_id_buffer, sizeof(g_esp32_id_buffer)));
+    ESP_LOGI(TAG, "ESP32 ID: %s", g_esp32_id_buffer);
     
     char mac_address[ESP32_MAC_STR_LENGTH + 1];
     ESP_ERROR_CHECK(esp32_id_manager_get_mac(mac_address, sizeof(mac_address)));
@@ -712,7 +593,7 @@ void app_main(void)
     ESP_ERROR_CHECK(wifi_manager_set_state_callback(wifi_state_callback, NULL));
     ESP_ERROR_CHECK(mqtt_manager_set_state_callback(mqtt_state_callback, NULL));
     ESP_ERROR_CHECK(mqtt_manager_set_message_callback(mqtt_message_callback, NULL));
-    ESP_ERROR_CHECK(mqtt_manager_set_esp32_id(esp32_id));
+    ESP_ERROR_CHECK(mqtt_manager_set_esp32_id(g_esp32_id_buffer));
     
     if (main_task_registered) {
         watchdog_manager_feed();
@@ -761,7 +642,7 @@ void app_main(void)
     BaseType_t xReturned = xTaskCreate(
         system_monitor_task,
         "sys_monitor",
-        16384,
+        12288,
         NULL,
         5,
         &monitor_task_handle
@@ -840,11 +721,6 @@ void app_main(void)
             size_t free_heap = esp_get_free_heap_size();
             size_t min_heap = esp_get_minimum_free_heap_size();
             ESP_LOGI(TAG, "Main task: heap free=%zu min=%zu", free_heap, min_heap);
-            
-            if (free_heap < 30000 || min_heap < 20000) {
-                ESP_LOGW(TAG, "Main task: Low memory detected");
-                force_heap_cleanup();
-            }
         }
         
         vTaskDelay(pdMS_TO_TICKS(5000));

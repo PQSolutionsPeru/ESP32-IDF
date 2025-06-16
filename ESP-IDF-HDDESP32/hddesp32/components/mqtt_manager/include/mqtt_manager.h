@@ -46,11 +46,11 @@ esp_err_t mqtt_manager_set_state_callback(mqtt_manager_state_callback_t callback
 mqtt_manager_state_t mqtt_manager_get_state(void);
 esp_err_t mqtt_manager_send_network_info(void);
 esp_err_t mqtt_manager_send_heartbeat(void);
-esp_err_t mqtt_manager_emergency_memory_cleanup(void);
 esp_err_t mqtt_manager_set_panel_config(const char *client_id, const char *panel_id);
 esp_err_t mqtt_manager_get_panel_topic(char *topic, size_t size, const char *suffix);
 esp_err_t mqtt_manager_send_config_response(bool success, const char *message);
 esp_err_t mqtt_manager_clear_panel_config(void);
+esp_err_t mqtt_manager_emergency_memory_cleanup(void);
 
 #ifdef __cplusplus
 }
