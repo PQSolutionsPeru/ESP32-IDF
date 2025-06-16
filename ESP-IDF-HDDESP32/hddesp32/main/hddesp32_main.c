@@ -442,46 +442,71 @@ static void on_wifi_connect_callback(void *user_data) {
 static void system_monitor_task(void *pvParameters) {
     ESP_LOGI(TAG, "System monitor task started");
     
-    bool task_watchdog_available = false;
+    bool task_registered = false;
+    int registration_attempts = 0;
+    const int max_attempts = 10;
     
-    if (g_watchdog_available) {
-        esp_err_t wd_ret = watchdog_manager_register_task(NULL, "sys_monitor");
-        if (wd_ret == ESP_OK) {
-            ESP_LOGI(TAG, "System monitor task registered in watchdog manager");
-            task_watchdog_available = true;
-        } else {
-            ESP_LOGW(TAG, "Failed to register in watchdog manager: %s", esp_err_to_name(wd_ret));
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    
+    while (!task_registered && registration_attempts < max_attempts) {
+        if (g_watchdog_available) {
+            esp_err_t wd_ret = watchdog_manager_register_task(NULL, "sys_monitor");
+            if (wd_ret == ESP_OK) {
+                ESP_LOGI(TAG, "System monitor task registered in watchdog manager");
+                task_registered = true;
+                break;
+            } else {
+                ESP_LOGW(TAG, "Registration attempt %d failed: %s", 
+                        registration_attempts + 1, esp_err_to_name(wd_ret));
+            }
         }
+        
+        registration_attempts++;
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
     
-    if (!task_watchdog_available) {
-        ESP_LOGW(TAG, "Watchdog manager not available, using default ESP-IDF TWDT");
-        esp_err_t twdt_ret = esp_task_wdt_add(NULL);
-        if (twdt_ret == ESP_OK) {
-            ESP_LOGI(TAG, "System monitor task registered in default TWDT");
-        } else {
-            ESP_LOGW(TAG, "Failed to register in default TWDT: %s", esp_err_to_name(twdt_ret));
-        }
+    if (!task_registered) {
+        ESP_LOGE(TAG, "Failed to register system monitor task after %d attempts", max_attempts);
+        ESP_LOGE(TAG, "System monitor will run without watchdog protection");
     }
     
     uint32_t cycle_count = 0;
+    uint32_t feed_error_count = 0;
     
     while (1) {
-        if (task_watchdog_available) {
-            watchdog_manager_feed();
-        } else {
-            esp_task_wdt_reset();
+        if (task_registered) {
+            esp_err_t feed_ret = watchdog_manager_feed();
+            if (feed_ret != ESP_OK) {
+                feed_error_count++;
+                ESP_LOGW(TAG, "Watchdog feed failed: %s (count: %lu)", 
+                        esp_err_to_name(feed_ret), feed_error_count);
+                
+                if (feed_error_count >= 20) {
+                    ESP_LOGE(TAG, "Too many feed failures, unregistering task");
+                    watchdog_manager_unregister_task(NULL);
+                    task_registered = false;
+                    feed_error_count = 0;
+                }
+            } else {
+                if (feed_error_count > 0) {
+                    feed_error_count = 0;
+                }
+            }
         }
         
         cycle_count++;
         
         if (cycle_count % 60 == 0 && g_relay_manager_initialized) {
             ESP_LOGI(TAG, "Performing periodic relay check");
-            relay_manager_check_all_states(false);
+            esp_err_t relay_ret = relay_manager_check_all_states(false);
+            if (relay_ret != ESP_OK) {
+                ESP_LOGW(TAG, "Relay check failed: %s", esp_err_to_name(relay_ret));
+            }
         }
         
         if (time_manager_should_send_network_info() || g_need_reregister) {
-            ESP_LOGI(TAG, "Sending network info %s", g_need_reregister ? "after deletion notification" : "after NTP synchronization");
+            ESP_LOGI(TAG, "Sending network info %s", 
+                    g_need_reregister ? "after deletion notification" : "after NTP synchronization");
             esp_err_t ret = mqtt_manager_send_network_info();
             if (ret == ESP_OK) {
                 ESP_LOGI(TAG, "Network info sent successfully");
@@ -602,47 +627,54 @@ void app_main(void)
         ESP_LOGE(TAG, "Failed to initialize watchdog manager: %s", esp_err_to_name(watchdog_ret));
         
         ESP_LOGW(TAG, "Retrying watchdog initialization after delay...");
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        vTaskDelay(pdMS_TO_TICKS(3000));
         
         watchdog_ret = watchdog_manager_init();
         if (watchdog_ret != ESP_OK) {
-            ESP_LOGE(TAG, "Watchdog initialization failed twice, continuing without custom watchdog manager");
-            ESP_LOGI(TAG, "System will use default ESP-IDF TWDT");
-            g_watchdog_available = false;
-        } else {
-            ESP_LOGI(TAG, "Watchdog manager initialized on second attempt");
-            g_watchdog_available = true;
-            
-            watchdog_manager_set_event_callback(watchdog_event_callback, NULL);
-            
-            esp_err_t reg_ret = watchdog_manager_register_task(NULL, "app_main");
-            if (reg_ret != ESP_OK) {
-                ESP_LOGW(TAG, "Failed to register main task in watchdog: %s", esp_err_to_name(reg_ret));
-            }
-        }
-    } else {
-        ESP_LOGI(TAG, "Watchdog manager initialized successfully");
-        g_watchdog_available = true;
-        
-        watchdog_manager_set_event_callback(watchdog_event_callback, NULL);
-        
-        esp_err_t reg_ret = watchdog_manager_register_task(NULL, "app_main");
-        if (reg_ret != ESP_OK) {
-            ESP_LOGW(TAG, "Failed to register main task in watchdog: %s", esp_err_to_name(reg_ret));
+            ESP_LOGE(TAG, "Watchdog initialization failed twice: %s", esp_err_to_name(watchdog_ret));
+            ESP_LOGE(TAG, "CRITICAL: System cannot function safely without watchdog");
+            vTaskDelay(pdMS_TO_TICKS(5000));
+            esp_restart();
         }
     }
     
-    if (g_watchdog_available) {
-        watchdog_manager_feed();
+    ESP_LOGI(TAG, "Watchdog manager initialized successfully");
+    g_watchdog_available = true;
+    
+    watchdog_manager_set_event_callback(watchdog_event_callback, NULL);
+    
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    
+    bool main_task_registered = false;
+    int main_reg_attempts = 0;
+    while (!main_task_registered && main_reg_attempts < 5) {
+        esp_err_t reg_ret = watchdog_manager_register_task(NULL, "app_main");
+        if (reg_ret == ESP_OK) {
+            ESP_LOGI(TAG, "Main task registered in watchdog manager");
+            main_task_registered = true;
+        } else {
+            ESP_LOGW(TAG, "Main task registration attempt %d failed: %s", 
+                    main_reg_attempts + 1, esp_err_to_name(reg_ret));
+            main_reg_attempts++;
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+    }
+    
+    if (!main_task_registered) {
+        ESP_LOGE(TAG, "CRITICAL: Could not register main task in watchdog");
+        esp_restart();
     }
     
     ESP_ERROR_CHECK(config_manager_init());
-    if (g_watchdog_available) {
-        watchdog_manager_feed();
+    if (main_task_registered) {
+        esp_err_t feed_ret = watchdog_manager_feed();
+        if (feed_ret != ESP_OK) {
+            ESP_LOGW(TAG, "Initial watchdog feed failed: %s", esp_err_to_name(feed_ret));
+        }
     }
     
     ESP_ERROR_CHECK(esp32_id_manager_init());
-    if (g_watchdog_available) {
+    if (main_task_registered) {
         watchdog_manager_feed();
     }
     
@@ -654,24 +686,24 @@ void app_main(void)
     ESP_ERROR_CHECK(esp32_id_manager_get_mac(mac_address, sizeof(mac_address)));
     ESP_LOGI(TAG, "MAC: %s", mac_address);
     
-    if (g_watchdog_available) {
+    if (main_task_registered) {
         watchdog_manager_feed();
     }
     
     ESP_LOGI(TAG, "Phase 2: Manager initialization");
     
     ESP_ERROR_CHECK(wifi_manager_init());
-    if (g_watchdog_available) {
+    if (main_task_registered) {
         watchdog_manager_feed();
     }
     
     ESP_ERROR_CHECK(time_manager_init());
-    if (g_watchdog_available) {
+    if (main_task_registered) {
         watchdog_manager_feed();
     }
     
     ESP_ERROR_CHECK(mqtt_manager_init());
-    if (g_watchdog_available) {
+    if (main_task_registered) {
         watchdog_manager_feed();
     }
     
@@ -682,7 +714,7 @@ void app_main(void)
     ESP_ERROR_CHECK(mqtt_manager_set_message_callback(mqtt_message_callback, NULL));
     ESP_ERROR_CHECK(mqtt_manager_set_esp32_id(esp32_id));
     
-    if (g_watchdog_available) {
+    if (main_task_registered) {
         watchdog_manager_feed();
     }
     
@@ -719,40 +751,68 @@ void app_main(void)
         }
     }
     
-    if (g_watchdog_available) {
+    if (main_task_registered) {
         watchdog_manager_feed();
     }
     
     ESP_LOGI(TAG, "Phase 5: Creating system monitor task");
     
+    TaskHandle_t monitor_task_handle = NULL;
     BaseType_t xReturned = xTaskCreate(
         system_monitor_task,
         "sys_monitor",
-        8192,
+        16384,
         NULL,
         5,
-        NULL
+        &monitor_task_handle
     );
     
-    if (xReturned != pdPASS) {
+    if (xReturned != pdPASS || monitor_task_handle == NULL) {
         ESP_LOGE(TAG, "Failed to create system monitor task");
+        ESP_LOGE(TAG, "CRITICAL: System cannot function without monitor task");
+        
         if (g_watchdog_available) {
-            watchdog_manager_force_reset("task_creation_failed");
+            watchdog_manager_force_reset("monitor_task_creation_failed");
         } else {
             esp_restart();
         }
     }
     
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    
     g_system_initialized = true;
     ESP_LOGI(TAG, "System initialization completed successfully");
     
     uint32_t main_cycle = 0;
+    uint32_t main_feed_errors = 0;
     
     while (1) {
-        if (g_watchdog_available) {
-            watchdog_manager_feed();
-        } else {
-            esp_task_wdt_reset();
+        if (main_task_registered) {
+            esp_err_t feed_ret = watchdog_manager_feed();
+            if (feed_ret != ESP_OK) {
+                main_feed_errors++;
+                ESP_LOGW(TAG, "Main task watchdog feed failed: %s (count: %lu)", 
+                        esp_err_to_name(feed_ret), main_feed_errors);
+                
+                if (main_feed_errors >= 30) {
+                    ESP_LOGE(TAG, "Too many main feed failures, attempting re-registration");
+                    watchdog_manager_unregister_task(NULL);
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                    
+                    esp_err_t reg_ret = watchdog_manager_register_task(NULL, "app_main");
+                    if (reg_ret == ESP_OK) {
+                        ESP_LOGI(TAG, "Main task re-registered successfully");
+                        main_feed_errors = 0;
+                    } else {
+                        ESP_LOGE(TAG, "CRITICAL: Cannot re-register main task");
+                        esp_restart();
+                    }
+                }
+            } else {
+                if (main_feed_errors > 0) {
+                    main_feed_errors = 0;
+                }
+            }
         }
         
         main_cycle++;
@@ -763,9 +823,9 @@ void app_main(void)
                 const char *last_reset_reason;
                 
                 if (watchdog_manager_get_stats(&feed_count, &error_count, &last_reset_reason) == ESP_OK) {
-                    if (error_count > 0) {
-                        ESP_LOGW(TAG, "Watchdog errors detected: %lu (last reset: %s)", 
-                                error_count, last_reset_reason ? last_reset_reason : "none");
+                    if (error_count > 100) {
+                        ESP_LOGW(TAG, "High watchdog error count: %lu (feeds: %lu, last reset: %s)", 
+                                error_count, feed_count, last_reset_reason ? last_reset_reason : "none");
                     }
                 }
                 
@@ -778,8 +838,12 @@ void app_main(void)
         
         if (main_cycle % 60 == 0) {
             size_t free_heap = esp_get_free_heap_size();
-            if (free_heap < 30000) {
-                ESP_LOGW(TAG, "Main task: Low memory detected: %zu bytes", free_heap);
+            size_t min_heap = esp_get_minimum_free_heap_size();
+            ESP_LOGI(TAG, "Main task: heap free=%zu min=%zu", free_heap, min_heap);
+            
+            if (free_heap < 30000 || min_heap < 20000) {
+                ESP_LOGW(TAG, "Main task: Low memory detected");
+                force_heap_cleanup();
             }
         }
         

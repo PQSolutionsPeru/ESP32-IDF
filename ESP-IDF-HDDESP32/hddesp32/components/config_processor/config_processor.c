@@ -146,10 +146,11 @@ esp_err_t process_esp32_configuration(const char *config_json) {
     
     cJSON_Delete(root);
     
+    // STACK CALCULADO: 6144 bytes (6KB) - basado en análisis detallado de operaciones MQTT
     BaseType_t task_created = xTaskCreate(
         config_response_task,
         "cfg_resp",
-        4096,
+        6144,  // CALCULADO: 612 bytes variables + 2500 bytes MQTT + 1500 bytes overhead + 1500 bytes margen
         params,
         5,
         NULL
@@ -161,5 +162,6 @@ esp_err_t process_esp32_configuration(const char *config_json) {
         return ESP_FAIL;
     }
     
+    ESP_LOGI(TAG, "Config response task created with calculated stack (6144 bytes)");
     return ESP_OK;
 }

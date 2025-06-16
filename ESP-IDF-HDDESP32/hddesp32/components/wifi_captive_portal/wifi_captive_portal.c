@@ -48,14 +48,14 @@ static esp_err_t start_web_server(void)
 {
     captive_portal_context_t *ctx = &s_portal_ctx;
     
-    // Configurar el servidor HTTP simple
+    // Configurar el servidor HTTP simple - STACK OPTIMIZADO
     simple_http_server_config_t config = {
         .port = 80,
         .max_connections = 4,
-        .stack_size = 8192
+        .stack_size = 5120  // REDUCIDO DE 8192 A 5120
     };
     
-    ESP_LOGI(TAG, "Starting HTTP server on port: %d", config.port);
+    ESP_LOGI(TAG, "Starting HTTP server on port: %d with optimized stack", config.port);
     
     esp_err_t ret = simple_http_server_start(&config, &ctx->server);
     if (ret != ESP_OK) {
@@ -63,7 +63,7 @@ static esp_err_t start_web_server(void)
         return ESP_FAIL;
     }
     
-    ESP_LOGI(TAG, "HTTP server started successfully");
+    ESP_LOGI(TAG, "HTTP server started successfully with %d bytes stack", config.stack_size);
     return ESP_OK;
 }
 
@@ -115,7 +115,7 @@ esp_err_t wifi_captive_portal_start(const char *ap_ssid, const char *ap_password
     }
     
     ctx->is_active = true;
-    ESP_LOGI(TAG, "Captive portal started successfully");
+    ESP_LOGI(TAG, "Captive portal started successfully with optimized memory usage");
     return ESP_OK;
 }
 
