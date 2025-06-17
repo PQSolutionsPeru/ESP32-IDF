@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.FirebaseFirestore
 import com.pqsolutions.hdd_monitor.data.Event
 import com.pqsolutions.hdd_monitor.data.EventRepository
+import com.pqsolutions.hdd_monitor.data.Panel
 import com.pqsolutions.hdd_monitor.data.PanelRepository
 import com.pqsolutions.hdd_monitor.data.UserRepository
 import com.pqsolutions.hdd_monitor.domain.model.EventStatus
@@ -65,7 +66,6 @@ class EventViewModel @Inject constructor(
     private var eventsJob: Job? = null
 
     init {
-        // Asegurando ando que siempre comienza con el orden por lastUpdate descendente
         currentSort = EventSortOption(
             field = EventSortOption.SortField.LAST_UPDATE,
             direction = EventSortOption.SortDirection.DESC
@@ -77,7 +77,7 @@ class EventViewModel @Inject constructor(
     }
 
     fun loadEvents() {
-        eventsJob?.cancel() // Cancelar job anterior si existe
+        eventsJob?.cancel()
 
         eventsJob = viewModelScope.launch {
             try {
@@ -152,7 +152,7 @@ class EventViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-                if (e !is CancellationException) {  // Ignorar excepciones de cancelación
+                if (e !is CancellationException) {
                     Log.e(TAG, "Error in loadEvents", e)
                     _state.update {
                         it.copy(
@@ -172,7 +172,7 @@ class EventViewModel @Inject constructor(
             return
         }
 
-        eventsJob?.cancel() // Cancelar job anterior si existe
+        eventsJob?.cancel()
         eventsJob = viewModelScope.launch {
             try {
                 Log.d(TAG, "Cargando evento específico: $eventId")
@@ -579,21 +579,17 @@ class EventViewModel @Inject constructor(
         val currentState = _state.value
         if (currentState.hasDateTime) {
             try {
-                // Zona horaria de Perú
                 val peruZoneId = ZoneId.of("America/Lima")
 
                 val selectedDate = currentState.currentDate!!
                 val selectedTime = currentState.currentTime!!
                 val dateTime = LocalDateTime.of(selectedDate, selectedTime)
 
-                // Log para depuración
                 Log.d(TAG, "Fecha/hora seleccionada: ${dateTime.format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm"))}")
 
-                // Usar la zona horaria de Perú para obtener la hora actual
                 val now: LocalDateTime = LocalDateTime.now(peruZoneId)
                 Log.d(TAG, "Fecha/hora actual (Perú): ${now.format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm"))}")
 
-                // Validación mejorada para fechas
                 if (dateTime.isBefore(now)) {
                     _uiEvent.send(EventUIEvent.ShowSnackbar("La fecha y hora seleccionadas deben ser posteriores a la hora actual"))
                     return
@@ -603,7 +599,6 @@ class EventViewModel @Inject constructor(
                     ?: throw IllegalStateException("No hay usuario autenticado")
 
                 if (currentState.selectedEvent != null) {
-                    // CASO EDICIÓN DE EVENTO
                     val updatedEvent = currentState.selectedEvent.update(
                         title = currentState.selectedEvent.title,
                         text = currentState.selectedEvent.text,
@@ -618,7 +613,6 @@ class EventViewModel @Inject constructor(
                         return
                     }
 
-                    // Verificar campos básicos obligatorios, permitiendo eventos sin panel
                     if (updatedEvent.title.isBlank() || updatedEvent.text.isBlank() || updatedEvent.type.isNullOrBlank()) {
                         _uiEvent.send(EventUIEvent.ShowSnackbar("Evento inválido. Título, descripción y tipo son obligatorios"))
                         return
@@ -626,7 +620,6 @@ class EventViewModel @Inject constructor(
 
                     updateEvent(updatedEvent)
                 } else {
-                    // CASO CREACIÓN DE EVENTO
                     val clientDocName = if (currentUser.role == UserRole.ADMIN) {
                         currentState.selectedClients.firstOrNull()
                             ?: throw IllegalStateException("Debe seleccionar un cliente")
@@ -637,13 +630,12 @@ class EventViewModel @Inject constructor(
                     val eventType = currentState.selectedEventType
                         ?: throw IllegalStateException("Debe seleccionar un tipo de evento")
 
-                    // Log para depuración
                     Log.d(TAG, "Creando evento: tipo=$eventType, fecha=${dateTime.toLocalDate()}, hora=${dateTime.toLocalTime()}")
 
                     val newEvent = Event.createNew(
                         clientDocName = clientDocName,
-                        panelDocName = currentState.selectedPanelDocName,  // Puede ser null
-                        panelName = currentState.selectedPanelName,        // Puede ser null
+                        panelDocName = currentState.selectedPanelDocName,
+                        panelName = currentState.selectedPanelName,
                         title = currentState.newEventTitle,
                         text = currentState.newEventDescription,
                         dateTime = dateTime,
@@ -652,7 +644,6 @@ class EventViewModel @Inject constructor(
                         createdByAccountRole = currentUser.role.toString()
                     )
 
-                    // Verificar campos básicos obligatorios, permitiendo eventos sin panel
                     if (newEvent.title.isBlank() || newEvent.text.isBlank()) {
                         _uiEvent.send(EventUIEvent.ShowSnackbar("Evento inválido. Título y descripción son obligatorios"))
                         return
@@ -679,21 +670,18 @@ class EventViewModel @Inject constructor(
         if (event.panelDocName != null && event.isProgramado) {
             viewModelScope.launch {
                 try {
-                    // Log para debug
                     Log.d(TAG, "Starting panel observation for event: ${event.documentName}, panel: ${event.panelDocName}")
 
                     panelRepository.observePanelUpdates(event.clientDocName, event.panelDocName)
-                        .take(1) // Solo toma el primer valor
-                        .collect { panel ->
+                        .take(1)
+                        .collect { panel: Panel? ->
                             if (panel != null) {
-                                // Log para mostrar el nombre del panel que viene de la BD
                                 Log.d(TAG, "Panel data retrieved: ${panel.name} for event: ${event.documentName}")
                                 Log.d(TAG, "Current event panel name: ${event.panelName}")
 
                                 if (panel.name != event.panelName) {
                                     Log.d(TAG, "Panel name differs, updating only UI for event: ${event.documentName}")
 
-                                    // SOLO actualizar la UI local sin tocar Firebase
                                     _state.update { currentState ->
                                         val updatedEvents = currentState.events.map {
                                             if (it.documentName == event.documentName)
@@ -703,24 +691,10 @@ class EventViewModel @Inject constructor(
                                         }
                                         currentState.copy(events = updatedEvents)
                                     }
-
-                                    // Si necesitamos actualizar la base de datos, lo hacemos sin cambiar lastUpdate
-                                    // Esto es opcional, puedes dejarlo comentado si prefieres solo actualizar la UI
-                                    /*
-                                    val updatedEvent = event.copy(panelName = panel.name)
-                                    eventRepository.updateEvent(event.clientDocName, updatedEvent, updateLastUpdate = false)
-                                        .onSuccess {
-                                            Log.d(TAG, "Panel name updated in database without changing lastUpdate: ${event.documentName}")
-                                        }
-                                        .onFailure { error ->
-                                            Log.e(TAG, "Error updating panel name", error)
-                                        }
-                                    */
                                 } else {
                                     Log.d(TAG, "Panel name unchanged for event: ${event.documentName}, no update needed")
                                 }
                             } else {
-                                // Solo mantener el caso crítico de panel eliminado
                                 handleDeletedPanel(event)
                             }
                         }
@@ -734,7 +708,6 @@ class EventViewModel @Inject constructor(
     }
 
     private fun updateEventPanelInfo(event: Event) {
-        // Evitar actualizar eventos que ya no están cargados
         if (_state.value.events.none { it.documentName == event.documentName }) {
             Log.d(TAG, "Ignorando actualización para evento ya no cargado: ${event.documentName}")
             return
@@ -742,17 +715,14 @@ class EventViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                // Solo actualizar si realmente hay un cambio y el evento sigue programado
                 val existingEvent = state.value.events.find { it.documentName == event.documentName }
                 if (existingEvent?.panelName != event.panelName && existingEvent?.isProgramado == true) {
                     Log.d(TAG, "Actualizando información de panel para evento: ${event.documentName}")
 
-                    // Creamos una versión del evento que NO actualice lastUpdate
                     val eventWithoutLastUpdateChange = event.copy(lastUpdate = existingEvent.lastUpdate)
 
                     eventRepository.updateEventWithoutLastUpdate(event.clientDocName, eventWithoutLastUpdateChange)
                         .onSuccess {
-                            // Simplemente actualizar el estado local sin recargar todos los eventos
                             _state.update { currentState ->
                                 val updatedEvents = currentState.events.map {
                                     if (it.documentName == event.documentName) event else it
@@ -776,12 +746,10 @@ class EventViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val updatedEvent = event.copy(panelDocName = null, panelName = null)
-                // Importante: no actualizar lastUpdate cuando se maneja un panel eliminado
                 eventRepository.updateEvent(event.clientDocName, updatedEvent, updateLastUpdate = false)
                     .onSuccess {
                         _uiEvent.send(EventUIEvent.ShowSnackbar("Panel eliminado: se actualizó el evento"))
 
-                        // Actualización local de la UI sin recargar todos los eventos
                         _state.update { currentState ->
                             val updatedEvents = currentState.events.map {
                                 if (it.documentName == event.documentName)
@@ -1057,10 +1025,8 @@ class EventViewModel @Inject constructor(
         return when (currentSort.field) {
             EventSortOption.SortField.DATE -> {
                 if (currentSort.direction == EventSortOption.SortDirection.DESC) {
-                    // Ordenar por fecha descendente (más recientes primero)
                     filteredEvents.sortedByDescending { it.dateTime ?: LocalDateTime.MIN }
                 } else {
-                    // Ordenar por fecha ascendente
                     filteredEvents.sortedBy { it.dateTime ?: LocalDateTime.MIN }
                 }
             }

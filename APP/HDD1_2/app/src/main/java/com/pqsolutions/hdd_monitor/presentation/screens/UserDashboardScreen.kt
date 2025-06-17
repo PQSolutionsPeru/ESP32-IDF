@@ -27,7 +27,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -75,14 +74,7 @@ fun UserDashboardScreen(
 
     LaunchedEffect(Unit) {
         viewModel.loadPanels()
-        viewModel.startPeriodicRefresh()
         notificationViewModel.restartNotificationCollection()
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            viewModel.stopPeriodicRefresh()
-        }
     }
 
     HDD1_2Theme {
@@ -91,26 +83,6 @@ fun UserDashboardScreen(
                 ScreenTopBar(
                     title = stringResource(R.string.user_dashboard_title),
                     actions = {
-                        IconButton(
-                            onClick = {
-                                performHapticFeedback(context)
-                                viewModel.loadPanels()
-                            },
-                            enabled = !uiState.isLoading
-                        ) {
-                            if (uiState.isLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = "Actualizar",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                        }
                         AnimatedNotificationBell(
                             hasNewNotifications = hasPendingNotifications,
                             notificationCount = notificationUiState.pendingCount,
@@ -273,7 +245,6 @@ fun UserPanelItem(panel: Panel) {
                     style = MaterialTheme.typography.bodyMedium
                 )
             } else {
-                // CAMBIO: Usar activeRelays para contar solo relays activos en DISC
                 val activeRelaysInDisc = panel.activeRelays.count { it.status == "DISC" }
                 val hasActiveIssues = activeRelaysInDisc > 0
 
@@ -295,7 +266,6 @@ fun UserPanelItem(panel: Panel) {
                     )
                 } else {
                     Text("Detalles de relays activos:", style = MaterialTheme.typography.bodyMedium)
-                    // CAMBIO: Mostrar solo relays activos
                     panel.activeRelays.forEach { relay ->
                         UserRelayStatus(relay)
                     }

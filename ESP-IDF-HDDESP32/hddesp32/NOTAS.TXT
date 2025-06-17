@@ -46,3 +46,8 @@ POR QUÉ EN esp32_config_manager.py HAY EN ESP32_STATES LOS VALORES 'REGISTERED'
 
 
 comparto lo solicitado; si hay funciones a corregir entonces dámelas completas y ya corregidas, sin comentarios en el código y explícame dónde estaba el problema
+
+
+
+
+Ahora tu app escucha en tiempo real a Firestore usando únicamente snapshot listeners

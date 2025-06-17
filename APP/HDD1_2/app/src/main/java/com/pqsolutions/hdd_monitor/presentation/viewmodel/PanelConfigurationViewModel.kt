@@ -17,7 +17,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -136,37 +135,30 @@ class PanelConfigurationViewModel @Inject constructor(
         try {
             Log.d(TAG, "Cargando datos para creación (admin)")
 
-            esp32Repository.observeUnassignedESP32s()
-                .catch { error ->
-                    Log.e(TAG, "Error en flujo de ESP32s no asignados", error)
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "Error cargando ESP32s: ${error.message}"
-                    )
-                }
-                .collect { unassignedESP32s ->
-                    val availableESP32s = unassignedESP32s.filter { esp32 ->
-                        esp32.status in listOf(
-                            ESP32Device.STATUS_AWAITING_CONFIG,
-                            ESP32Device.STATUS_PENDING_ASSIGNMENT,
-                            ESP32Device.STATUS_ONLINE,
-                            ESP32Device.STATUS_RUNNING
-                        )
-                    }
+            val unassignedESP32s = esp32Repository.getUnassignedESP32s()
 
-                    val esp32StatusMap = unassignedESP32s.associate {
-                        it.documentName to it.status
-                    }
+            val availableESP32s = unassignedESP32s.filter { esp32 ->
+                esp32.status in listOf(
+                    ESP32Device.STATUS_AWAITING_CONFIG,
+                    ESP32Device.STATUS_PENDING_ASSIGNMENT,
+                    ESP32Device.STATUS_ONLINE,
+                    ESP32Device.STATUS_RUNNING
+                )
+            }
 
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        availableESP32s = availableESP32s,
-                        esp32StatusMap = esp32StatusMap,
-                        error = null
-                    )
+            val esp32StatusMap = mutableMapOf<String, String>()
+            unassignedESP32s.forEach { esp32 ->
+                esp32StatusMap[esp32.documentName] = esp32.status
+            }
 
-                    Log.d(TAG, "Datos de creación (admin) cargados - ESP32s disponibles: ${availableESP32s.size}")
-                }
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                availableESP32s = availableESP32s,
+                esp32StatusMap = esp32StatusMap,
+                error = null
+            )
+
+            Log.d(TAG, "Datos de creación (admin) cargados - ESP32s disponibles: ${availableESP32s.size}")
 
         } catch (e: Exception) {
             Log.e(TAG, "Error cargando datos de creación", e)
@@ -219,20 +211,14 @@ class PanelConfigurationViewModel @Inject constructor(
 
     private suspend fun loadEditModeData(clientDocName: String, panelId: String) {
         try {
-            combine(
-                panelRepository.observePanelUpdates(clientDocName, panelId),
-                esp32Repository.observeUnassignedESP32s(),
-                esp32Repository.observeAssignedESP32s(clientDocName)
-            ) { panel, unassignedESP32s, assignedESP32s ->
-                Triple(panel, unassignedESP32s, assignedESP32s)
-            }
+            panelRepository.observePanelUpdates(clientDocName, panelId)
                 .catch { error ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = "Error cargando datos: ${error.message}"
                     )
                 }
-                .collect { (panel, unassignedESP32s, assignedESP32s) ->
+                .collect { panel ->
                     if (panel == null) {
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
@@ -241,23 +227,42 @@ class PanelConfigurationViewModel @Inject constructor(
                         return@collect
                     }
 
-                    val availableESP32s = buildList {
-                        addAll(unassignedESP32s)
-                        assignedESP32s.find { it.documentName == panel.esp32_id }?.let { add(it) }
-                    }
+                    viewModelScope.launch {
+                        try {
+                            val unassignedESP32s = esp32Repository.getUnassignedESP32s()
+                            val assignedESP32s = esp32Repository.getAssignedESP32s(clientDocName)
 
-                    val esp32StatusMap = buildMap {
-                        unassignedESP32s.forEach { put(it.documentName, it.status) }
-                        assignedESP32s.forEach { put(it.documentName, it.status) }
-                    }
+                            val availableESP32s = mutableListOf<ESP32Device>()
+                            availableESP32s.addAll(unassignedESP32s)
 
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        currentPanel = panel,
-                        availableESP32s = availableESP32s,
-                        esp32StatusMap = esp32StatusMap,
-                        error = null
-                    )
+                            val currentESP32 = assignedESP32s.find { it.documentName == panel.esp32_id }
+                            if (currentESP32 != null) {
+                                availableESP32s.add(currentESP32)
+                            }
+
+                            val esp32StatusMap = mutableMapOf<String, String>()
+                            unassignedESP32s.forEach { esp32 ->
+                                esp32StatusMap[esp32.documentName] = esp32.status
+                            }
+                            assignedESP32s.forEach { esp32 ->
+                                esp32StatusMap[esp32.documentName] = esp32.status
+                            }
+
+                            _uiState.value = _uiState.value.copy(
+                                isLoading = false,
+                                currentPanel = panel,
+                                availableESP32s = availableESP32s,
+                                esp32StatusMap = esp32StatusMap,
+                                error = null
+                            )
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error loading ESP32 data", e)
+                            _uiState.value = _uiState.value.copy(
+                                isLoading = false,
+                                error = "Error cargando ESP32s: ${e.message}"
+                            )
+                        }
+                    }
                 }
 
         } catch (e: Exception) {
@@ -270,34 +275,28 @@ class PanelConfigurationViewModel @Inject constructor(
 
     private suspend fun loadCreateModeData(clientDocName: String) {
         try {
-            esp32Repository.observeUnassignedESP32s()
-                .catch { error ->
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "Error cargando ESP32s: ${error.message}"
-                    )
-                }
-                .collect { unassignedESP32s ->
-                    val availableESP32s = unassignedESP32s.filter { esp32 ->
-                        esp32.status in listOf(
-                            ESP32Device.STATUS_AWAITING_CONFIG,
-                            ESP32Device.STATUS_PENDING_ASSIGNMENT,
-                            ESP32Device.STATUS_ONLINE,
-                            ESP32Device.STATUS_RUNNING
-                        )
-                    }
+            val unassignedESP32s = esp32Repository.getUnassignedESP32s()
 
-                    val esp32StatusMap = unassignedESP32s.associate {
-                        it.documentName to it.status
-                    }
+            val availableESP32s = unassignedESP32s.filter { esp32 ->
+                esp32.status in listOf(
+                    ESP32Device.STATUS_AWAITING_CONFIG,
+                    ESP32Device.STATUS_PENDING_ASSIGNMENT,
+                    ESP32Device.STATUS_ONLINE,
+                    ESP32Device.STATUS_RUNNING
+                )
+            }
 
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        availableESP32s = availableESP32s,
-                        esp32StatusMap = esp32StatusMap,
-                        error = null
-                    )
-                }
+            val esp32StatusMap = mutableMapOf<String, String>()
+            unassignedESP32s.forEach { esp32 ->
+                esp32StatusMap[esp32.documentName] = esp32.status
+            }
+
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                availableESP32s = availableESP32s,
+                esp32StatusMap = esp32StatusMap,
+                error = null
+            )
 
         } catch (e: Exception) {
             _uiState.value = _uiState.value.copy(

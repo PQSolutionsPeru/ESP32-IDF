@@ -27,7 +27,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -75,27 +74,10 @@ fun AdminDashboardScreen(
     val notificationUiState by notificationViewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    val lifecycleKey = remember { "dashboard_lifecycle" }
-
-    LaunchedEffect(lifecycleKey) {
+    LaunchedEffect(Unit) {
         Log.d(TAG, "LaunchedEffect: Loading panels for admin dashboard")
-        // CAMBIO: Usar loadPanels() en lugar de refreshPanels()
         viewModel.loadPanels()
-
-        // Reiniciar la recolección de notificaciones
-        Log.d(TAG, "AdminDashboardScreen: Reiniciando recolección de notificaciones")
         notificationViewModel.restartNotificationCollection()
-    }
-
-    // DisposableEffect vinculado a la misma key que LaunchedEffect
-    DisposableEffect(lifecycleKey) {
-        // Al entrar en la pantalla: iniciar actualización periódica
-        viewModel.startPeriodicRefresh()
-
-        onDispose {
-            Log.d(TAG, "DisposableEffect: Cleaning up admin dashboard")
-            viewModel.stopPeriodicRefresh()
-        }
     }
 
     HDD1_2Theme {
@@ -104,29 +86,6 @@ fun AdminDashboardScreen(
                 ScreenTopBar(
                     title = stringResource(R.string.admin_dashboard_title),
                     actions = {
-                        // Botón de actualizar
-                        IconButton(
-                            onClick = {
-                                performHapticFeedback(context)
-                                // CAMBIO: Usar loadPanels() para mantener los listeners activos
-                                viewModel.loadPanels()
-                            },
-                            enabled = !uiState.isLoading
-                        ) {
-                            if (uiState.isLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = "Actualizar",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                        }
-                        // Campana de notificaciones
                         AnimatedNotificationBell(
                             hasNewNotifications = hasPendingNotifications,
                             notificationCount = notificationUiState.pendingCount,
@@ -317,7 +276,6 @@ fun AdminPanelItem(panel: Panel) {
                     style = MaterialTheme.typography.bodyMedium
                 )
             } else {
-                // CAMBIO: Usar activeRelays para contar solo relays activos en DISC
                 val activeRelaysInDisc = panel.activeRelays.count { it.status == "DISC" }
                 val hasActiveIssues = activeRelaysInDisc > 0
 
@@ -339,7 +297,6 @@ fun AdminPanelItem(panel: Panel) {
                     )
                 } else {
                     Text("Detalles de relays activos:", style = MaterialTheme.typography.bodyMedium)
-                    // CAMBIO: Mostrar solo relays activos
                     panel.activeRelays.forEach { relay ->
                         AdminRelayStatus(relay)
                     }
@@ -366,18 +323,16 @@ fun AdminPanelItemForRelay(
     Log.d(TAG, "Rendering AdminPanelItemForRelay: ${panel.name}, Relay: ${relay.name}, isAlarmRelay: $isAlarmRelay")
     var expanded by remember { mutableStateOf(false) }
 
-    // Determinar color basado en el tipo de relay
     val backgroundColor = if (isAlarmRelay) {
-        Color(0xFFFFEBEE) // Rojo claro para relay Alarma
+        Color(0xFFFFEBEE)
     } else {
-        Color(0xFFFFEE58) // Amarillo más intenso para otros relays
+        Color(0xFFFFEE58)
     }
 
-    // Color del texto para paneles amarillos
     val textColor = if (!isAlarmRelay) {
-        Color(0xFF0D47A1) // Azul oscuro para texto en paneles amarillos
+        Color(0xFF0D47A1)
     } else {
-        MaterialTheme.colorScheme.onSurface // Color normal para otros casos
+        MaterialTheme.colorScheme.onSurface
     }
 
     Card(
@@ -407,7 +362,6 @@ fun AdminPanelItemForRelay(
                 color = if (!isAlarmRelay) textColor else MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            // Mostrar mensaje específico del relay en DISC
             Text(
                 text = "Estado: ${relay.name} en DISC",
                 style = MaterialTheme.typography.bodyMedium.copy(
@@ -425,7 +379,6 @@ fun AdminPanelItemForRelay(
                     color = if (isAlarmRelay) PanelColors.StatusDisc else textColor
                 )
 
-                // Mostrar información adicional si está disponible
                 if (relay.date_time != null) {
                     Text(
                         text = "Fecha: ${relay.date_time}",
