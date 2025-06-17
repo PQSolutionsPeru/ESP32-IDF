@@ -57,7 +57,13 @@ fun RelayControlScreen(
 
         onDispose {
             Log.d(TAG, "RelayControlScreen disposed")
+
+            showRelayConfigDialog = false
+            selectedPanel = null
+            selectedRelay = null
+
             viewModel.stopPeriodicRefresh()
+            viewModel.cleanup()
         }
     }
 
@@ -73,7 +79,12 @@ fun RelayControlScreen(
             topBar = {
                 AppTopBar(
                     title = stringResource(R.string.relay_control_title),
-                    onBackClick = onBackClick,
+                    onBackClick = {
+                        showRelayConfigDialog = false
+                        selectedPanel = null
+                        selectedRelay = null
+                        onBackClick()
+                    },
                     actions = {
                         IconButton(
                             onClick = {

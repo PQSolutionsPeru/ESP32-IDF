@@ -386,8 +386,27 @@ class RelayControlViewModel @Inject constructor(
     }
 
     fun stopPeriodicRefresh() {
+        Log.d(TAG, "Refresh periódico cancelado")
         refreshJob?.cancel()
         refreshJob = null
+
+        _uiState.value = _uiState.value.copy(
+            operationInProgress = false
+        )
+    }
+
+    fun cleanup() {
+        Log.d(TAG, "Limpiando estado del ViewModel")
+
+        loadingJob?.cancel()
+        statusUpdateJob?.cancel()
+        refreshJob?.cancel()
+
+        pendingCommands.clear()
+
+        _uiState.value = RelayControlState()
+
+        Log.d(TAG, "Estado del ViewModel limpiado")
     }
 
     override fun onCleared() {
@@ -399,6 +418,12 @@ class RelayControlViewModel @Inject constructor(
         refreshJob?.cancel()
 
         pendingCommands.clear()
+
+        _uiState.value = _uiState.value.copy(
+            operationInProgress = false,
+            isLoading = false,
+            error = null
+        )
 
         Log.d(TAG, "ViewModel limpiado exitosamente")
     }

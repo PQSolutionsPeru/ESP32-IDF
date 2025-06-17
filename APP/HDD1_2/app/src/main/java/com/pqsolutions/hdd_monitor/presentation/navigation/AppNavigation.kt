@@ -411,13 +411,6 @@ private fun safeNavigateBack(navController: NavHostController) {
             return
         }
 
-        if (navController.currentBackStackEntry?.lifecycle?.currentState?.isAtLeast(
-                androidx.lifecycle.Lifecycle.State.RESUMED
-            ) == false) {
-            Log.d("Navigation", "Navegación en curso, esperando...")
-            return
-        }
-
         val canPop = navController.previousBackStackEntry != null
 
         if (canPop) {
