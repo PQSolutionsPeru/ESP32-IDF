@@ -62,6 +62,15 @@ typedef void (*relay_state_change_callback_t)(const relay_event_t *event, void *
 // Callback para comandos de configuración MQTT
 typedef esp_err_t (*relay_mqtt_command_callback_t)(const char *topic, const char *command_json, void *user_data);
 
+typedef enum {
+    RELAY_MGR_STATE_UNINITIALIZED = 0,
+    RELAY_MGR_STATE_INITIALIZING,
+    RELAY_MGR_STATE_RUNNING,
+    RELAY_MGR_STATE_DEINITIALIZING
+} relay_mgr_state_t;
+
+relay_mgr_state_t relay_manager_get_mgr_state(void);
+
 /**
  * @brief Inicializa el Relay Manager
  * 

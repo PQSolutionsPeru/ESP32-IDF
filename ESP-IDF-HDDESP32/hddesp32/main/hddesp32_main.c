@@ -34,6 +34,8 @@ static char g_mqtt_temp_topic[128];
 static char g_mqtt_temp_data[400];
 static char g_esp32_id_buffer[ESP32_ID_LENGTH + 1];
 
+static SemaphoreHandle_t g_callback_mutex = NULL;
+
 static void print_memory_info_simple(void) {
     size_t free_heap = esp_get_free_heap_size();
     size_t min_heap = esp_get_minimum_free_heap_size();
@@ -101,7 +103,12 @@ static void watchdog_event_callback(watchdog_health_status_t status, watchdog_ch
 }
 
 static void relay_state_change_callback(const relay_event_t *event, void *user_data) {
-    if (!g_mqtt_connected || !event) {
+    if (!g_mqtt_connected || !event || !g_callback_mutex) {
+        return;
+    }
+
+    if (xSemaphoreTake(g_callback_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        ESP_LOGW(TAG, "Could not take callback mutex");
         return;
     }
     
@@ -149,6 +156,9 @@ static void relay_state_change_callback(const relay_event_t *event, void *user_d
             mqtt_manager_publish_json(relay_topic, g_relay_json_buffer, 1, false);
         }
     }
+
+    xSemaphoreGive(g_callback_mutex);
+    
 }
 
 static esp_err_t relay_mqtt_command_callback(const char *topic, const char *command_json, void *user_data) {
@@ -241,6 +251,7 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
     
     if (strcmp(topic, g_mqtt_temp_topic) == 0) {
         ESP_LOGW(TAG, "Deletion notification received");
+        
         config_manager_erase_key("client_id");
         config_manager_erase_key("panel_id");
         config_manager_erase_key("panel_name");
@@ -248,8 +259,12 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
         mqtt_manager_clear_panel_config();
         
         if (g_relay_manager_initialized) {
-            relay_manager_deinit();
-            g_relay_manager_initialized = false;
+            relay_mgr_state_t state = relay_manager_get_mgr_state();
+            if (state == RELAY_MGR_STATE_RUNNING) {
+                relay_manager_deinit();
+                g_relay_manager_initialized = false;
+                vTaskDelay(pdMS_TO_TICKS(3000));
+            }
         }
         
         time_manager_reset_network_info_sent();
@@ -503,6 +518,8 @@ void app_main(void)
     ESP_LOGI(TAG, "Starting HDD ESP32 Monitor v2.0 (ESP-IDF v5.4.1)");
 
     ESP_LOGI(TAG, "Phase 1: Basic initialization");
+
+    g_callback_mutex = xSemaphoreCreateMutex();
     
     esp_err_t watchdog_ret = watchdog_manager_init();
     if (watchdog_ret != ESP_OK) {

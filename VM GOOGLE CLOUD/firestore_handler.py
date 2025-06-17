@@ -216,7 +216,7 @@ class FirestoreHandler:
         self._relay_states = {}
         self._relay_configs = {}
         self._initial_load_complete = False
-        self._events_initial_snapshots = set()
+        self._events_initial_snapshots = {}
         self._notification_cache = {}
 
         try:
@@ -296,297 +296,179 @@ class FirestoreHandler:
 
     def watch_events(self):
         try:
-            clients_ref = self.db.collection('hdd-monitor/accounts/clients')
-            clients = clients_ref.stream()
-
-            for client in clients:
-                def create_snapshot_handler(client_id):
-                    snapshot_key = f"events_{client_id}"
-                    initial_snapshot_processed = False
-                    last_snapshot = {}
+            def on_event_change(doc_snapshot, changes, read_time):
+                for change in changes:
+                    try:
+                        doc = change.document
+                        doc_path = doc.reference.path
+                        path_parts = doc_path.split('/')
+                        
+                        if len(path_parts) >= 6 and path_parts[4] == 'events':
+                            old_data = {}
+                            new_data = doc.to_dict() if change.type.name != 'REMOVED' else None
+                            
+                            if change.type.name == 'MODIFIED':
+                                for existing_doc in doc_snapshot:
+                                    if existing_doc.id == doc.id and existing_doc.reference.path == doc_path:
+                                        old_data = self._events_initial_snapshots.get(doc_path, {})
+                                        break
+                            
+                            if change.type.name in ['ADDED', 'MODIFIED', 'REMOVED']:
+                                logging.info(f"Evento {change.type.name}: {doc.id}")
+                                self.notification_handler.process_event_update(
+                                    doc.reference,
+                                    old_data if change.type.name == 'MODIFIED' else {},
+                                    new_data
+                                )
+                            
+                            if new_data and change.type.name != 'REMOVED':
+                                self._events_initial_snapshots[doc_path] = new_data
+                            elif doc_path in self._events_initial_snapshots:
+                                del self._events_initial_snapshots[doc_path]
                     
-                    def on_snapshot(doc_snapshot, changes, read_time):
-                        nonlocal initial_snapshot_processed, last_snapshot
-                        
-                        if not initial_snapshot_processed:
-                            initial_snapshot_processed = True
-                            for doc in doc_snapshot:
-                                last_snapshot[doc.id] = doc.to_dict()
-                            logging.info(f"Carga inicial de eventos para cliente {client_id}")
-                            return
-
-                        for change in changes:
-                            try:
-                                doc = change.document
-                                new_data = doc.to_dict() if change.type.name != 'REMOVED' else None
-                                old_data = last_snapshot.get(doc.id, {})
-
-                                if change.type.name == 'ADDED':
-                                    if new_data:
-                                        logging.info(f"Nuevo evento detectado:")
-                                        logging.info(f"ID: {doc.id}")
-                                        logging.info(f"Estado inicial: {new_data.get('status')}")
-                                        self.notification_handler.process_event_update(
-                                            doc.reference,
-                                            {},
-                                            new_data
-                                        )
-                                        last_snapshot[doc.id] = new_data
-                                
-                                elif change.type.name == 'MODIFIED':
-                                    logging.info(f"Evento modificado detectado:")
-                                    logging.info(f"ID: {doc.id}")
-                                    logging.info(f"Estado anterior: {old_data.get('status')}")
-                                    logging.info(f"Nuevo estado: {new_data.get('status')}")
-                                    
-                                    self.notification_handler.process_event_update(
-                                        doc.reference,
-                                        old_data,
-                                        new_data
-                                    )
-                                    last_snapshot[doc.id] = new_data
-                                
-                                elif change.type.name == 'REMOVED':
-                                    logging.info(f"Evento eliminado detectado: {doc.id}")
-                                    self.notification_handler.process_event_update(
-                                        doc.reference,
-                                        last_snapshot.get(doc.id, {}),
-                                        None
-                                    )
-                                    last_snapshot.pop(doc.id, None)
-                                                
-                            except Exception as e:
-                                logging.error(f"Error procesando cambio de evento: {e}", exc_info=True)
-
-                        current_snapshot = {doc.id: doc.to_dict() for doc in doc_snapshot}
-                        last_snapshot.update(current_snapshot)
-                        
-                    return on_snapshot
-
-                events_ref = clients_ref.document(client.id).collection('events')
-                watch = events_ref.on_snapshot(create_snapshot_handler(client.id))
-                self._watch_references.append(watch)
-                logging.info(f"Observador de eventos iniciado para cliente {client.id}")
-
+                    except Exception as e:
+                        logging.error(f"Error procesando cambio de evento: {e}", exc_info=True)
+            
+            query = self.db.collection_group('events')
+            watch = query.on_snapshot(on_event_change)
+            self._watch_references.append(watch)
+            
+            logging.info("Observador global de eventos iniciado")
+            
         except Exception as e:
-            logging.error(f"Error iniciando observadores de eventos: {e}", exc_info=True)
+            logging.error(f"Error iniciando observador de eventos: {e}", exc_info=True)
 
     def watch_relay_states(self):
         try:
-            clients_ref = self.db.collection('hdd-monitor/accounts/clients')
-            clients = clients_ref.stream()
-
-            for client in clients:
-                panels_ref = clients_ref.document(client.id).collection('panels')
-                panels = panels_ref.stream()
-
-                for panel in panels:
-                    relays_ref = panels_ref.document(panel.id).collection('relays')
-                    for relay_doc in relays_ref.stream():
-                        self._relay_states[relay_doc.reference.path] = relay_doc.to_dict()
-
-                    watch = relays_ref.on_snapshot(self._on_relay_snapshot)
-                    self._watch_references.append(watch)
-                    logging.info(f"Observador de relays iniciado para panel {panel.id} del cliente {client.id}")
-
+            def on_relay_state_change(doc_snapshot, changes, read_time):
+                for change in changes:
+                    try:
+                        if change.type.name == 'MODIFIED':
+                            doc = change.document
+                            doc_path = doc.reference.path
+                            path_parts = doc_path.split('/')
+                            
+                            if len(path_parts) >= 8 and path_parts[4] == 'panels' and path_parts[6] == 'relays':
+                                new_data = doc.to_dict()
+                                old_data = self._relay_states.get(doc_path, {})
+                                
+                                if old_data.get('status') != new_data.get('status'):
+                                    if new_data.get('source') != 'mqtt':
+                                        logging.info(f"Cambio de estado detectado: {doc.id}")
+                                        self.notification_handler.process_relay_update(doc.reference, old_data, new_data)
+                                
+                                self._relay_states[doc_path] = new_data
+                    
+                    except Exception as e:
+                        logging.error(f"Error procesando cambio de estado: {e}")
+            
+            query = self.db.collection_group('relays')
+            watch = query.on_snapshot(on_relay_state_change)
+            self._watch_references.append(watch)
+            
+            logging.info("Observador global de estados de relay iniciado")
+            
         except Exception as e:
-            logging.error(f"Error iniciando observadores de relays: {e}", exc_info=True)
+            logging.error(f"Error iniciando observador de estados: {e}", exc_info=True)
 
     def watch_relay_configurations(self):
-        logging.info("Iniciando observador de configuraciones de relay")
+        logging.info("Iniciando observador global de configuraciones de relay")
         try:
             self._relay_configs = {}
             
-            clients_ref = self.db.collection('hdd-monitor/accounts/clients')
-            clients_snapshot = clients_ref.get()
-            
-            logging.info(f"Total de clientes encontrados: {len(clients_snapshot)}")
-            
-            for client_doc in clients_snapshot:
-                client_id = client_doc.id
-                logging.info(f"Procesando cliente: {client_id}")
-                
-                panels_ref = clients_ref.document(client_id).collection('panels')
-                panels_snapshot = panels_ref.get()
-                
-                logging.info(f"Paneles encontrados para {client_id}: {len(panels_snapshot)}")
-                
-                for panel_doc in panels_snapshot:
-                    panel_id = panel_doc.id
-                    panel_data = panel_doc.to_dict()
-                    
-                    logging.info(f"Procesando panel: {panel_id}")
-                    logging.info(f"Panel data keys: {list(panel_data.keys()) if panel_data else 'None'}")
-                    
-                    esp32_id = panel_data.get('esp32_id') if panel_data else None
-                    
-                    logging.info(f"ESP32 ID encontrado: {esp32_id}")
-                    
-                    if not esp32_id:
-                        logging.warning(f"Panel {panel_id} no tiene ESP32 asignado, omitiendo")
-                        continue
-                    
-                    relays_ref = panels_ref.document(panel_id).collection('relays')
-                    relays_snapshot = relays_ref.get()
-                    
-                    logging.info(f"Relays encontrados en panel {panel_id}: {len(relays_snapshot)}")
-                    
-                    relay_count = 0
-                    for relay_doc in relays_snapshot:
-                        relay_count += 1
-                        relay_data = relay_doc.to_dict()
-                        relay_path = relay_doc.reference.path
-                        self._relay_configs[relay_path] = relay_data
-                        
-                        logging.info(f"    Relay {relay_count}: {relay_doc.id}")
-                        logging.info(f"      isActive: {relay_data.get('isActive')}")
-                        logging.info(f"      customName: '{relay_data.get('customName')}'")
-                        logging.info(f"      contactType: {relay_data.get('contactType')}")
-                        logging.info(f"      status: {relay_data.get('status')}")
-                    
-                    logging.info(f"Total relays cargados para panel {panel_id}: {relay_count}")
-                    
-                    if relay_count == 0:
-                        logging.warning(f"No se encontraron relays para panel {panel_id}")
-                        continue
-                    
-                    def create_config_handler(client_id, panel_id, esp32_id):
-                        initial_load_done = False
-                        last_snapshot_data = {}
-                        
-                        def on_relay_config_change(doc_snapshot, changes, read_time):
-                            nonlocal initial_load_done, last_snapshot_data
-                            
-                            if not initial_load_done:
-                                initial_load_done = True
-                                logging.info(f"Snapshot inicial para panel {panel_id}: {len(doc_snapshot)} documentos")
-                                for doc in doc_snapshot:
-                                    doc_data = doc.to_dict()
-                                    last_snapshot_data[doc.id] = doc_data
-                                    self._relay_configs[doc.reference.path] = doc_data
-                                    logging.info(f"  Cargado en snapshot: {doc.id} - isActive: {doc_data.get('isActive')}")
-                                logging.info(f"Carga inicial completada para panel {panel_id}")
-                                return
-                            
-                            if len(changes) > 0:
-                                logging.info(f"CAMBIOS DETECTADOS en panel {panel_id}: {len(changes)} cambios")
-                                
-                                for change in changes:
-                                    try:
-                                        doc = change.document
-                                        relay_id = doc.id
-                                        change_type = change.type.name
-                                        
-                                        logging.info(f"  Procesando cambio '{change_type}' para relay {relay_id}")
-                                        
-                                        if change_type == 'MODIFIED':
-                                            new_data = doc.to_dict()
-                                            old_data = last_snapshot_data.get(relay_id, {})
-                                            
-                                            logging.info(f"    Datos anteriores: isActive={old_data.get('isActive')}, customName='{old_data.get('customName')}', contactType={old_data.get('contactType')}")
-                                            logging.info(f"    Datos nuevos: isActive={new_data.get('isActive')}, customName='{new_data.get('customName')}', contactType={new_data.get('contactType')}")
-                                            
-                                            config_fields_changed = []
-                                            
-                                            if old_data.get('isActive') != new_data.get('isActive'):
-                                                config_fields_changed.append(f"isActive: {old_data.get('isActive')} → {new_data.get('isActive')}")
-                                            
-                                            if old_data.get('customName') != new_data.get('customName'):
-                                                config_fields_changed.append(f"customName: '{old_data.get('customName')}' → '{new_data.get('customName')}'")
-                                            
-                                            if old_data.get('contactType') != new_data.get('contactType'):
-                                                config_fields_changed.append(f"contactType: {old_data.get('contactType')} → {new_data.get('contactType')}")
-                                            
-                                            if config_fields_changed:
-                                                logging.info(f"    CONFIGURACION CAMBIADA para relay {relay_id}:")
-                                                for change_detail in config_fields_changed:
-                                                    logging.info(f"      {change_detail}")
-                                                
-                                                command = {
-                                                    'command': 'update_config',
-                                                    'relay_id': relay_id,
-                                                    'is_active': new_data.get('isActive', True),
-                                                    'contact_type': new_data.get('contactType', 'NO'),
-                                                    'timestamp': int(time.time() * 1000)
-                                                }
-                                                
-                                                custom_name = new_data.get('customName')
-                                                if custom_name and custom_name.strip():
-                                                    command['custom_name'] = custom_name.strip()
-                                                
-                                                topic = f"clients/{client_id}/panels/{panel_id}/relay_config"
-                                                
-                                                try:
-                                                    command_json = json.dumps(command)
-                                                    logging.info(f"    ENVIANDO comando MQTT:")
-                                                    logging.info(f"      Topico: {topic}")
-                                                    logging.info(f"      Comando: {command_json}")
-                                                    
-                                                    if not self.mqtt_client:
-                                                        logging.error(f"      self.mqtt_client es None")
-                                                    elif not self.mqtt_client.connected:
-                                                        logging.error(f"      Cliente MQTT no conectado (connected={self.mqtt_client.connected})")
-                                                    else:
-                                                        logging.info(f"      Cliente MQTT OK, publicando...")
-                                                        result = self.mqtt_client.client.publish(
-                                                            topic,
-                                                            command_json,
-                                                            qos=2
-                                                        )
-                                                        
-                                                        logging.info(f"      Resultado publish: rc={result.rc}")
-                                                        
-                                                        if result.rc == mqtt.MQTT_ERR_SUCCESS:
-                                                            logging.info(f"      CONFIGURACION ENVIADA EXITOSAMENTE al ESP32 {esp32_id}")
-                                                        else:
-                                                            logging.error(f"      Error enviando MQTT, código: {result.rc}")
-                                                
-                                                except Exception as e:
-                                                    logging.error(f"      Excepción enviando configuración: {e}", exc_info=True)
-                                            
-                                            else:
-                                                logging.info(f"    Cambio en relay {relay_id} pero no es de configuración")
-                                            
-                                            last_snapshot_data[relay_id] = new_data
-                                            self._relay_configs[doc.reference.path] = new_data
-                                        
-                                        elif change_type == 'ADDED':
-                                            new_data = doc.to_dict()
-                                            last_snapshot_data[relay_id] = new_data
-                                            self._relay_configs[doc.reference.path] = new_data
-                                            logging.info(f"  Nuevo relay añadido: {relay_id}")
-                                        
-                                        elif change_type == 'REMOVED':
-                                            if relay_id in last_snapshot_data:
-                                                del last_snapshot_data[relay_id]
-                                            if doc.reference.path in self._relay_configs:
-                                                del self._relay_configs[doc.reference.path]
-                                            logging.info(f"  Relay eliminado: {relay_id}")
-                                    
-                                    except Exception as e:
-                                        logging.error(f"  Error procesando cambio de relay {doc.id}: {e}", exc_info=True)
-                            else:
-                                logging.debug(f"Sin cambios detectados en panel {panel_id}")
-                        
-                        return on_relay_config_change
-                    
+            def on_relay_config_change(doc_snapshot, changes, read_time):
+                for change in changes:
                     try:
-                        config_handler = create_config_handler(client_id, panel_id, esp32_id)
-                        watch = relays_ref.on_snapshot(config_handler)
-                        self._watch_references.append(watch)
-                        logging.info(f"OBSERVADOR INICIADO para panel {panel_id} (ESP32: {esp32_id})")
+                        doc = change.document
+                        doc_path = doc.reference.path
+                        path_parts = doc_path.split('/')
+                        
+                        if len(path_parts) >= 8 and path_parts[4] == 'panels' and path_parts[6] == 'relays':
+                            client_id = path_parts[3]
+                            panel_id = path_parts[5]
+                            relay_id = path_parts[7]
+                            
+                            logging.info(f"Cambio detectado: {change.type.name} en {client_id}/{panel_id}/{relay_id}")
+                            
+                            if change.type.name == 'REMOVED':
+                                if doc_path in self._relay_configs:
+                                    del self._relay_configs[doc_path]
+                                continue
+                            
+                            new_data = doc.to_dict()
+                            old_data = self._relay_configs.get(doc_path, {})
+                            
+                            if change.type.name == 'ADDED':
+                                self._relay_configs[doc_path] = new_data
+                                continue
+                            
+                            if change.type.name == 'MODIFIED':
+                                config_changed = False
+                                
+                                if old_data.get('isActive') != new_data.get('isActive'):
+                                    config_changed = True
+                                    logging.info(f"isActive cambió: {old_data.get('isActive')} → {new_data.get('isActive')}")
+                                
+                                if old_data.get('customName') != new_data.get('customName'):
+                                    config_changed = True
+                                    logging.info(f"customName cambió: '{old_data.get('customName')}' → '{new_data.get('customName')}'")
+                                
+                                if old_data.get('contactType') != new_data.get('contactType'):
+                                    config_changed = True
+                                    logging.info(f"contactType cambió: {old_data.get('contactType')} → {new_data.get('contactType')}")
+                                
+                                if config_changed:
+                                    panel_ref = self.db.document(f'hdd-monitor/accounts/clients/{client_id}/panels/{panel_id}')
+                                    panel_doc = panel_ref.get()
+                                    
+                                    if panel_doc.exists:
+                                        panel_data = panel_doc.to_dict()
+                                        esp32_id = panel_data.get('esp32_id')
+                                        
+                                        if esp32_id:
+                                            logging.info(f"Enviando configuración a ESP32 {esp32_id}")
+                                            
+                                            command = {
+                                                'command': 'update_config',
+                                                'relay_id': relay_id,
+                                                'is_active': new_data.get('isActive', True),
+                                                'contact_type': new_data.get('contactType', 'NO'),
+                                                'timestamp': int(time.time() * 1000)
+                                            }
+                                            
+                                            custom_name = new_data.get('customName')
+                                            if custom_name and custom_name.strip():
+                                                command['custom_name'] = custom_name.strip()
+                                            
+                                            topic = f"clients/{client_id}/panels/{panel_id}/relay_config"
+                                            
+                                            try:
+                                                if self.mqtt_client and self.mqtt_client.connected:
+                                                    result = self.mqtt_client.client.publish(
+                                                        topic,
+                                                        json.dumps(command),
+                                                        qos=2
+                                                    )
+                                                    if result.rc == mqtt.MQTT_ERR_SUCCESS:
+                                                        logging.info(f"Configuración enviada exitosamente")
+                                                    else:
+                                                        logging.error(f"Error enviando MQTT: {result.rc}")
+                                            except Exception as e:
+                                                logging.error(f"Error publicando MQTT: {e}")
+                                
+                                self._relay_configs[doc_path] = new_data
                     
                     except Exception as e:
-                        logging.error(f"Error iniciando observador para panel {panel_id}: {e}", exc_info=True)
+                        logging.error(f"Error procesando cambio: {e}", exc_info=True)
             
-            logging.info(f"Total observadores creados: {len(self._watch_references)}")
-            logging.info(f"Total configuraciones en caché: {len(self._relay_configs)}")
+            query = self.db.collection_group('relays')
+            watch = query.on_snapshot(on_relay_config_change)
+            self._watch_references.append(watch)
             
-            for path, config in self._relay_configs.items():
-                logging.info(f"  Cache: {path} -> isActive: {config.get('isActive')}")
-                            
+            logging.info("Observador global de configuraciones iniciado")
+            
         except Exception as e:
-            logging.error(f"ERROR CRITICO iniciando observador de configuraciones: {e}", exc_info=True)
+            logging.error(f"Error iniciando observador global: {e}", exc_info=True)
             raise
 
     def _on_relay_snapshot(self, doc_snapshot, changes, read_time):

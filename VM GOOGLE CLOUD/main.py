@@ -5,6 +5,7 @@ from mqtt_client import MQTTClient
 from firestore_handler import FirestoreHandler
 import json
 import threading
+import time
 
 def signal_handler(signum, frame):
     """Maneja la limpieza antes de cerrar"""
@@ -15,29 +16,23 @@ def signal_handler(signum, frame):
         logging.error(f"Error durante la limpieza: {e}")
     sys.exit(0)
 
-# En main.py, modificar:
 if __name__ == '__main__':
     try:
         logging.info("Iniciando servicio...")
         
-        # Configurar manejador de señales
         signal.signal(signal.SIGTERM, signal_handler)
         signal.signal(signal.SIGINT, signal_handler)
         
-        # Inicializar componentes
         firestore_handler = FirestoreHandler()
         
-        # NO iniciar estos observadores otra vez, ya se inician en el constructor
-        # firestore_thread = threading.Thread(...)
-        # relay_watch_thread = threading.Thread(...)
-        
-        # Usar el cliente MQTT que ya está en FirestoreHandler
         firestore_handler.mqtt_client.connect_and_loop()
         
-    except Exception as e:
-        logging.error(f"Error fatal: {e}", exc_info=True)
-        sys.exit(1)
+        while True:
+            time.sleep(1)
         
+    except KeyboardInterrupt:
+        logging.info("Servicio interrumpido por el usuario")
+        signal_handler(signal.SIGINT, None)
     except Exception as e:
         logging.error(f"Error fatal: {e}", exc_info=True)
         sys.exit(1)

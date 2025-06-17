@@ -1,7 +1,8 @@
+me dijiste que No use Core Dump en Flash si no es crítico, podrías indicarme si en verdad es crítico o no? qué archivos necesitas ver para saberlo? También me dijiste que Considere usar un estado intermedio para evitar reinicializaciones rápidas, igual, qué archivos necesitas ver para implementarlo?
+
 por qué se sigue este proceso? es necesario para manetner el ESP32 en óptimas condiciones funcionando bien las 24 horas?
 Recibes una notificación de eliminación y llamas a relay_manager_deinit()
 Inmediatamente reinicias el Relay Manager
-
 
 EL DASHBOARD, YA SEA DE USUARIO O DE ADMINISTRADOR, NO REFLEJA EN TIEMPO REAL LO QUE ESTÁ EN LA BD
 
@@ -10,6 +11,15 @@ AUMENTAR EL TIEMPO ENTRE REINTENTOS PARA QUE EL AP NO SE REINICIE
 DEBERIA DETECTAR CUANDO LA CONTRASEÑA ES INCORRECTA Y AVISAR AL USUARIO Y LANZAR DE NUEVO EL MODO AP/STA COMO AL COMIENZO, ESTO EN VEZ DE REINICIARSE A CADA RATO; SI LA CONTRASEÑA ES CORRECTA PERO LA RED NO ESTÁ DISPONIBLE DEBERÁ LANZAR DE IGUAL MANERA EL MODO AP/STA COMO AL COMIENZO
 
 MONITOREAR LOS LOGS DE LA VM EN CUANTO UN ESP32 SE CONECTA A RED WIFI, DEBERIA FUNCIONAR TAL Y COMO SI ESTUVIERA EN LA RED WIFI DEL CLIENTE.
+
+REDUCIR LA INFO A LA INFORMACIÓN BÁSICA Y NECESRIA DE LOS MENSAJES DESDE LA VM HACIA EL BROKER MQTT PARA QUE EL ESP32 NO RECIBA TANTO TEXTO QUE NO USARÁ, EJEMPLO:
+command = {
+    'command': 'update_config',
+    'relay_id': relay_id,
+    'is_active': new_data.get('isActive', True),
+    'contact_type': new_data.get('contactType', 'NO'),
+    'timestamp': int(time.time() * 1000)
+} CUANDO SOLO NECESITO command, relay_id, is_active Y contact_type, NO NECESITA EL TIMESTAMP, PERO SI EL custom_name
 
 por qué cada cierto tiempo manda mensajes al broker mqtt de ONLINE con la IP en el mensaje?
 {"esp32_id":"42A8ACA0",

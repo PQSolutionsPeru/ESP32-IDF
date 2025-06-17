@@ -81,7 +81,8 @@ class MQTTClient:
                     )
                 
                 retry_count = 0
-                self.client.loop_forever()
+                self.client.loop_start()
+                return
                 
             except Exception as e:
                 retry_count += 1

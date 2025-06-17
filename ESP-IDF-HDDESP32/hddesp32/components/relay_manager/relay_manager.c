@@ -54,26 +54,22 @@ typedef struct {
 
 // Contexto del Relay Manager
 typedef struct {
-    // Configuración de relays
     relay_config_t relays[RELAY_MANAGER_MAX_RELAYS];
-    bool initialized;
+    volatile relay_mgr_state_t state;
+    volatile bool initialized;
     
-    // FreeRTOS objects
     QueueHandle_t gpio_event_queue;
     SemaphoreHandle_t config_mutex;
     TaskHandle_t event_task_handle;
     
-    // Callbacks
     relay_state_change_callback_t state_callback;
     void *state_callback_user_data;
     relay_mqtt_command_callback_t mqtt_callback;
     void *mqtt_callback_user_data;
     
-    // Estadísticas
     uint32_t total_events_processed;
     uint32_t debounce_filtered_events;
     uint32_t mqtt_commands_processed;
-    
 } relay_manager_context_t;
 
 static relay_manager_context_t s_relay_ctx = {0};
@@ -90,32 +86,42 @@ static relay_contact_type_t string_to_contact_type(const char* str);
 static int find_relay_index_by_id(const char *relay_id);
 static int find_relay_index_by_gpio(gpio_num_t gpio_pin);
 
+relay_mgr_state_t relay_manager_get_mgr_state(void) {
+    return s_relay_ctx.state;
+}
+
 esp_err_t relay_manager_init(void) {
     relay_manager_context_t *ctx = &s_relay_ctx;
     
-    if (ctx->initialized) {
-        ESP_LOGW(TAG, "Already initialized");
+    if (ctx->state != RELAY_MGR_STATE_UNINITIALIZED) {
+        ESP_LOGW(TAG, "Already initialized or initializing");
         return ESP_ERR_INVALID_STATE;
     }
     
+    ctx->state = RELAY_MGR_STATE_INITIALIZING;
     ESP_LOGI(TAG, "Initializing Relay Manager with %d relays", RELAY_MANAGER_MAX_RELAYS);
     
-    memset(ctx, 0, sizeof(relay_manager_context_t));
+    memset(ctx->relays, 0, sizeof(ctx->relays));
+    ctx->total_events_processed = 0;
+    ctx->debounce_filtered_events = 0;
+    ctx->mqtt_commands_processed = 0;
     
     ctx->config_mutex = xSemaphoreCreateMutex();
     if (ctx->config_mutex == NULL) {
         ESP_LOGE(TAG, "Failed to create config mutex");
+        ctx->state = RELAY_MGR_STATE_UNINITIALIZED;
         return ESP_ERR_NO_MEM;
     }
     
     ctx->gpio_event_queue = xQueueCreate(100, sizeof(gpio_event_t));
     if (ctx->gpio_event_queue == NULL) {
         vSemaphoreDelete(ctx->config_mutex);
+        ctx->config_mutex = NULL;
         ESP_LOGE(TAG, "Failed to create GPIO event queue");
+        ctx->state = RELAY_MGR_STATE_UNINITIALIZED;
         return ESP_ERR_NO_MEM;
     }
     
-    // Inicializar configuración de relays
     for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
         relay_config_t *relay = &ctx->relays[i];
         
@@ -130,13 +136,11 @@ esp_err_t relay_manager_init(void) {
         relay->last_report_time = 0;
     }
     
-    // Cargar configuración guardada
     esp_err_t ret = load_relay_config();
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "Could not load config from NVS, using defaults");
     }
     
-    // Instalar servicio ISR
     ret = gpio_install_isr_service(0);
     if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
         ESP_LOGE(TAG, "Failed to install ISR service: %s", esp_err_to_name(ret));
@@ -144,7 +148,6 @@ esp_err_t relay_manager_init(void) {
     }
     ESP_LOGI(TAG, "GPIO ISR service ready");
     
-    // Configurar GPIOs
     for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
         relay_config_t *relay = &ctx->relays[i];
         
@@ -169,7 +172,6 @@ esp_err_t relay_manager_init(void) {
         
         vTaskDelay(pdMS_TO_TICKS(50));
         
-        // Leer estado inicial con estabilización simple
         int reading_sum = 0;
         for (int j = 0; j < 10; j++) {
             reading_sum += gpio_get_level(relay->gpio_pin);
@@ -187,13 +189,15 @@ esp_err_t relay_manager_init(void) {
                 relay_state_to_string(relay->current_state));
     }
     
-    // Crear tarea de eventos con stack optimizado
+    ctx->initialized = true;
+    ctx->state = RELAY_MGR_STATE_RUNNING;
+    
     BaseType_t task_ret = xTaskCreate(
         relay_event_task,
         "relay_events",
-        3072,  // Stack reducido a 3KB
+        8192,
         NULL,
-        4,     // Prioridad reducida
+        4,
         &ctx->event_task_handle
     );
     
@@ -203,13 +207,10 @@ esp_err_t relay_manager_init(void) {
         goto cleanup;
     }
     
-    ESP_LOGI(TAG, "Relay event task created with 3KB stack");
+    ESP_LOGI(TAG, "Relay event task created with 4KB stack");
     
     vTaskDelay(pdMS_TO_TICKS(300));
     
-    ctx->initialized = true;
-    
-    // Configurar interrupciones
     for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
         relay_config_t *relay = &ctx->relays[i];
         
@@ -242,6 +243,7 @@ esp_err_t relay_manager_init(void) {
     return ESP_OK;
     
 cleanup:
+    ctx->state = RELAY_MGR_STATE_UNINITIALIZED;
     ctx->initialized = false;
     
     if (ctx->event_task_handle) {
@@ -266,15 +268,15 @@ cleanup:
         ctx->config_mutex = NULL;
     }
     
-    memset(ctx, 0, sizeof(relay_manager_context_t));
-    
     return ret;
 }
 
 static void IRAM_ATTR gpio_isr_handler(void *arg) {
     gpio_num_t gpio_pin = (gpio_num_t)(uintptr_t)arg;
     
-    if (!s_relay_ctx.initialized || !s_relay_ctx.gpio_event_queue) {
+    if (s_relay_ctx.state != RELAY_MGR_STATE_RUNNING || 
+        !s_relay_ctx.initialized || 
+        !s_relay_ctx.gpio_event_queue) {
         return;
     }
     
@@ -306,14 +308,20 @@ static void relay_event_task(void *pvParameters) {
     
     ESP_LOGI(TAG, "Relay event task started");
     
+    vTaskDelay(pdMS_TO_TICKS(500));
+    
     while (1) {
+        if (ctx->state != RELAY_MGR_STATE_RUNNING) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
+        
         if (xQueueReceive(ctx->gpio_event_queue, &gpio_event, pdMS_TO_TICKS(15000)) == pdTRUE) {
             idle_cycles = 0;
             ctx->total_events_processed++;
             
-            if (!ctx->initialized) {
-                ESP_LOGW(TAG, "Context not initialized, exiting task");
-                break;
+            if (ctx->state != RELAY_MGR_STATE_RUNNING || !ctx->initialized) {
+                continue;
             }
             
             int relay_index = find_relay_index_by_gpio(gpio_event.gpio_pin);
@@ -323,12 +331,10 @@ static void relay_event_task(void *pvParameters) {
             
             relay_config_t *relay = &ctx->relays[relay_index];
             
-            // Solo procesar relays activos
             if (!relay->is_active) {
                 continue;
             }
             
-            // Debounce simple
             int64_t time_since_last = gpio_event.timestamp - relay->last_change_time;
             if (time_since_last < (RELAY_MANAGER_DEBOUNCE_TIME_MS * 1000)) {
                 ctx->debounce_filtered_events++;
@@ -337,12 +343,10 @@ static void relay_event_task(void *pvParameters) {
             
             relay_state_t new_state = gpio_to_logical_state(gpio_event.gpio_level, relay->contact_type);
             
-            // Solo procesar cambios reales
             if (new_state == relay->current_state) {
                 continue;
             }
             
-            // Limitar frecuencia de reportes
             int64_t time_since_last_report = gpio_event.timestamp - relay->last_report_time;
             if (time_since_last_report < (RELAY_MANAGER_MIN_REPORT_INTERVAL_MS * 1000)) {
                 continue;
@@ -358,7 +362,6 @@ static void relay_event_task(void *pvParameters) {
                     relay_state_to_string(old_state),
                     relay_state_to_string(new_state));
             
-            // Llamar callback sin verificaciones excesivas
             if (ctx->state_callback) {
                 relay_event_t event = {
                     .gpio_pin = relay->gpio_pin,
@@ -377,16 +380,14 @@ static void relay_event_task(void *pvParameters) {
                 ctx->state_callback(&event, ctx->state_callback_user_data);
             }
         } else {
-            // Timeout - sistema inactivo
             idle_cycles++;
             
             if (idle_cycles > 4) {
                 ESP_LOGD(TAG, "No relay events for 60 seconds");
                 idle_cycles = 0;
                 
-                if (!ctx->initialized) {
-                    ESP_LOGE(TAG, "System no longer initialized, exiting task");
-                    break;
+                if (ctx->state != RELAY_MGR_STATE_RUNNING || !ctx->initialized) {
+                    continue;
                 }
             }
         }
@@ -1002,26 +1003,40 @@ esp_err_t relay_manager_get_diagnostics_json(char *json_buffer, size_t buffer_si
 esp_err_t relay_manager_deinit(void) {
     relay_manager_context_t *ctx = &s_relay_ctx;
     
-    if (!ctx->initialized) {
+    if (ctx->state == RELAY_MGR_STATE_UNINITIALIZED || 
+        ctx->state == RELAY_MGR_STATE_DEINITIALIZING) {
         return ESP_ERR_INVALID_STATE;
     }
     
     ESP_LOGI(TAG, "Deinitializing Relay Manager");
-    
+    ctx->state = RELAY_MGR_STATE_DEINITIALIZING;
     ctx->initialized = false;
     
     for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
         if (GPIO_IS_VALID_GPIO(ctx->relays[i].gpio_pin)) {
             gpio_intr_disable(ctx->relays[i].gpio_pin);
             gpio_isr_handler_remove(ctx->relays[i].gpio_pin);
+            gpio_reset_pin(ctx->relays[i].gpio_pin);
         }
     }
     
-    if (ctx->event_task_handle) {
-        vTaskDelete(ctx->event_task_handle);
-        ctx->event_task_handle = NULL;
-        vTaskDelay(pdMS_TO_TICKS(200));
+    vTaskDelay(pdMS_TO_TICKS(100));
+    
+    if (ctx->gpio_event_queue) {
+        xQueueReset(ctx->gpio_event_queue);
     }
+    
+    if (ctx->event_task_handle) {
+        TaskHandle_t temp_handle = ctx->event_task_handle;
+        ctx->event_task_handle = NULL;
+        vTaskDelete(temp_handle);
+        vTaskDelay(pdMS_TO_TICKS(300));
+    }
+    
+    ctx->state_callback = NULL;
+    ctx->state_callback_user_data = NULL;
+    ctx->mqtt_callback = NULL;
+    ctx->mqtt_callback_user_data = NULL;
     
     if (ctx->gpio_event_queue) {
         vQueueDelete(ctx->gpio_event_queue);
@@ -1032,6 +1047,9 @@ esp_err_t relay_manager_deinit(void) {
         vSemaphoreDelete(ctx->config_mutex);
         ctx->config_mutex = NULL;
     }
+    
+    memset(ctx, 0, sizeof(relay_manager_context_t));
+    ctx->state = RELAY_MGR_STATE_UNINITIALIZED;
     
     ESP_LOGI(TAG, "Relay Manager deinitialized");
     
