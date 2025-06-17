@@ -44,10 +44,12 @@ fun ESP32ManagementScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    DisposableEffect(Unit) {
+    LaunchedEffect(Unit) {
         Log.d(TAG, "ESP32ManagementScreen iniciado - Cargando datos")
-        viewModel.loadData()
+        viewModel.initializeIfNeeded()
+    }
 
+    DisposableEffect(Unit) {
         onDispose {
             Log.d(TAG, "ESP32ManagementScreen disposed")
         }
@@ -98,7 +100,7 @@ fun ESP32ManagementScreen(
                     uiState.error != null -> {
                         ErrorSection(
                             error = uiState.error!!,
-                            onRetry = { viewModel.loadData() },
+                            onRetry = { viewModel.refreshData() },
                             onDismiss = { viewModel.clearError() }
                         )
                     }
@@ -188,19 +190,16 @@ private fun ESP32Content(
     onRefresh: () -> Unit
 ) {
     Column {
-        // Estadísticas resumen
         SummarySection(uiState = uiState)
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Lista de paneles y ESP32s
         if (uiState.panels.isEmpty() && uiState.availableESP32s.isEmpty()) {
             EmptyStateSection(onCreatePanel = onCreatePanel)
         } else {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Paneles existentes
                 if (uiState.panels.isNotEmpty()) {
                     item {
                         Text(
@@ -226,7 +225,6 @@ private fun ESP32Content(
                     item { Spacer(modifier = Modifier.height(16.dp)) }
                 }
 
-                // ESP32s disponibles
                 if (uiState.availableESP32s.isNotEmpty()) {
                     item {
                         Text(
@@ -323,8 +321,8 @@ private fun PanelCard(
         colors = CardDefaults.cardColors(
             containerColor = when {
                 panel.isESP32Offline() -> PanelColors.PanelBackgroundOffline
-                panel.hasIssues -> Color(0xFFFFEBEE) // Rojo claro
-                else -> Color(0xFFE8F5E9) // Verde claro
+                panel.hasIssues -> Color(0xFFFFEBEE)
+                else -> Color(0xFFE8F5E9)
             }
         )
     ) {
@@ -354,7 +352,6 @@ private fun PanelCard(
                     )
                 }
 
-                // Estado del ESP32
                 StatusChip(
                     status = if (isOnline) "ONLINE" else "OFFLINE",
                     isOnline = isOnline
@@ -363,7 +360,6 @@ private fun PanelCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Estado de relays
             Text(
                 text = if (panel.hasIssues) "Relays con problemas: ${panel.relaysInDisc}" else "Todos los relays OK",
                 style = MaterialTheme.typography.bodySmall,
@@ -372,7 +368,6 @@ private fun PanelCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Botones de acción
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {

@@ -60,22 +60,26 @@ class PanelRepository @Inject constructor(
 
     fun clearListeners() {
         Log.d(TAG, "Clearing all panel and relay listeners: ${activeListeners.size} listeners")
-        val listenersToRemove = activeListeners.toMap()
+
+        val listenersSnapshot = activeListeners.toMap()
         activeListeners.clear()
-        listenersToRemove.values.forEach { listener ->
+
+        listenersSnapshot.forEach { (key, listener) ->
             try {
                 listener.remove()
+                Log.d(TAG, "Listener removido: $key")
             } catch (e: Exception) {
-                Log.e(TAG, "Error removing listener", e)
+                Log.e(TAG, "Error removing listener: $key", e)
             }
         }
+
         Log.d(TAG, "All listeners cleared successfully")
     }
 
     fun getPanels(clientDocName: String?): Flow<List<Panel>> = callbackFlow {
         Log.d(TAG, "getPanels called with clientDocName: $clientDocName")
 
-        val listenerId = "panels_${clientDocName ?: "all"}_${System.currentTimeMillis()}"
+        val listenerId = "panels_${System.currentTimeMillis()}_${clientDocName ?: "all"}"
 
         try {
             val registration = if (clientDocName != null) {
@@ -83,7 +87,7 @@ class PanelRepository @Inject constructor(
                     trySend(panels)
                 }
             } else {
-                setupAllClientsPanelsListener { panels ->
+                setupAdminPanelsListener { panels ->
                     trySend(panels)
                 }
             }
@@ -101,6 +105,61 @@ class PanelRepository @Inject constructor(
             activeListeners.remove(listenerId)
         }
     }.flowOn(Dispatchers.IO)
+
+    private fun setupAdminPanelsListener(onUpdate: (List<Panel>) -> Unit): ListenerRegistration {
+        return firestore.collectionGroup("panels")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e(TAG, "Error in admin panels listener", error)
+                    return@addSnapshotListener
+                }
+
+                if (snapshot == null) {
+                    onUpdate(emptyList())
+                    return@addSnapshotListener
+                }
+
+                coroutineScope.launch {
+                    try {
+                        val panels = mutableListOf<Panel>()
+
+                        for (doc in snapshot.documents) {
+                            if (doc.exists()) {
+                                try {
+                                    val documentPath = doc.reference.path
+                                    val pathParts = documentPath.split("/")
+
+                                    if (pathParts.size >= 4) {
+                                        val clientId = pathParts[3]
+                                        val clientDisplayName = getClientDisplayName(clientId)
+
+                                        val panel = doc.toObject(Panel::class.java)?.copy(
+                                            documentName = doc.id,
+                                            clientName = clientId,
+                                            clientDisplayName = clientDisplayName,
+                                            lastUpdate = doc.getLong("lastUpdate") ?: System.currentTimeMillis()
+                                        )
+
+                                        if (panel != null) {
+                                            setupRelayListener(clientId, panel)
+                                            setupESP32Listener(panel)
+                                            panels.add(panel)
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Error converting panel for admin", e)
+                                }
+                            }
+                        }
+
+                        onUpdate(panels)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error processing admin panels", e)
+                        onUpdate(emptyList())
+                    }
+                }
+            }
+    }
 
     private suspend fun getClientDisplayName(clientDocName: String): String {
         return try {

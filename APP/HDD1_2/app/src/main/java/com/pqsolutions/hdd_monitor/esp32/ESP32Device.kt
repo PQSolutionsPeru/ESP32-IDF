@@ -2,7 +2,6 @@ package com.pqsolutions.hdd_monitor.esp32
 
 import com.google.firebase.firestore.PropertyName
 
-
 data class ESP32Device(
     val documentName: String = "",
     val MAC: String = "",
@@ -17,7 +16,9 @@ data class ESP32Device(
     @get:PropertyName("lastUpdate")
     @set:PropertyName("lastUpdate")
     var lastUpdate: com.google.firebase.Timestamp = com.google.firebase.Timestamp.now(),
-    // Campos adicionales para enriquecer la información
+    @get:PropertyName("lastNetworkUpdate")
+    @set:PropertyName("lastNetworkUpdate")
+    var lastNetworkUpdate: com.google.firebase.Timestamp = com.google.firebase.Timestamp.now(),
     val clientName: String = "",
     val panelName: String = ""
 ) {
@@ -40,6 +41,7 @@ data class ESP32Device(
         "client_id" to clientId,
         "panel_id" to panelId,
         "lastUpdate" to lastUpdate,
+        "lastNetworkUpdate" to lastNetworkUpdate,
         "clientName" to clientName,
         "panelName" to panelName
     )

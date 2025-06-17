@@ -191,8 +191,7 @@ class ESP32Repository @Inject constructor(
         try {
             Log.d(TAG, "Iniciando observación de ESP32s no asignados. DeviceId: $deviceId")
 
-            val listenerId = "observe_unassigned_esp32" + (deviceId ?: "")
-            activeListeners[listenerId]?.remove()
+            val listenerId = "unassigned_${System.currentTimeMillis()}_${deviceId ?: "all"}"
 
             val baseQuery = firestore.collection(ESP32_COLLECTION)
                 .whereIn("status", listOf(
@@ -225,7 +224,6 @@ class ESP32Repository @Inject constructor(
                                 Log.d(TAG, "ESP32 sin asignar encontrado: ${doc.id}, Status: ${device.status}")
                                 device
                             } else {
-                                Log.d(TAG, "ESP32 ya asignado, ignorando: ${doc.id}")
                                 null
                             }
                         } else null
@@ -328,11 +326,10 @@ class ESP32Repository @Inject constructor(
         try {
             Log.d(TAG, "Observando ESP32s asignados para cliente: $clientId")
 
-            val listenerId = "observe_assigned_esp32_${clientId ?: "all"}"
-            activeListeners[listenerId]?.remove()
+            val listenerId = "assigned_${System.currentTimeMillis()}_${clientId ?: "admin"}"
 
-            if (clientId != null) {
-                val listenerRegistration = firestore.collection(ESP32_COLLECTION)
+            val listenerRegistration = if (clientId != null) {
+                firestore.collection(ESP32_COLLECTION)
                     .whereEqualTo("client_id", clientId)
                     .whereIn("status", listOf(
                         ESP32Device.STATUS_ONLINE,
@@ -359,10 +356,8 @@ class ESP32Repository @Inject constructor(
                         Log.d(TAG, "ESP32s asignados encontrados para cliente: ${devices.size}")
                         trySend(devices)
                     }
-
-                activeListeners[listenerId] = listenerRegistration
             } else {
-                val listenerRegistration = firestore.collection(ESP32_COLLECTION)
+                firestore.collection(ESP32_COLLECTION)
                     .addSnapshotListener { snapshot, error ->
                         if (error != null) {
                             Log.e(TAG, "Error observando ESP32s para admin", error)
@@ -398,12 +393,12 @@ class ESP32Repository @Inject constructor(
                         Log.d(TAG, "ESP32s asignados encontrados para admin: ${devices.size}")
                         trySend(devices)
                     }
-
-                activeListeners[listenerId] = listenerRegistration
             }
 
+            activeListeners[listenerId] = listenerRegistration
+
             awaitClose {
-                activeListeners[listenerId]?.remove()
+                listenerRegistration.remove()
                 activeListeners.remove(listenerId)
             }
         } catch (e: Exception) {
@@ -674,12 +669,13 @@ class ESP32Repository @Inject constructor(
     fun clearListeners() {
         Log.d(TAG, "Limpiando todos los listeners de ESP32: ${activeListeners.size} listeners")
 
-        val keys = ArrayList(activeListeners.keys)
+        val listenersSnapshot = activeListeners.toMap()
+        activeListeners.clear()
 
-        keys.forEach { key ->
+        listenersSnapshot.forEach { (key, listener) ->
             try {
-                activeListeners[key]?.remove()
-                activeListeners.remove(key)
+                listener.remove()
+                Log.d(TAG, "Listener removido: $key")
             } catch (e: Exception) {
                 Log.e(TAG, "Error al remover listener: $key", e)
             }
