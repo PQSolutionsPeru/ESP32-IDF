@@ -35,10 +35,11 @@ class PanelConfigurationViewModel @Inject constructor(
     val uiState: StateFlow<PanelConfigurationState> = _uiState.asStateFlow()
 
     private var initializationJob: Job? = null
+    private var panelListenerJob: Job? = null
     private var saveJob: Job? = null
 
     fun initializeScreen(panelId: String?) {
-        initializationJob?.cancel()
+        cancelJobs()
 
         initializationJob = viewModelScope.launch {
             try {
@@ -63,20 +64,14 @@ class PanelConfigurationViewModel @Inject constructor(
                     isAdmin = isAdmin
                 )
 
-                if (isAdmin && panelId == null) {
-                    loadClientsForAdmin()
-                }
-
                 val (clientDocName, clientDisplayName) = when (currentUser.role) {
                     UserRole.USER -> {
-                        val displayName = if (currentUser.clientDocName.isNotEmpty()) {
-                            getClientDisplayName(currentUser.clientDocName)
-                        } else ""
+                        val displayName = getClientDisplayName(currentUser.clientDocName)
                         Pair(currentUser.clientDocName, displayName)
                     }
                     UserRole.ADMIN -> {
                         if (panelId != null) {
-                            val clientInfo = getPanelClient(panelId)
+                            val clientInfo = findPanelClient(panelId)
                             if (clientInfo.first.isEmpty()) {
                                 _uiState.value = _uiState.value.copy(
                                     isLoading = false,
@@ -86,6 +81,7 @@ class PanelConfigurationViewModel @Inject constructor(
                             }
                             clientInfo
                         } else {
+                            loadClientsForAdmin()
                             Pair("", "")
                         }
                     }
@@ -98,13 +94,12 @@ class PanelConfigurationViewModel @Inject constructor(
 
                 if (panelId != null) {
                     loadEditModeData(clientDocName, panelId)
-                } else if (currentUser.role == UserRole.USER) {
-                    loadCreateModeData(clientDocName)
                 } else {
-                    loadCreateModeDataForAdmin()
+                    loadCreateModeData(clientDocName)
                 }
 
             } catch (e: Exception) {
+                Log.e(TAG, "Error inicializando", e)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = "Error inicializando: ${e.message}"
@@ -117,9 +112,7 @@ class PanelConfigurationViewModel @Inject constructor(
         try {
             userRepository.getClients().fold(
                 onSuccess = { clients ->
-                    _uiState.value = _uiState.value.copy(
-                        availableClients = clients
-                    )
+                    _uiState.value = _uiState.value.copy(availableClients = clients)
                     Log.d(TAG, "Clientes cargados: ${clients.size}")
                 },
                 onFailure = { error ->
@@ -131,64 +124,21 @@ class PanelConfigurationViewModel @Inject constructor(
         }
     }
 
-    private suspend fun loadCreateModeDataForAdmin() {
-        try {
-            Log.d(TAG, "Cargando datos para creación (admin)")
-
-            val unassignedESP32s = esp32Repository.getUnassignedESP32s()
-
-            val availableESP32s = unassignedESP32s.filter { esp32 ->
-                esp32.status in listOf(
-                    ESP32Device.STATUS_AWAITING_CONFIG,
-                    ESP32Device.STATUS_PENDING_ASSIGNMENT,
-                    ESP32Device.STATUS_ONLINE,
-                    ESP32Device.STATUS_RUNNING
-                )
-            }
-
-            val esp32StatusMap = mutableMapOf<String, String>()
-            unassignedESP32s.forEach { esp32 ->
-                esp32StatusMap[esp32.documentName] = esp32.status
-            }
-
-            _uiState.value = _uiState.value.copy(
-                isLoading = false,
-                availableESP32s = availableESP32s,
-                esp32StatusMap = esp32StatusMap,
-                error = null
-            )
-
-            Log.d(TAG, "Datos de creación (admin) cargados - ESP32s disponibles: ${availableESP32s.size}")
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Error cargando datos de creación", e)
-            _uiState.value = _uiState.value.copy(
-                isLoading = false,
-                error = "Error cargando ESP32s: ${e.message}"
-            )
-        }
-    }
-
     private suspend fun getClientDisplayName(clientDocName: String): String {
         return try {
+            if (clientDocName.isEmpty()) return ""
             userRepository.getClients()
                 .getOrNull()
                 ?.find { it.documentName == clientDocName }
                 ?.name ?: ""
         } catch (e: Exception) {
+            Log.e(TAG, "Error obteniendo nombre de cliente", e)
             ""
         }
     }
 
-    private suspend fun getPanelClient(panelId: String): Pair<String, String> {
+    private suspend fun findPanelClient(panelId: String): Pair<String, String> {
         return try {
-            val parts = panelId.split("_")
-            if (parts.size >= 3 && parts.last().startsWith("client")) {
-                val clientDocName = parts.takeLast(2).joinToString("_")
-                val clientName = getClientDisplayName(clientDocName)
-                return Pair(clientDocName, clientName)
-            }
-
             val clientsResult = userRepository.getClients()
             if (clientsResult.isFailure) {
                 return Pair("", "")
@@ -205,17 +155,49 @@ class PanelConfigurationViewModel @Inject constructor(
 
             Pair("", "")
         } catch (e: Exception) {
+            Log.e(TAG, "Error buscando cliente del panel", e)
             Pair("", "")
         }
     }
 
     private suspend fun loadEditModeData(clientDocName: String, panelId: String) {
         try {
+            val unassignedESP32s = esp32Repository.getUnassignedESP32s()
+            val assignedESP32s = esp32Repository.getAssignedESP32s(clientDocName)
+
+            val availableESP32s = mutableListOf<ESP32Device>()
+            availableESP32s.addAll(unassignedESP32s)
+            availableESP32s.addAll(assignedESP32s)
+
+            val esp32StatusMap = mutableMapOf<String, String>()
+            availableESP32s.forEach { esp32 ->
+                esp32StatusMap[esp32.documentName] = esp32.status
+            }
+
+            _uiState.value = _uiState.value.copy(
+                availableESP32s = availableESP32s,
+                esp32StatusMap = esp32StatusMap
+            )
+
+            startPanelListener(clientDocName, panelId)
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error cargando datos de edición", e)
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                error = "Error cargando datos: ${e.message}"
+            )
+        }
+    }
+
+    private fun startPanelListener(clientDocName: String, panelId: String) {
+        panelListenerJob = viewModelScope.launch {
             panelRepository.observePanelUpdates(clientDocName, panelId)
                 .catch { error ->
+                    Log.e(TAG, "Error en listener de panel", error)
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = "Error cargando datos: ${error.message}"
+                        error = "Error observando panel: ${error.message}"
                     )
                 }
                 .collect { panel ->
@@ -224,52 +206,14 @@ class PanelConfigurationViewModel @Inject constructor(
                             isLoading = false,
                             error = "Panel no encontrado"
                         )
-                        return@collect
-                    }
-
-                    viewModelScope.launch {
-                        try {
-                            val unassignedESP32s = esp32Repository.getUnassignedESP32s()
-                            val assignedESP32s = esp32Repository.getAssignedESP32s(clientDocName)
-
-                            val availableESP32s = mutableListOf<ESP32Device>()
-                            availableESP32s.addAll(unassignedESP32s)
-
-                            val currentESP32 = assignedESP32s.find { it.documentName == panel.esp32_id }
-                            if (currentESP32 != null) {
-                                availableESP32s.add(currentESP32)
-                            }
-
-                            val esp32StatusMap = mutableMapOf<String, String>()
-                            unassignedESP32s.forEach { esp32 ->
-                                esp32StatusMap[esp32.documentName] = esp32.status
-                            }
-                            assignedESP32s.forEach { esp32 ->
-                                esp32StatusMap[esp32.documentName] = esp32.status
-                            }
-
-                            _uiState.value = _uiState.value.copy(
-                                isLoading = false,
-                                currentPanel = panel,
-                                availableESP32s = availableESP32s,
-                                esp32StatusMap = esp32StatusMap,
-                                error = null
-                            )
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error loading ESP32 data", e)
-                            _uiState.value = _uiState.value.copy(
-                                isLoading = false,
-                                error = "Error cargando ESP32s: ${e.message}"
-                            )
-                        }
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            currentPanel = panel,
+                            error = null
+                        )
                     }
                 }
-
-        } catch (e: Exception) {
-            _uiState.value = _uiState.value.copy(
-                isLoading = false,
-                error = "Error cargando panel: ${e.message}"
-            )
         }
     }
 
@@ -298,7 +242,10 @@ class PanelConfigurationViewModel @Inject constructor(
                 error = null
             )
 
+            Log.d(TAG, "Datos de creación cargados - ESP32s disponibles: ${availableESP32s.size}")
+
         } catch (e: Exception) {
+            Log.e(TAG, "Error cargando datos de creación", e)
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
                 error = "Error cargando ESP32s: ${e.message}"
@@ -471,12 +418,10 @@ class PanelConfigurationViewModel @Inject constructor(
 
     fun validatePanelName(name: String): Boolean {
         if (name.isBlank()) return false
-
         val currentPanel = _uiState.value.currentPanel
         if (currentPanel != null && currentPanel.name == name) {
             return true
         }
-
         return name.length >= 3 && name.length <= 50
     }
 
@@ -518,23 +463,17 @@ class PanelConfigurationViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(saveSuccess = false)
     }
 
-    fun cancelOperations() {
+    private fun cancelJobs() {
         initializationJob?.cancel()
+        panelListenerJob?.cancel()
         saveJob?.cancel()
-
-        _uiState.value = _uiState.value.copy(
-            isLoading = false,
-            isSaving = false
-        )
     }
 
     override fun onCleared() {
         super.onCleared()
         Log.d(TAG, "ViewModel limpiado - cancelando operaciones")
 
-        initializationJob?.cancel()
-        saveJob?.cancel()
-
+        cancelJobs()
         esp32Repository.clearListeners()
         panelRepository.clearListeners()
 
