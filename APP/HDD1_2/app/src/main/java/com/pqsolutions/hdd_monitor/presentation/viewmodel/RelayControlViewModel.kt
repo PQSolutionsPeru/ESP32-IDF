@@ -410,21 +410,25 @@ class RelayControlViewModel @Inject constructor(
     }
 
     override fun onCleared() {
-        super.onCleared()
-        Log.d(TAG, "ViewModel limpiado - cancelando jobs")
+        try {
+            super.onCleared()
+            Log.d(TAG, "RelayControlViewModel limpiado - cancelando jobs")
 
-        loadingJob?.cancel()
-        statusUpdateJob?.cancel()
-        refreshJob?.cancel()
+            loadingJob?.cancel()
+            statusUpdateJob?.cancel()
+            refreshJob?.cancel()
 
-        pendingCommands.clear()
+            loadingJob = null
+            statusUpdateJob = null
+            refreshJob = null
 
-        _uiState.value = _uiState.value.copy(
-            operationInProgress = false,
-            isLoading = false,
-            error = null
-        )
+            pendingCommands.clear()
 
-        Log.d(TAG, "ViewModel limpiado exitosamente")
+            _uiState.value = RelayControlState()
+
+            Log.d(TAG, "RelayControlViewModel limpiado exitosamente")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in RelayControlViewModel.onCleared", e)
+        }
     }
 }

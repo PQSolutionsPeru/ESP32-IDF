@@ -44,14 +44,17 @@ fun ESP32ManagementScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    LaunchedEffect(Unit) {
+    DisposableEffect(viewModel) {
         Log.d(TAG, "ESP32ManagementScreen iniciado - Cargando datos")
         viewModel.initializeIfNeeded()
-    }
 
-    DisposableEffect(Unit) {
         onDispose {
             Log.d(TAG, "ESP32ManagementScreen disposed")
+            try {
+                // Limpieza inmediata sin llamadas a viewModel que pueden estar disposed
+            } catch (e: Exception) {
+                Log.e(TAG, "Error during disposal", e)
+            }
         }
     }
 
@@ -100,8 +103,20 @@ fun ESP32ManagementScreen(
                     uiState.error != null -> {
                         ErrorSection(
                             error = uiState.error!!,
-                            onRetry = { viewModel.refreshData() },
-                            onDismiss = { viewModel.clearError() }
+                            onRetry = {
+                                try {
+                                    viewModel.refreshData()
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Error during retry", e)
+                                }
+                            },
+                            onDismiss = {
+                                try {
+                                    viewModel.clearError()
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Error clearing error", e)
+                                }
+                            }
                         )
                     }
                     else -> {
@@ -110,7 +125,13 @@ fun ESP32ManagementScreen(
                             onEditPanel = onEditPanel,
                             onCustomizeRelays = onCustomizeRelays,
                             onCreatePanel = onCreatePanel,
-                            onRefresh = { viewModel.refreshData() }
+                            onRefresh = {
+                                try {
+                                    viewModel.refreshData()
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Error during refresh", e)
+                                }
+                            }
                         )
                     }
                 }

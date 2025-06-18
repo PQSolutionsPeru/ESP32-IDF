@@ -55,9 +55,18 @@ fun PanelConfigurationScreen(
     val isEditMode = panelId != null
     val title = if (isEditMode) "Editar Panel" else "Crear Panel"
 
-    LaunchedEffect(panelId) {
+    DisposableEffect(viewModel) {
         Log.d(TAG, "PanelConfigurationScreen iniciado - Modo: ${if (isEditMode) "Editar" else "Crear"}")
         viewModel.initializeScreen(panelId)
+
+        onDispose {
+            Log.d(TAG, "PanelConfigurationScreen disposed")
+            try {
+                // No llamar métodos del ViewModel aquí - puede estar disposed
+            } catch (e: Exception) {
+                Log.e(TAG, "Error during disposal", e)
+            }
+        }
     }
 
     LaunchedEffect(uiState.currentPanel) {
@@ -75,6 +84,7 @@ fun PanelConfigurationScreen(
         }
     }
 
+    // Resto del código de la UI permanece igual...
     HDD1_2Theme {
         Scaffold(
             topBar = {
@@ -94,17 +104,25 @@ fun PanelConfigurationScreen(
             },
             bottomBar = {
                 PanelConfigurationBottomBar(
-                    canSave = viewModel.canSave(panelName, panelLocation, selectedESP32, selectedClient),
+                    canSave = try {
+                        viewModel.canSave(panelName, panelLocation, selectedESP32, selectedClient)
+                    } catch (e: Exception) {
+                        false
+                    },
                     isSaving = uiState.isSaving,
                     onSave = {
                         performHapticFeedback(context)
-                        viewModel.savePanel(
-                            panelId = panelId,
-                            name = panelName.trim(),
-                            location = panelLocation.trim(),
-                            esp32Device = selectedESP32,
-                            selectedClient = selectedClient
-                        )
+                        try {
+                            viewModel.savePanel(
+                                panelId = panelId,
+                                name = panelName.trim(),
+                                location = panelLocation.trim(),
+                                esp32Device = selectedESP32,
+                                selectedClient = selectedClient
+                            )
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error saving panel", e)
+                        }
                     },
                     onCancel = {
                         performHapticFeedback(context)
@@ -127,8 +145,20 @@ fun PanelConfigurationScreen(
                     uiState.error != null -> {
                         ErrorSection(
                             error = uiState.error!!,
-                            onRetry = { viewModel.initializeScreen(panelId) },
-                            onDismiss = { viewModel.clearError() }
+                            onRetry = {
+                                try {
+                                    viewModel.initializeScreen(panelId)
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Error during retry", e)
+                                }
+                            },
+                            onDismiss = {
+                                try {
+                                    viewModel.clearError()
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Error clearing error", e)
+                                }
+                            }
                         )
                     }
                     else -> {

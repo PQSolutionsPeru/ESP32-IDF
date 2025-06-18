@@ -271,13 +271,27 @@ class ESP32ManagementViewModel @Inject constructor(
     }
 
     override fun onCleared() {
-        super.onCleared()
-        Log.d(TAG, "ViewModel limpiado - cancelando jobs")
+        try {
+            super.onCleared()
+            Log.d(TAG, "ESP32ManagementViewModel limpiado - cancelando jobs")
 
-        cancelJobs()
-        esp32Repository.clearListeners()
-        panelRepository.clearListeners()
+            cancelJobs()
 
-        Log.d(TAG, "ViewModel limpiado exitosamente")
+            try {
+                esp32Repository.clearListeners()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error clearing ESP32 listeners", e)
+            }
+
+            try {
+                panelRepository.clearListeners()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error clearing panel listeners", e)
+            }
+
+            Log.d(TAG, "ESP32ManagementViewModel limpiado exitosamente")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in ESP32ManagementViewModel.onCleared", e)
+        }
     }
 }

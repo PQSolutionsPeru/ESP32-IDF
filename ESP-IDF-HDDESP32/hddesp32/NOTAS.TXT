@@ -49,3 +49,39 @@ Si encuentras el error dime cual era y dame las funciones a corregir pero ya com
 
 
 Ahora tu app escucha en tiempo real a Firestore usando únicamente snapshot listeners
+
+
+
+por qué cuando entro a la página de Gestión ESP32 al principio sale que no hay paneles para mostrar y luego de unos segundos aparecen los paeneles configurados y disponibles?
+logcat:
+2025-06-17 19:08:46.716 23753-23753 AdminDashboardScreen    com.pqsolutions.hdd_monitor          D  Manage ESP32 button clicked
+2025-06-17 19:08:46.717 23753-23753 Navigation              com.pqsolutions.hdd_monitor          D  Navegando de 'dashboard?panelId={panelId}' a 'esp32_management'
+2025-06-17 19:08:46.724 23753-23753 AppNavigation           com.pqsolutions.hdd_monitor          D  Navigating to Dashboard. User role: admin
+2025-06-17 19:08:46.724 23753-23753 AdminDashboardScreen    com.pqsolutions.hdd_monitor          D  AdminDashboardScreen composition started
+2025-06-17 19:08:46.724 23753-23753 AdminDashboardScreen    com.pqsolutions.hdd_monitor          D  Current UI State: DashboardUiState(isLoading=false, panels=2, groupedPanels=[Amoladoras Slicer, taller 1 HDD], clientNames=3, error=null, lastUpdate=1750205324587)
+2025-06-17 19:08:46.724 23753-23753 AdminDashboardScreen    com.pqsolutions.hdd_monitor          D  AdminDashboardScreen composition finished
+2025-06-17 19:08:46.725 23753-23753 AdminDashboardScreen    com.pqsolutions.hdd_monitor          D  Rendering DashboardActions
+2025-06-17 19:08:46.736 23753-23753 AppNavigation           com.pqsolutions.hdd_monitor          D  Navigating to Dashboard. User role: admin
+2025-06-17 19:08:46.736 23753-23753 AdminDashboardScreen    com.pqsolutions.hdd_monitor          D  AdminDashboardScreen composition started
+2025-06-17 19:08:46.736 23753-23753 AdminDashboardScreen    com.pqsolutions.hdd_monitor          D  Current UI State: DashboardUiState(isLoading=false, panels=2, groupedPanels=[Amoladoras Slicer, taller 1 HDD], clientNames=3, error=null, lastUpdate=1750205324587)
+2025-06-17 19:08:46.736 23753-23753 AdminDashboardScreen    com.pqsolutions.hdd_monitor          D  AdminDashboardScreen composition finished
+2025-06-17 19:08:46.743 23753-23753 AdminDashboardScreen    com.pqsolutions.hdd_monitor          D  Rendering DashboardActions
+2025-06-17 19:08:46.781 23753-23753 ESP32ManagementScreen   com.pqsolutions.hdd_monitor          D  ESP32ManagementScreen iniciado - Cargando datos
+2025-06-17 19:08:46.781 23753-23753 ESP32Manag...tViewModel com.pqsolutions.hdd_monitor          D  ESP32ManagementViewModel inicializado
+2025-06-17 19:08:46.781 23753-23753 ESP32Manag...tViewModel com.pqsolutions.hdd_monitor          D  Iniciando carga de datos
+2025-06-17 19:08:46.781 23753-23788 UserRepository          com.pqsolutions.hdd_monitor          D  Firebase user: HzS9s0sMkcNgrT2sPZIJSKVXvDR2
+2025-06-17 19:08:47.100 23753-23788 UserRepository          com.pqsolutions.hdd_monitor          D  User found in collection: hdd-monitor/accounts/admins
+2025-06-17 19:08:47.105 23753-23753 ESP32Manag...tViewModel com.pqsolutions.hdd_monitor          D  Usuario: Hernán, Rol: admin
+2025-06-17 19:08:47.106 23753-23788 PanelRepository         com.pqsolutions.hdd_monitor          D  getPanels called with clientDocName: null
+2025-06-17 19:08:47.106 23753-23753 ESP32Repository         com.pqsolutions.hdd_monitor          D  Observando ESP32s asignados para cliente: null
+2025-06-17 19:08:47.106 23753-23753 ESP32Repository         com.pqsolutions.hdd_monitor          D  Iniciando observación de ESP32s no asignados. DeviceId: null
+2025-06-17 19:08:47.131 23753-23753 ESP32Repository         com.pqsolutions.hdd_monitor          D  ESP32s asignados encontrados para admin: 2
+2025-06-17 19:08:47.131 23753-23753 ESP32Manag...tViewModel com.pqsolutions.hdd_monitor          D  ESP32s asignados recibidos: 2
+2025-06-17 19:08:47.131 23753-23753 ESP32Manag...tViewModel com.pqsolutions.hdd_monitor          D  ESP32s no asignados recibidos: 0
+2025-06-17 19:08:48.070 23753-23788 PanelRepository         com.pqsolutions.hdd_monitor          D  Panel completo cargado: panel_PANEPIA0_client_2, ESP32: OFFLINE, Relays: 6
+2025-06-17 19:08:48.079 23753-23753 PanelRepository         com.pqsolutions.hdd_monitor          D  ESP32 42A8ACA0 cambió a OFFLINE
+2025-06-17 19:08:48.079 23753-23788 StatusUpdateManager     com.pqsolutions.hdd_monitor          D  Emitiendo actualización de ESP32: panel_PANEPIA0_client_2 -> OFFLINE
+2025-06-17 19:08:48.080 23753-23753 DashboardViewModel      com.pqsolutions.hdd_monitor          D  Recibida actualización de estado: panel_PANEPIA0_client_2 -> OFFLINE
+2025-06-17 19:08:48.080 23753-23753 DashboardViewModel      com.pqsolutions.hdd_monitor          D  Actualizando estado ESP32 en UI para panel panel_PANEPIA0_client_2 a OFFLINE
+2025-06-17 19:08:48.080 23753-23753 DashboardViewModel      com.pqsolutions.hdd_monitor          D  Actualizando estado ESP32 del panel Panel de prueba 1 a OFFLINE
+2025-06-17 19:08:48.080 23753-23753 DashboardViewModel      com.pqsolutions.hdd_monitor          D  Panel actualizado: isESP32Offline=true, hasIssues=false, overallStatus=false

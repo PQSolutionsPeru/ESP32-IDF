@@ -250,6 +250,11 @@ private fun DashboardButton(onClick: () -> Unit, text: String) {
 fun AdminPanelItem(panel: Panel) {
     var expanded by remember { mutableStateOf(false) }
 
+    Log.d(TAG, "AdminPanelItem - Panel: ${panel.name}, Total relays: ${panel.relays.size}, Active relays: ${panel.activeRelays.size}")
+    panel.relays.forEach { relay ->
+        Log.d(TAG, "  Relay: ${relay.name}, isActive: ${relay.isActive}, status: ${relay.status}")
+    }
+
     val backgroundColor = when {
         panel.isESP32Offline() -> PanelColors.PanelBackgroundOffline
         panel.hasIssues -> Color(0xFFFFEBEE)
@@ -260,7 +265,10 @@ fun AdminPanelItem(panel: Panel) {
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize()
-            .clickable { expanded = !expanded },
+            .clickable {
+                expanded = !expanded
+                Log.d(TAG, "Panel ${panel.name} expandido: $expanded")
+            },
         colors = CardDefaults.cardColors(containerColor = backgroundColor)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -297,16 +305,35 @@ fun AdminPanelItem(panel: Panel) {
                     )
                 } else {
                     Text("Detalles de relays activos:", style = MaterialTheme.typography.bodyMedium)
+
+                    Log.d(TAG, "Mostrando relays activos para panel ${panel.name}: ${panel.activeRelays.size} relays")
+
                     panel.activeRelays.forEach { relay ->
+                        Log.d(TAG, "  Mostrando relay activo: ${relay.name} (${relay.status})")
                         AdminRelayStatus(relay)
                     }
 
                     if (panel.activeRelays.isEmpty()) {
+                        Log.d(TAG, "No hay relays activos para mostrar en panel ${panel.name}")
                         Text(
                             "No hay relays habilitados para monitoreo",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+
+                        Text(
+                            "Total de relays: ${panel.relays.size}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        panel.relays.forEach { relay ->
+                            Text(
+                                "- ${relay.name}: isActive=${relay.isActive}, status=${relay.status}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }

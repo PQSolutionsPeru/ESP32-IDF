@@ -248,11 +248,26 @@ class DashboardViewModel @Inject constructor(
     }
 
     override fun onCleared() {
-        super.onCleared()
-        panelsJob?.cancel()
-        statusUpdateJob?.cancel()
-        panelRepository.clearListeners()
-        Log.d(TAG, "ViewModel cleared, all listeners and jobs cancelled")
+        try {
+            super.onCleared()
+            Log.d(TAG, "DashboardViewModel clearing")
+
+            panelsJob?.cancel()
+            statusUpdateJob?.cancel()
+
+            panelsJob = null
+            statusUpdateJob = null
+
+            try {
+                panelRepository.clearListeners()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error clearing panel listeners", e)
+            }
+
+            Log.d(TAG, "DashboardViewModel cleared successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in DashboardViewModel.onCleared", e)
+        }
     }
 
     data class DashboardUiState(
