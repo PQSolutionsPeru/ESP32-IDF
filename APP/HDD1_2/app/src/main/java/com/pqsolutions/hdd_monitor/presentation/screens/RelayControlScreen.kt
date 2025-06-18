@@ -39,6 +39,7 @@ private const val TAG = "RelayControlScreen"
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RelayControlScreen(
+    panelId: String? = null,
     viewModel: RelayControlViewModel = hiltViewModel(),
     onBackClick: () -> Unit,
     hasPendingNotifications: Boolean,
@@ -51,17 +52,19 @@ fun RelayControlScreen(
     var selectedPanel by remember { mutableStateOf<Panel?>(null) }
     var selectedRelay by remember { mutableStateOf<Relay?>(null) }
 
-    DisposableEffect(Unit) {
-        Log.d(TAG, "RelayControlScreen iniciado - Cargando paneles")
-        viewModel.loadPanels()
+    DisposableEffect(panelId) {
+        Log.d(TAG, "RelayControlScreen iniciado - Panel específico: $panelId")
+        if (panelId != null) {
+            viewModel.loadSpecificPanel(panelId)
+        } else {
+            viewModel.loadPanels()
+        }
 
         onDispose {
             Log.d(TAG, "RelayControlScreen disposed")
-
             showRelayConfigDialog = false
             selectedPanel = null
             selectedRelay = null
-
             viewModel.stopPeriodicRefresh()
             viewModel.cleanup()
         }
@@ -78,7 +81,11 @@ fun RelayControlScreen(
         Scaffold(
             topBar = {
                 AppTopBar(
-                    title = stringResource(R.string.relay_control_title),
+                    title = if (panelId != null && uiState.panels.isNotEmpty()) {
+                        "Relays - ${uiState.panels.first().name}"
+                    } else {
+                        stringResource(R.string.relay_control_title)
+                    },
                     onBackClick = {
                         showRelayConfigDialog = false
                         selectedPanel = null
@@ -89,7 +96,11 @@ fun RelayControlScreen(
                         IconButton(
                             onClick = {
                                 performHapticFeedback(context)
-                                viewModel.refreshPanels()
+                                if (panelId != null) {
+                                    viewModel.refreshSpecificPanel(panelId)
+                                } else {
+                                    viewModel.refreshPanels()
+                                }
                             }
                         ) {
                             Icon(
@@ -122,7 +133,13 @@ fun RelayControlScreen(
                     uiState.error != null -> {
                         ErrorSection(
                             error = uiState.error!!,
-                            onRetry = { viewModel.loadPanels() },
+                            onRetry = {
+                                if (panelId != null) {
+                                    viewModel.loadSpecificPanel(panelId)
+                                } else {
+                                    viewModel.loadPanels()
+                                }
+                            },
                             onDismiss = { viewModel.clearError() }
                         )
                     }
@@ -422,17 +439,17 @@ private fun RelayControlItem(
         }
 
         return when (relay.contactType) {
-            "NC" -> { // Normally Closed
+            "NC" -> {
                 when (relay.status) {
-                    "OK" -> Pair(MaterialTheme.colorScheme.primary, "OK") // Verde
-                    "DISC" -> Pair(MaterialTheme.colorScheme.error, "DISC") // Rojo
+                    "OK" -> Pair(MaterialTheme.colorScheme.primary, "OK")
+                    "DISC" -> Pair(MaterialTheme.colorScheme.error, "DISC")
                     else -> Pair(MaterialTheme.colorScheme.onSurfaceVariant, relay.status)
                 }
             }
-            "NO" -> { // Normally Open
+            "NO" -> {
                 when (relay.status) {
-                    "OK" -> Pair(MaterialTheme.colorScheme.primary, "OK") // Verde
-                    "DISC" -> Pair(MaterialTheme.colorScheme.error, "DISC") // Rojo
+                    "OK" -> Pair(MaterialTheme.colorScheme.primary, "OK")
+                    "DISC" -> Pair(MaterialTheme.colorScheme.error, "DISC")
                     else -> Pair(MaterialTheme.colorScheme.onSurfaceVariant, relay.status)
                 }
             }
@@ -513,12 +530,10 @@ private fun RelayControlItem(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // CORREGIDO: Mostrar estado con color correcto
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        // Indicador visual de estado
                         Box(
                             modifier = Modifier
                                 .size(8.dp)

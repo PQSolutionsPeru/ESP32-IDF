@@ -38,6 +38,7 @@ sealed class Screen(val route: String) {
         fun eventDetail(eventId: String) = "events/$eventId"
         fun panelDetail(panelId: String) = "dashboard?panelId=$panelId"
         fun panelConfiguration(panelId: String? = null) = if (panelId != null) "panel_configuration?panelId=$panelId" else "panel_configuration"
+        fun relayControl(panelId: String? = null) = if (panelId != null) "relay_control?panelId=$panelId" else "relay_control"
     }
 }
 
@@ -149,11 +150,7 @@ fun AppNavigation(
         composable(Screen.ClientManagement.route) {
             ClientManagementScreen(
                 onBackClick = {
-                    if (!navController.popBackStack()) {
-                        navController.navigate(Screen.Dashboard.route) {
-                            popUpTo(0) { inclusive = true }
-                        }
-                    }
+                    navController.popBackStack()
                 },
                 hasPendingNotifications = hasPendingNotifications,
                 onNotificationClick = {
@@ -167,11 +164,7 @@ fun AppNavigation(
                 notificationViewModel = notificationViewModel,
                 onBackClick = {
                     notificationViewModel.clearError()
-                    if (!navController.popBackStack()) {
-                        navController.navigate(Screen.Dashboard.route) {
-                            popUpTo(0) { inclusive = true }
-                        }
-                    }
+                    navController.popBackStack()
                 },
                 hasPendingNotifications = hasPendingNotifications,
                 onNavigateToEvent = { eventId ->
@@ -190,11 +183,7 @@ fun AppNavigation(
         composable(Screen.Events.route) {
             EventScreen(
                 onBackClick = {
-                    if (!navController.popBackStack()) {
-                        navController.navigate(Screen.Dashboard.route) {
-                            popUpTo(0) { inclusive = true }
-                        }
-                    }
+                    navController.popBackStack()
                 },
                 isAdmin = uiState.userData?.role == UserRole.ADMIN,
                 hasPendingNotifications = hasPendingNotifications,
@@ -219,11 +208,7 @@ fun AppNavigation(
             val eventId = backStackEntry.arguments?.getString("eventId")
             EventScreen(
                 onBackClick = {
-                    if (!navController.popBackStack()) {
-                        navController.navigate(Screen.Dashboard.route) {
-                            popUpTo(0) { inclusive = true }
-                        }
-                    }
+                    navController.popBackStack()
                 },
                 isAdmin = uiState.userData?.role == UserRole.ADMIN,
                 hasPendingNotifications = hasPendingNotifications,
@@ -240,14 +225,21 @@ fun AppNavigation(
             )
         }
 
-        composable(Screen.RelayControl.route) {
+        composable(
+            route = "${Screen.RelayControl.route}?panelId={panelId}",
+            arguments = listOf(
+                navArgument("panelId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            val panelId = backStackEntry.arguments?.getString("panelId")
             RelayControlScreen(
+                panelId = panelId,
                 onBackClick = {
-                    if (!navController.popBackStack()) {
-                        navController.navigate(Screen.Dashboard.route) {
-                            popUpTo(0) { inclusive = true }
-                        }
-                    }
+                    navController.popBackStack()
                 },
                 hasPendingNotifications = hasPendingNotifications,
                 onNotificationClick = {
@@ -259,11 +251,7 @@ fun AppNavigation(
         composable(Screen.ESP32Management.route) {
             ESP32ManagementScreen(
                 onBackClick = {
-                    if (!navController.popBackStack()) {
-                        navController.navigate(Screen.Dashboard.route) {
-                            popUpTo(0) { inclusive = true }
-                        }
-                    }
+                    navController.popBackStack()
                 },
                 onCreatePanel = {
                     navController.navigate(Screen.panelConfiguration())
@@ -272,7 +260,7 @@ fun AppNavigation(
                     navController.navigate(Screen.panelConfiguration(panelId))
                 },
                 onCustomizeRelays = { panelId ->
-                    navController.navigate(Screen.RelayControl.route)
+                    navController.navigate(Screen.relayControl(panelId))
                 },
                 hasPendingNotifications = hasPendingNotifications,
                 onNotificationClick = {
@@ -295,18 +283,10 @@ fun AppNavigation(
             PanelConfigurationScreen(
                 panelId = panelId,
                 onBackClick = {
-                    if (!navController.popBackStack()) {
-                        navController.navigate(Screen.ESP32Management.route) {
-                            popUpTo(Screen.Dashboard.route) { inclusive = false }
-                        }
-                    }
+                    navController.popBackStack()
                 },
                 onSaveSuccess = {
-                    if (!navController.popBackStack()) {
-                        navController.navigate(Screen.ESP32Management.route) {
-                            popUpTo(Screen.Dashboard.route) { inclusive = false }
-                        }
-                    }
+                    navController.popBackStack()
                 },
                 hasPendingNotifications = hasPendingNotifications,
                 onNotificationClick = {

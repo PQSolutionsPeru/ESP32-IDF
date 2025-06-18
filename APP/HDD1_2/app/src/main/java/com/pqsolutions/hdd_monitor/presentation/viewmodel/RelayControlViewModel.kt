@@ -25,7 +25,6 @@ import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
-import com.pqsolutions.hdd_monitor.data.RelayConfiguration
 
 @HiltViewModel
 class RelayControlViewModel @Inject constructor(
@@ -54,6 +53,124 @@ class RelayControlViewModel @Inject constructor(
         Log.d(TAG, "RelayControlViewModel inicializado")
         startStatusUpdatesListener()
         startPeriodicRefresh()
+    }
+
+    fun loadSpecificPanel(panelId: String) {
+        loadingJob?.let { job ->
+            if (job.isActive) {
+                job.cancel()
+            }
+        }
+
+        loadingJob = viewModelScope.launch {
+            try {
+                Log.d(TAG, "Cargando panel específico: $panelId")
+                _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+
+                val currentUser = userRepository.getCurrentUser()
+                if (currentUser == null) {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "Usuario no encontrado"
+                    )
+                    return@launch
+                }
+
+                Log.d(TAG, "Usuario: ${currentUser.name}, Rol: ${currentUser.role}")
+
+                val clientDocName = when (currentUser.role) {
+                    UserRole.USER -> currentUser.clientDocName
+                    UserRole.ADMIN -> null
+                }
+
+                if (clientDocName != null) {
+                    loadClientSpecificPanel(clientDocName, panelId)
+                } else {
+                    loadAdminSpecificPanel(panelId)
+                }
+
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) {
+                    Log.d(TAG, "Carga de panel específico cancelada")
+                    return@launch
+                }
+
+                Log.e(TAG, "Error cargando panel específico", e)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Error cargando panel: ${e.message}"
+                )
+            }
+        }
+    }
+
+    private suspend fun loadClientSpecificPanel(clientDocName: String, panelId: String) {
+        val clientsMap = loadClientNames(clientDocName)
+        _uiState.value = _uiState.value.copy(clientNames = clientsMap)
+
+        panelRepository.observePanelUpdates(clientDocName, panelId)
+            .catch { error ->
+                if (error is kotlinx.coroutines.CancellationException) {
+                    Log.d(TAG, "Observación de panel cancelada (normal)")
+                    return@catch
+                }
+
+                Log.e(TAG, "Error en observación de panel", error)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Error cargando panel: ${error.message}"
+                )
+            }
+            .collect { panel ->
+                if (!currentCoroutineContext().isActive) {
+                    Log.d(TAG, "Corrutina cancelada, no actualizando UI")
+                    return@collect
+                }
+
+                if (panel != null) {
+                    Log.d(TAG, "Panel específico recibido: ${panel.name}")
+
+                    val clientDisplayName = clientsMap[panel.clientName] ?: panel.clientName
+                    val groupedPanels: Map<String, List<Panel>> = mapOf(clientDisplayName to listOf(panel))
+
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        panels = listOf(panel),
+                        groupedPanels = groupedPanels,
+                        error = null
+                    )
+
+                    Log.d(TAG, "Estado actualizado - Panel ${panel.name} cargado")
+                } else {
+                    if (!_uiState.value.isLoading) {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = "Panel no encontrado"
+                        )
+                    }
+                }
+            }
+    }
+
+    private suspend fun loadAdminSpecificPanel(panelId: String) {
+        val allClientsSnapshot = firestore.collection("hdd-monitor/accounts/clients").get().await()
+
+        for (clientDoc in allClientsSnapshot.documents) {
+            if (clientDoc.exists()) {
+                val clientId = clientDoc.id
+                val panelExists = panelRepository.verifyPanelExists(clientId, panelId)
+
+                if (panelExists) {
+                    loadClientSpecificPanel(clientId, panelId)
+                    return
+                }
+            }
+        }
+
+        _uiState.value = _uiState.value.copy(
+            isLoading = false,
+            error = "Panel no encontrado en ningún cliente"
+        )
     }
 
     fun loadPanels() {
@@ -142,6 +259,11 @@ class RelayControlViewModel @Inject constructor(
     fun refreshPanels() {
         Log.d(TAG, "Refresh manual solicitado")
         loadPanels()
+    }
+
+    fun refreshSpecificPanel(panelId: String) {
+        Log.d(TAG, "Refresh de panel específico solicitado: $panelId")
+        loadSpecificPanel(panelId)
     }
 
     fun updateRelayConfig(panel: Panel, updatedRelay: Relay) {

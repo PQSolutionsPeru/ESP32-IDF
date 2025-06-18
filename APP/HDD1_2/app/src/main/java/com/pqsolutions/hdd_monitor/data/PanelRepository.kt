@@ -93,8 +93,8 @@ class PanelRepository @Inject constructor(
                 esp32Status = esp32Status
             )
 
-            setupRelayListener(clientDocName, completePanel)
-            setupESP32Listener(completePanel)
+            ensureRelayListener(clientDocName, completePanel)
+            ensureESP32Listener(completePanel)
 
             Log.d(TAG, "Panel completo cargado: ${completePanel.documentName}, ESP32: $esp32Status, Relays: ${relays.size}")
 
@@ -103,6 +103,30 @@ class PanelRepository @Inject constructor(
             Log.e(TAG, "Error cargando panel completo", e)
             null
         }
+    }
+
+    private fun ensureRelayListener(clientDocName: String, panel: Panel) {
+        val relayListenerId = "relays_${clientDocName}_${panel.documentName}"
+
+        if (activeListeners.containsKey(relayListenerId)) {
+            return
+        }
+
+        setupRelayListener(clientDocName, panel)
+    }
+
+    private fun ensureESP32Listener(panel: Panel) {
+        if (panel.esp32_id.isEmpty()) {
+            return
+        }
+
+        val esp32ListenerId = "esp32_${panel.esp32_id}"
+
+        if (activeListeners.containsKey(esp32ListenerId)) {
+            return
+        }
+
+        setupESP32Listener(panel)
     }
 
     private suspend fun loadPanelRelays(clientDocName: String, panelDocName: String): List<Relay> {
@@ -828,12 +852,11 @@ class PanelRepository @Inject constructor(
 
             val panelListenerId = "panel_observe_${clientDocName}_$panelDocName"
 
-            trySend(null)
-
             val registration = firestore.document("$BASE_PATH/$clientDocName/panels/$panelDocName")
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
                         Log.e(TAG, "Error observing panel updates", error)
+                        close(error)
                         return@addSnapshotListener
                     }
 

@@ -45,7 +45,7 @@ INVESTIGAR LAS FUINCIONES O VARIABLES NO USADAS EN ANDROID STUDIO Y EN EL ESP32.
 POR QUÉ EN esp32_config_manager.py HAY EN ESP32_STATES LOS VALORES 'REGISTERED': 'REGISTERED' Y TAMBIÉN 'status': ESP32_STATES['REGISTERED']?
 
 
-Si encuentras el error dime cual era y dame las funciones a corregir pero ya completas y corregidas y sin comentarios ni emoticones en el código. Si encuentras complejidad innecesaria, elimínala y optimiza para simplicidad y efectividad; recuerda que debe funcionar con listeners para reflejar en tiempo real lo que está en la BD
+Si encuentras el error dime cual era y dame las funciones a corregir pero ya completas y corregidas y sin comentarios ni emoticones en el código y no en artifacts, sino en cuadros de respuesta. Si encuentras complejidad innecesaria, elimínala y optimiza para simplicidad y efectividad; recuerda que debe funcionar con listeners para reflejar en tiempo real lo que está en la BD
 
 
 Ahora tu app escucha en tiempo real a Firestore usando únicamente snapshot listeners
