@@ -25,7 +25,6 @@ import com.pqsolutions.hdd_monitor.presentation.components.AnimatedNotificationB
 import com.pqsolutions.hdd_monitor.presentation.components.AppTopBar
 import com.pqsolutions.hdd_monitor.presentation.components.CustomTextField
 import com.pqsolutions.hdd_monitor.presentation.state.PanelConfigurationState
-import com.pqsolutions.hdd_monitor.presentation.theme.HDD1_2Theme
 import com.pqsolutions.hdd_monitor.presentation.util.performHapticFeedback
 import com.pqsolutions.hdd_monitor.presentation.viewmodel.PanelConfigurationViewModel
 
@@ -84,116 +83,113 @@ fun PanelConfigurationScreen(
         }
     }
 
-    // Resto del código de la UI permanece igual...
-    HDD1_2Theme {
-        Scaffold(
-            topBar = {
-                AppTopBar(
-                    title = title,
-                    onBackClick = onBackClick,
-                    actions = {
-                        AnimatedNotificationBell(
-                            hasNewNotifications = hasPendingNotifications,
-                            onClick = {
-                                performHapticFeedback(context)
-                                onNotificationClick()
-                            }
+    Scaffold(
+        topBar = {
+            AppTopBar(
+                title = title,
+                onBackClick = onBackClick,
+                actions = {
+                    AnimatedNotificationBell(
+                        hasNewNotifications = hasPendingNotifications,
+                        onClick = {
+                            performHapticFeedback(context)
+                            onNotificationClick()
+                        }
+                    )
+                }
+            )
+        },
+        bottomBar = {
+            PanelConfigurationBottomBar(
+                canSave = try {
+                    viewModel.canSave(panelName, panelLocation, selectedESP32, selectedClient)
+                } catch (e: Exception) {
+                    false
+                },
+                isSaving = uiState.isSaving,
+                onSave = {
+                    performHapticFeedback(context)
+                    try {
+                        viewModel.savePanel(
+                            panelId = panelId,
+                            name = panelName.trim(),
+                            location = panelLocation.trim(),
+                            esp32Device = selectedESP32,
+                            selectedClient = selectedClient
                         )
-                    }
-                )
-            },
-            bottomBar = {
-                PanelConfigurationBottomBar(
-                    canSave = try {
-                        viewModel.canSave(panelName, panelLocation, selectedESP32, selectedClient)
                     } catch (e: Exception) {
-                        false
-                    },
-                    isSaving = uiState.isSaving,
-                    onSave = {
-                        performHapticFeedback(context)
-                        try {
-                            viewModel.savePanel(
-                                panelId = panelId,
-                                name = panelName.trim(),
-                                location = panelLocation.trim(),
-                                esp32Device = selectedESP32,
-                                selectedClient = selectedClient
-                            )
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error saving panel", e)
-                        }
-                    },
-                    onCancel = {
-                        performHapticFeedback(context)
-                        onBackClick()
+                        Log.e(TAG, "Error saving panel", e)
                     }
-                )
-            }
-        ) { paddingValues ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .verticalScroll(scrollState)
-                    .padding(16.dp)
-            ) {
-                when {
-                    uiState.isLoading -> {
-                        LoadingSection()
-                    }
-                    uiState.error != null -> {
-                        ErrorSection(
-                            error = uiState.error!!,
-                            onRetry = {
-                                try {
-                                    viewModel.initializeScreen(panelId)
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "Error during retry", e)
-                                }
-                            },
-                            onDismiss = {
-                                try {
-                                    viewModel.clearError()
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "Error clearing error", e)
-                                }
+                },
+                onCancel = {
+                    performHapticFeedback(context)
+                    onBackClick()
+                }
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .verticalScroll(scrollState)
+                .padding(16.dp)
+        ) {
+            when {
+                uiState.isLoading -> {
+                    LoadingSection()
+                }
+                uiState.error != null -> {
+                    ErrorSection(
+                        error = uiState.error!!,
+                        onRetry = {
+                            try {
+                                viewModel.initializeScreen(panelId)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error during retry", e)
                             }
-                        )
-                    }
-                    else -> {
-                        if (uiState.availableESP32s.isEmpty() && !isEditMode) {
-                            NoESP32AvailableSection(
-                                onBackClick = onBackClick
-                            )
-                        } else {
-                            PanelConfigurationForm(
-                                panelName = panelName,
-                                onPanelNameChange = { panelName = it },
-                                panelLocation = panelLocation,
-                                onPanelLocationChange = { panelLocation = it },
-                                selectedESP32 = selectedESP32,
-                                availableESP32s = uiState.availableESP32s,
-                                showESP32Dropdown = showESP32Dropdown,
-                                onShowESP32DropdownChange = { showESP32Dropdown = it },
-                                onESP32Select = { esp32 ->
-                                    selectedESP32 = esp32
-                                    showESP32Dropdown = false
-                                },
-                                isEditMode = isEditMode,
-                                esp32StatusMap = uiState.esp32StatusMap,
-                                isAdmin = uiState.isAdmin,
-                                selectedClient = selectedClient,
-                                availableClients = uiState.availableClients,
-                                showClientDropdown = showClientDropdown,
-                                onShowClientDropdownChange = { showClientDropdown = it },
-                                onClientSelect = { client ->
-                                    selectedClient = client
-                                    showClientDropdown = false
-                                },
-                                clientDisplayName = uiState.clientDisplayName
-                            )
+                        },
+                        onDismiss = {
+                            try {
+                                viewModel.clearError()
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error clearing error", e)
+                            }
                         }
+                    )
+                }
+                else -> {
+                    if (uiState.availableESP32s.isEmpty() && !isEditMode) {
+                        NoESP32AvailableSection(
+                            onBackClick = onBackClick
+                        )
+                    } else {
+                        PanelConfigurationForm(
+                            panelName = panelName,
+                            onPanelNameChange = { panelName = it },
+                            panelLocation = panelLocation,
+                            onPanelLocationChange = { panelLocation = it },
+                            selectedESP32 = selectedESP32,
+                            availableESP32s = uiState.availableESP32s,
+                            showESP32Dropdown = showESP32Dropdown,
+                            onShowESP32DropdownChange = { showESP32Dropdown = it },
+                            onESP32Select = { esp32 ->
+                                selectedESP32 = esp32
+                                showESP32Dropdown = false
+                            },
+                            isEditMode = isEditMode,
+                            esp32StatusMap = uiState.esp32StatusMap,
+                            isAdmin = uiState.isAdmin,
+                            selectedClient = selectedClient,
+                            availableClients = uiState.availableClients,
+                            showClientDropdown = showClientDropdown,
+                            onShowClientDropdownChange = { showClientDropdown = it },
+                            onClientSelect = { client ->
+                                selectedClient = client
+                                showClientDropdown = false
+                            },
+                            clientDisplayName = uiState.clientDisplayName
+                        )
                     }
                 }
             }

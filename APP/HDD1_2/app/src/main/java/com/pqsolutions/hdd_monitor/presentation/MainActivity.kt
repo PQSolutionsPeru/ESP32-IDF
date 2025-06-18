@@ -251,13 +251,7 @@ class MainActivity : ComponentActivity() {
         try {
             setContent {
                 HDD1_2Theme {
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = MaterialTheme.colorScheme.background
-                    ) {
-                        val uiState by viewModel.uiState.collectAsState()
-                        AppNavigation(viewModel)
-                    }
+                    AppNavigation(viewModel)
                 }
             }
         } catch (e: Exception) {

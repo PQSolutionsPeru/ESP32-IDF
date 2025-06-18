@@ -23,7 +23,6 @@ import com.pqsolutions.hdd_monitor.data.Panel
 import com.pqsolutions.hdd_monitor.presentation.components.AnimatedNotificationBell
 import com.pqsolutions.hdd_monitor.presentation.components.AppTopBar
 import com.pqsolutions.hdd_monitor.presentation.state.ESP32ManagementState
-import com.pqsolutions.hdd_monitor.presentation.theme.HDD1_2Theme
 import com.pqsolutions.hdd_monitor.presentation.theme.PanelColors
 import com.pqsolutions.hdd_monitor.presentation.util.performHapticFeedback
 import com.pqsolutions.hdd_monitor.presentation.viewmodel.ESP32ManagementViewModel
@@ -58,82 +57,80 @@ fun ESP32ManagementScreen(
         }
     }
 
-    HDD1_2Theme {
-        Scaffold(
-            topBar = {
-                AppTopBar(
-                    title = "Gestión ESP32",
-                    onBackClick = onBackClick,
-                    actions = {
-                        AnimatedNotificationBell(
-                            hasNewNotifications = hasPendingNotifications,
-                            onClick = {
-                                performHapticFeedback(context)
-                                onNotificationClick()
-                            }
-                        )
-                    }
-                )
-            },
-            floatingActionButton = {
-                FloatingActionButton(
-                    onClick = {
-                        performHapticFeedback(context)
-                        onCreatePanel()
-                    },
-                    containerColor = MaterialTheme.colorScheme.primary
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Crear Panel"
+    Scaffold(
+        topBar = {
+            AppTopBar(
+                title = "Gestión ESP32",
+                onBackClick = onBackClick,
+                actions = {
+                    AnimatedNotificationBell(
+                        hasNewNotifications = hasPendingNotifications,
+                        onClick = {
+                            performHapticFeedback(context)
+                            onNotificationClick()
+                        }
                     )
                 }
-            }
-        ) { paddingValues ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(16.dp)
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = {
+                    performHapticFeedback(context)
+                    onCreatePanel()
+                },
+                containerColor = MaterialTheme.colorScheme.primary
             ) {
-                when {
-                    uiState.isLoading -> {
-                        LoadingSection()
-                    }
-                    uiState.error != null -> {
-                        ErrorSection(
-                            error = uiState.error!!,
-                            onRetry = {
-                                try {
-                                    viewModel.refreshData()
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "Error during retry", e)
-                                }
-                            },
-                            onDismiss = {
-                                try {
-                                    viewModel.clearError()
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "Error clearing error", e)
-                                }
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Crear Panel"
+                )
+            }
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp)
+        ) {
+            when {
+                uiState.isLoading -> {
+                    LoadingSection()
+                }
+                uiState.error != null -> {
+                    ErrorSection(
+                        error = uiState.error!!,
+                        onRetry = {
+                            try {
+                                viewModel.refreshData()
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error during retry", e)
                             }
-                        )
-                    }
-                    else -> {
-                        ESP32Content(
-                            uiState = uiState,
-                            onEditPanel = onEditPanel,
-                            onCustomizeRelays = onCustomizeRelays,
-                            onCreatePanel = onCreatePanel,
-                            onRefresh = {
-                                try {
-                                    viewModel.refreshData()
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "Error during refresh", e)
-                                }
+                        },
+                        onDismiss = {
+                            try {
+                                viewModel.clearError()
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error clearing error", e)
                             }
-                        )
-                    }
+                        }
+                    )
+                }
+                else -> {
+                    ESP32Content(
+                        uiState = uiState,
+                        onEditPanel = onEditPanel,
+                        onCustomizeRelays = onCustomizeRelays,
+                        onCreatePanel = onCreatePanel,
+                        onRefresh = {
+                            try {
+                                viewModel.refreshData()
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error during refresh", e)
+                            }
+                        }
+                    )
                 }
             }
         }

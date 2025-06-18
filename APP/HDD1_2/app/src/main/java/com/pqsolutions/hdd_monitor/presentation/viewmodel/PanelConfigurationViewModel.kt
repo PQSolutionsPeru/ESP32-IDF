@@ -13,6 +13,7 @@ import com.pqsolutions.hdd_monitor.esp32.ESP32Repository
 import com.pqsolutions.hdd_monitor.presentation.state.PanelConfigurationState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,6 +30,7 @@ class PanelConfigurationViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "PanelConfigurationViewModel"
+        private const val PANEL_LOAD_TIMEOUT = 5000L
     }
 
     private val _uiState = MutableStateFlow(PanelConfigurationState())
@@ -37,9 +39,11 @@ class PanelConfigurationViewModel @Inject constructor(
     private var initializationJob: Job? = null
     private var panelListenerJob: Job? = null
     private var saveJob: Job? = null
+    private var panelReceived = false
 
     fun initializeScreen(panelId: String?) {
         cancelJobs()
+        panelReceived = false
 
         initializationJob = viewModelScope.launch {
             try {
@@ -192,21 +196,31 @@ class PanelConfigurationViewModel @Inject constructor(
 
     private fun startPanelListener(clientDocName: String, panelId: String) {
         panelListenerJob = viewModelScope.launch {
+            val timeoutJob = launch {
+                delay(PANEL_LOAD_TIMEOUT)
+                if (!panelReceived) {
+                    Log.w(TAG, "Timeout esperando datos del panel")
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "Panel no encontrado o timeout cargando datos"
+                    )
+                }
+            }
+
             panelRepository.observePanelUpdates(clientDocName, panelId)
                 .catch { error ->
                     Log.e(TAG, "Error en listener de panel", error)
+                    panelReceived = true
+                    timeoutJob.cancel()
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = "Error observando panel: ${error.message}"
                     )
                 }
                 .collect { panel ->
-                    if (panel == null) {
-                        _uiState.value = _uiState.value.copy(
-                            isLoading = false,
-                            error = "Panel no encontrado"
-                        )
-                    } else {
+                    if (panel != null) {
+                        panelReceived = true
+                        timeoutJob.cancel()
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             currentPanel = panel,

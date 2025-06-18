@@ -37,7 +37,7 @@ sealed class Screen(val route: String) {
     companion object {
         fun eventDetail(eventId: String) = "events/$eventId"
         fun panelDetail(panelId: String) = "dashboard?panelId=$panelId"
-        fun panelConfiguration(panelId: String? = null) = if (panelId != null) "panel_configuration/$panelId" else "panel_configuration"
+        fun panelConfiguration(panelId: String? = null) = if (panelId != null) "panel_configuration?panelId=$panelId" else "panel_configuration"
     }
 }
 
@@ -282,7 +282,7 @@ fun AppNavigation(
         }
 
         composable(
-            route = "${Screen.PanelConfiguration.route}/{panelId}",
+            route = "${Screen.PanelConfiguration.route}?panelId={panelId}",
             arguments = listOf(
                 navArgument("panelId") {
                     type = NavType.StringType
@@ -296,39 +296,15 @@ fun AppNavigation(
                 panelId = panelId,
                 onBackClick = {
                     if (!navController.popBackStack()) {
-                        navController.navigate(Screen.Dashboard.route) {
-                            popUpTo(0) { inclusive = true }
+                        navController.navigate(Screen.ESP32Management.route) {
+                            popUpTo(Screen.Dashboard.route) { inclusive = false }
                         }
                     }
                 },
                 onSaveSuccess = {
                     if (!navController.popBackStack()) {
-                        navController.navigate(Screen.Dashboard.route) {
-                            popUpTo(0) { inclusive = true }
-                        }
-                    }
-                },
-                hasPendingNotifications = hasPendingNotifications,
-                onNotificationClick = {
-                    navController.navigate(Screen.NotificationHistory.route)
-                }
-            )
-        }
-
-        composable(Screen.PanelConfiguration.route) {
-            PanelConfigurationScreen(
-                panelId = null,
-                onBackClick = {
-                    if (!navController.popBackStack()) {
-                        navController.navigate(Screen.Dashboard.route) {
-                            popUpTo(0) { inclusive = true }
-                        }
-                    }
-                },
-                onSaveSuccess = {
-                    if (!navController.popBackStack()) {
-                        navController.navigate(Screen.Dashboard.route) {
-                            popUpTo(0) { inclusive = true }
+                        navController.navigate(Screen.ESP32Management.route) {
+                            popUpTo(Screen.Dashboard.route) { inclusive = false }
                         }
                     }
                 },

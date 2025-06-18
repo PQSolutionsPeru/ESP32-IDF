@@ -38,6 +38,10 @@ class ESP32ManagementViewModel @Inject constructor(
     private var unassignedESP32Job: Job? = null
     private var isInitialized = false
 
+    private var panelsReceived = false
+    private var assignedESP32sReceived = false
+    private var unassignedESP32sReceived = false
+
     fun initializeIfNeeded() {
         if (!isInitialized) {
             isInitialized = true
@@ -53,6 +57,10 @@ class ESP32ManagementViewModel @Inject constructor(
         }
 
         Log.d(TAG, "Iniciando carga de datos")
+
+        panelsReceived = false
+        assignedESP32sReceived = false
+        unassignedESP32sReceived = false
 
         viewModelScope.launch {
             try {
@@ -75,7 +83,6 @@ class ESP32ManagementViewModel @Inject constructor(
                 }
 
                 startDataListeners(clientDocName)
-                _uiState.value = _uiState.value.copy(isLoading = false)
 
             } catch (e: Exception) {
                 Log.e(TAG, "Error cargando datos", e)
@@ -94,10 +101,16 @@ class ESP32ManagementViewModel @Inject constructor(
             panelRepository.getPanels(clientDocName)
                 .catch { error ->
                     Log.e(TAG, "Error en listener de paneles", error)
+                    panelsReceived = true
+                    checkInitialDataLoaded()
                 }
                 .collect { panels ->
                     Log.d(TAG, "Paneles recibidos: ${panels.size}")
                     updatePanels(panels)
+                    if (!panelsReceived) {
+                        panelsReceived = true
+                        checkInitialDataLoaded()
+                    }
                 }
         }
 
@@ -105,10 +118,16 @@ class ESP32ManagementViewModel @Inject constructor(
             esp32Repository.observeAssignedESP32s(clientDocName)
                 .catch { error ->
                     Log.e(TAG, "Error en listener de ESP32s asignados", error)
+                    assignedESP32sReceived = true
+                    checkInitialDataLoaded()
                 }
                 .collect { assignedESP32s ->
                     Log.d(TAG, "ESP32s asignados recibidos: ${assignedESP32s.size}")
                     updateAssignedESP32s(assignedESP32s)
+                    if (!assignedESP32sReceived) {
+                        assignedESP32sReceived = true
+                        checkInitialDataLoaded()
+                    }
                 }
         }
 
@@ -116,11 +135,26 @@ class ESP32ManagementViewModel @Inject constructor(
             esp32Repository.observeUnassignedESP32s()
                 .catch { error ->
                     Log.e(TAG, "Error en listener de ESP32s no asignados", error)
+                    unassignedESP32sReceived = true
+                    checkInitialDataLoaded()
                 }
                 .collect { unassignedESP32s ->
                     Log.d(TAG, "ESP32s no asignados recibidos: ${unassignedESP32s.size}")
                     updateUnassignedESP32s(unassignedESP32s)
+                    if (!unassignedESP32sReceived) {
+                        unassignedESP32sReceived = true
+                        checkInitialDataLoaded()
+                    }
                 }
+        }
+    }
+
+    private fun checkInitialDataLoaded() {
+        if (panelsReceived && assignedESP32sReceived && unassignedESP32sReceived) {
+            if (_uiState.value.isLoading) {
+                Log.d(TAG, "Datos iniciales cargados completamente")
+                _uiState.value = _uiState.value.copy(isLoading = false)
+            }
         }
     }
 
