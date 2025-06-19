@@ -38,7 +38,6 @@ class RelayControlViewModel @Inject constructor(
 
     init {
         Log.d(TAG, "RelayControlViewModel inicializado")
-        loadPanels()
     }
 
     fun loadSpecificPanel(panelId: String?) {

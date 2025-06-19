@@ -38,6 +38,7 @@ private const val TAG = "RelayControlScreen"
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RelayControlScreen(
+    panelId: String? = null,
     viewModel: RelayControlViewModel = hiltViewModel(),
     onBackClick: () -> Unit,
     hasPendingNotifications: Boolean,
@@ -50,6 +51,16 @@ fun RelayControlScreen(
     var selectedPanel by remember { mutableStateOf<Panel?>(null) }
     var selectedRelay by remember { mutableStateOf<Relay?>(null) }
 
+    LaunchedEffect(panelId) {
+        if (panelId != null) {
+            Log.d(TAG, "Cargando panel específico: $panelId")
+            viewModel.loadSpecificPanel(panelId)
+        } else {
+            Log.d(TAG, "Cargando todos los paneles")
+            viewModel.loadPanels()
+        }
+    }
+
     LaunchedEffect(uiState.error) {
         if (uiState.error != null) {
             kotlinx.coroutines.delay(5000)
@@ -60,13 +71,17 @@ fun RelayControlScreen(
     Scaffold(
         topBar = {
             AppTopBar(
-                title = stringResource(R.string.relay_control_title),
+                title = if (panelId != null) "Configurar Relays" else stringResource(R.string.relay_control_title),
                 onBackClick = onBackClick,
                 actions = {
                     IconButton(
                         onClick = {
                             performHapticFeedback(context)
-                            viewModel.refreshPanels()
+                            if (panelId != null) {
+                                viewModel.refreshSpecificPanel(panelId)
+                            } else {
+                                viewModel.refreshPanels()
+                            }
                         }
                     ) {
                         Icon(
@@ -99,7 +114,13 @@ fun RelayControlScreen(
                 uiState.error != null -> {
                     ErrorSection(
                         error = uiState.error!!,
-                        onRetry = { viewModel.loadPanels() },
+                        onRetry = {
+                            if (panelId != null) {
+                                viewModel.loadSpecificPanel(panelId)
+                            } else {
+                                viewModel.loadPanels()
+                            }
+                        },
                         onDismiss = { viewModel.clearError() }
                     )
                 }

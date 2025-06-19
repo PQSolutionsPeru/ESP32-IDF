@@ -9,9 +9,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.pqsolutions.hdd_monitor.domain.model.UserRole
 import com.pqsolutions.hdd_monitor.presentation.screens.*
 import com.pqsolutions.hdd_monitor.presentation.state.MainUiEvent
@@ -30,6 +32,11 @@ sealed class Screen(val route: String) {
     object RelayControl : Screen("relay_control")
     object ESP32Management : Screen("esp32_management")
     object PanelConfiguration : Screen("panel_configuration")
+
+    companion object {
+        fun panelConfiguration(panelId: String? = null) = if (panelId != null) "panel_configuration?panelId=$panelId" else "panel_configuration"
+        fun relayControl(panelId: String? = null) = if (panelId != null) "relay_control?panelId=$panelId" else "relay_control"
+    }
 }
 
 @Composable
@@ -148,8 +155,19 @@ fun AppNavigation(viewModel: MainViewModel) {
             )
         }
 
-        composable(Screen.RelayControl.route) {
+        composable(
+            route = "${Screen.RelayControl.route}?panelId={panelId}",
+            arguments = listOf(
+                navArgument("panelId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            val panelId = backStackEntry.arguments?.getString("panelId")
             RelayControlScreen(
+                panelId = panelId,
                 onBackClick = {
                     if (!navController.popBackStack()) {
                         navController.navigate(Screen.Dashboard.route)
@@ -167,17 +185,31 @@ fun AppNavigation(viewModel: MainViewModel) {
                         navController.navigate(Screen.Dashboard.route)
                     }
                 },
-                onCreatePanel = { navController.navigate(Screen.PanelConfiguration.route) },
-                onEditPanel = { navController.navigate(Screen.PanelConfiguration.route) },
-                onCustomizeRelays = { navController.navigate(Screen.RelayControl.route) },
+                onCreatePanel = { navController.navigate(Screen.panelConfiguration()) },
+                onEditPanel = { panelId ->
+                    navController.navigate(Screen.panelConfiguration(panelId))
+                },
+                onCustomizeRelays = { panelId ->
+                    navController.navigate(Screen.relayControl(panelId))
+                },
                 hasPendingNotifications = hasPendingNotifications,
                 onNotificationClick = { navController.navigate(Screen.NotificationHistory.route) }
             )
         }
 
-        composable(Screen.PanelConfiguration.route) {
+        composable(
+            route = "${Screen.PanelConfiguration.route}?panelId={panelId}",
+            arguments = listOf(
+                navArgument("panelId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            val panelId = backStackEntry.arguments?.getString("panelId")
             PanelConfigurationScreen(
-                panelId = null,
+                panelId = panelId,
                 onBackClick = {
                     if (!navController.popBackStack()) {
                         navController.navigate(Screen.ESP32Management.route)
