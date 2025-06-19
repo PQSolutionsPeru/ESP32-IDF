@@ -1,7 +1,6 @@
 package com.pqsolutions.hdd_monitor.presentation.screens
 
 import android.util.Log
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -43,18 +42,9 @@ fun ESP32ManagementScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    DisposableEffect(viewModel) {
-        Log.d(TAG, "ESP32ManagementScreen iniciado - Cargando datos")
+    LaunchedEffect(Unit) {
+        Log.d(TAG, "ESP32ManagementScreen iniciado")
         viewModel.initializeIfNeeded()
-
-        onDispose {
-            Log.d(TAG, "ESP32ManagementScreen disposed")
-            try {
-                // Limpieza inmediata sin llamadas a viewModel que pueden estar disposed
-            } catch (e: Exception) {
-                Log.e(TAG, "Error during disposal", e)
-            }
-        }
     }
 
     Scaffold(
@@ -101,20 +91,8 @@ fun ESP32ManagementScreen(
                 uiState.error != null -> {
                     ErrorSection(
                         error = uiState.error!!,
-                        onRetry = {
-                            try {
-                                viewModel.refreshData()
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Error during retry", e)
-                            }
-                        },
-                        onDismiss = {
-                            try {
-                                viewModel.clearError()
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Error clearing error", e)
-                            }
-                        }
+                        onRetry = { viewModel.refreshData() },
+                        onDismiss = { viewModel.clearError() }
                     )
                 }
                 else -> {
@@ -123,13 +101,7 @@ fun ESP32ManagementScreen(
                         onEditPanel = onEditPanel,
                         onCustomizeRelays = onCustomizeRelays,
                         onCreatePanel = onCreatePanel,
-                        onRefresh = {
-                            try {
-                                viewModel.refreshData()
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Error during refresh", e)
-                            }
-                        }
+                        onRefresh = { viewModel.refreshData() }
                     )
                 }
             }

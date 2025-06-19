@@ -14,7 +14,6 @@ import com.pqsolutions.hdd_monitor.presentation.state.RelayControlState
 import com.pqsolutions.hdd_monitor.util.StatusUpdateManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,8 +35,6 @@ class RelayControlViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "RelayControlViewModel"
-        private const val COMMAND_TIMEOUT = 10000L
-        private const val REFRESH_INTERVAL = 30000L
     }
 
     private val _uiState = MutableStateFlow(RelayControlState())
@@ -45,22 +42,14 @@ class RelayControlViewModel @Inject constructor(
 
     private var loadingJob: Job? = null
     private var statusUpdateJob: Job? = null
-    private var refreshJob: Job? = null
-
-    private val pendingCommands = mutableMapOf<String, Long>()
 
     init {
         Log.d(TAG, "RelayControlViewModel inicializado")
         startStatusUpdatesListener()
-        startPeriodicRefresh()
     }
 
     fun loadSpecificPanel(panelId: String) {
-        loadingJob?.let { job ->
-            if (job.isActive) {
-                job.cancel()
-            }
-        }
+        cancelCurrentJob()
 
         loadingJob = viewModelScope.launch {
             try {
@@ -75,8 +64,6 @@ class RelayControlViewModel @Inject constructor(
                     )
                     return@launch
                 }
-
-                Log.d(TAG, "Usuario: ${currentUser.name}, Rol: ${currentUser.role}")
 
                 val clientDocName = when (currentUser.role) {
                     UserRole.USER -> currentUser.clientDocName
@@ -111,7 +98,7 @@ class RelayControlViewModel @Inject constructor(
         panelRepository.observePanelUpdates(clientDocName, panelId)
             .catch { error ->
                 if (error is kotlinx.coroutines.CancellationException) {
-                    Log.d(TAG, "Observación de panel cancelada (normal)")
+                    Log.d(TAG, "Observación de panel cancelada")
                     return@catch
                 }
 
@@ -122,14 +109,9 @@ class RelayControlViewModel @Inject constructor(
                 )
             }
             .collect { panel ->
-                if (!currentCoroutineContext().isActive) {
-                    Log.d(TAG, "Corrutina cancelada, no actualizando UI")
-                    return@collect
-                }
+                if (!currentCoroutineContext().isActive) return@collect
 
                 if (panel != null) {
-                    Log.d(TAG, "Panel específico recibido: ${panel.name}")
-
                     val clientDisplayName = clientsMap[panel.clientName] ?: panel.clientName
                     val groupedPanels: Map<String, List<Panel>> = mapOf(clientDisplayName to listOf(panel))
 
@@ -139,15 +121,11 @@ class RelayControlViewModel @Inject constructor(
                         groupedPanels = groupedPanels,
                         error = null
                     )
-
-                    Log.d(TAG, "Estado actualizado - Panel ${panel.name} cargado")
                 } else {
-                    if (!_uiState.value.isLoading) {
-                        _uiState.value = _uiState.value.copy(
-                            isLoading = false,
-                            error = "Panel no encontrado"
-                        )
-                    }
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "Panel no encontrado"
+                    )
                 }
             }
     }
@@ -174,11 +152,7 @@ class RelayControlViewModel @Inject constructor(
     }
 
     fun loadPanels() {
-        loadingJob?.let { job ->
-            if (job.isActive) {
-                job.cancel()
-            }
-        }
+        cancelCurrentJob()
 
         loadingJob = viewModelScope.launch {
             try {
@@ -194,8 +168,6 @@ class RelayControlViewModel @Inject constructor(
                     return@launch
                 }
 
-                Log.d(TAG, "Usuario: ${currentUser.name}, Rol: ${currentUser.role}")
-
                 val clientDocName = when (currentUser.role) {
                     UserRole.USER -> currentUser.clientDocName
                     UserRole.ADMIN -> null
@@ -207,7 +179,7 @@ class RelayControlViewModel @Inject constructor(
                 panelRepository.getPanels(clientDocName)
                     .catch { error ->
                         if (error is kotlinx.coroutines.CancellationException) {
-                            Log.d(TAG, "Carga de paneles cancelada (normal)")
+                            Log.d(TAG, "Carga de paneles cancelada")
                             return@catch
                         }
 
@@ -218,27 +190,20 @@ class RelayControlViewModel @Inject constructor(
                         )
                     }
                     .collect { panels ->
-                        if (!currentCoroutineContext().isActive) {
-                            Log.d(TAG, "Corrutina cancelada, no actualizando UI")
-                            return@collect
-                        }
+                        if (!currentCoroutineContext().isActive) return@collect
 
                         Log.d(TAG, "Paneles recibidos: ${panels.size}")
 
-                        val validPanels = panels
-
-                        val groupedPanels = validPanels.groupBy { panel ->
+                        val groupedPanels = panels.groupBy { panel ->
                             clientsMap[panel.clientName] ?: panel.clientName
                         }
 
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
-                            panels = validPanels,
+                            panels = panels,
                             groupedPanels = groupedPanels,
                             error = null
                         )
-
-                        Log.d(TAG, "Estado actualizado - ${validPanels.size} paneles válidos")
                     }
 
             } catch (e: Exception) {
@@ -295,9 +260,7 @@ class RelayControlViewModel @Inject constructor(
                 updateRelayInState(panel.documentName, updatedRelay.name) { currentRelay ->
                     updatedRelay.copy(
                         status = currentRelay.status,
-                        date_time = currentRelay.date_time,
-                        lastCommandSent = currentRelay.lastCommandSent,
-                        commandSource = currentRelay.commandSource
+                        date_time = currentRelay.date_time
                     )
                 }
 
@@ -326,8 +289,6 @@ class RelayControlViewModel @Inject constructor(
                         Log.e(TAG, "Error en status updates", error)
                     }
                     .collect { update ->
-                        Log.d(TAG, "Actualización recibida: ${update.panelDocName}")
-
                         if (!update.isEsp32) {
                             handleRelayUpdate(update.panelDocName, update.relayName, update.newStatus)
                         } else {
@@ -335,22 +296,14 @@ class RelayControlViewModel @Inject constructor(
                         }
                     }
             } catch (e: Exception) {
-                Log.e(TAG, "Error en listener de actualizaciones", e)
+                if (e !is kotlinx.coroutines.CancellationException) {
+                    Log.e(TAG, "Error en listener de actualizaciones", e)
+                }
             }
         }
     }
 
     private fun handleRelayUpdate(panelDocName: String, relayName: String, newStatus: String) {
-        Log.d(TAG, "Relay $relayName del panel $panelDocName cambió a $newStatus")
-
-        val commandKey = pendingCommands.keys.find {
-            it.contains("${panelDocName}_$relayName")
-        }
-        if (commandKey != null) {
-            Log.d(TAG, "Comando confirmado: $commandKey")
-            pendingCommands.remove(commandKey)
-        }
-
         updatePanelInState(panelDocName) { panel ->
             val updatedRelays = panel.relays.map { relay ->
                 if (relay.name == relayName) {
@@ -361,15 +314,9 @@ class RelayControlViewModel @Inject constructor(
             }
             panel.copy(relays = updatedRelays)
         }
-
-        _uiState.value = _uiState.value.copy(
-            operationInProgress = pendingCommands.isNotEmpty()
-        )
     }
 
     private fun handleESP32Update(panelDocName: String, newStatus: String) {
-        Log.d(TAG, "ESP32 del panel $panelDocName cambió a $newStatus")
-
         updatePanelInState(panelDocName) { panel ->
             panel.copy(esp32Status = newStatus)
         }
@@ -393,47 +340,6 @@ class RelayControlViewModel @Inject constructor(
             panels = updatedPanels,
             groupedPanels = updatedGroupedPanels
         )
-    }
-
-    private fun startPeriodicRefresh() {
-        refreshJob = viewModelScope.launch {
-            while (true) {
-                try {
-                    delay(REFRESH_INTERVAL)
-
-                    val currentState = _uiState.value
-                    if (!currentState.isLoading && currentState.panels.isNotEmpty()) {
-                        Log.d(TAG, "Refresh periódico automático")
-                        refreshPanelStates()
-                    }
-                } catch (e: Exception) {
-                    if (e is kotlinx.coroutines.CancellationException) {
-                        Log.d(TAG, "Refresh periódico cancelado")
-                        break
-                    }
-                    Log.e(TAG, "Error en refresh periódico", e)
-                }
-            }
-        }
-    }
-
-    private suspend fun refreshPanelStates() {
-        try {
-            val currentPanels = _uiState.value.panels
-            currentPanels.forEach { panel ->
-                relayControlRepository.checkESP32Status(panel.esp32_id)
-                    .onSuccess { status ->
-                        if (panel.esp32Status != status) {
-                            handleESP32Update(panel.documentName, status)
-                        }
-                    }
-                    .onFailure { error ->
-                        Log.e(TAG, "Error verificando ESP32 ${panel.esp32_id}", error)
-                    }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error en refresh de estados", e)
-        }
     }
 
     private fun updateRelayInState(
@@ -507,50 +413,31 @@ class RelayControlViewModel @Inject constructor(
         }
     }
 
-    fun stopPeriodicRefresh() {
-        Log.d(TAG, "Refresh periódico cancelado")
-        refreshJob?.cancel()
-        refreshJob = null
-
-        _uiState.value = _uiState.value.copy(
-            operationInProgress = false
-        )
+    private fun cancelCurrentJob() {
+        loadingJob?.cancel()
+        loadingJob = null
     }
 
     fun cleanup() {
-        Log.d(TAG, "Limpiando estado del ViewModel")
-
-        loadingJob?.cancel()
-        statusUpdateJob?.cancel()
-        refreshJob?.cancel()
-
-        pendingCommands.clear()
-
-        _uiState.value = RelayControlState()
-
-        Log.d(TAG, "Estado del ViewModel limpiado")
+        Log.d(TAG, "Limpiando ViewModel")
+        cancelCurrentJob()
+        _uiState.value = _uiState.value.copy(operationInProgress = false)
     }
 
     override fun onCleared() {
-        try {
-            super.onCleared()
-            Log.d(TAG, "RelayControlViewModel limpiado - cancelando jobs")
+        super.onCleared()
+        Log.d(TAG, "RelayControlViewModel limpiado")
 
+        try {
             loadingJob?.cancel()
             statusUpdateJob?.cancel()
-            refreshJob?.cancel()
 
             loadingJob = null
             statusUpdateJob = null
-            refreshJob = null
-
-            pendingCommands.clear()
 
             _uiState.value = RelayControlState()
-
-            Log.d(TAG, "RelayControlViewModel limpiado exitosamente")
         } catch (e: Exception) {
-            Log.e(TAG, "Error in RelayControlViewModel.onCleared", e)
+            Log.e(TAG, "Error in onCleared", e)
         }
     }
 }

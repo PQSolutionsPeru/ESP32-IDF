@@ -52,21 +52,23 @@ fun RelayControlScreen(
     var selectedPanel by remember { mutableStateOf<Panel?>(null) }
     var selectedRelay by remember { mutableStateOf<Relay?>(null) }
 
-    DisposableEffect(panelId) {
+    LaunchedEffect(panelId) {
         Log.d(TAG, "RelayControlScreen iniciado - Panel específico: $panelId")
         if (panelId != null) {
             viewModel.loadSpecificPanel(panelId)
         } else {
             viewModel.loadPanels()
         }
+    }
 
+    DisposableEffect(Unit) {
         onDispose {
             Log.d(TAG, "RelayControlScreen disposed")
-            showRelayConfigDialog = false
-            selectedPanel = null
-            selectedRelay = null
-            viewModel.stopPeriodicRefresh()
-            viewModel.cleanup()
+            try {
+                viewModel.cleanup()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error during cleanup", e)
+            }
         }
     }
 
@@ -88,8 +90,6 @@ fun RelayControlScreen(
                     },
                     onBackClick = {
                         showRelayConfigDialog = false
-                        selectedPanel = null
-                        selectedRelay = null
                         onBackClick()
                     },
                     actions = {
