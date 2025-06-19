@@ -206,51 +206,49 @@ class NotificationHandler:
         return messages.get(update_type, '')
 
     def process_relay_update(self, relay_ref: firestore.DocumentReference, old_data: Dict[str, Any], new_data: Dict[str, Any], update_id=None):
-        """Procesa actualizaciones de estado de relays y envía notificaciones"""
         try:
-            # Solo procesar si hay un cambio real de estado
             if old_data.get('status') != new_data.get('status'):
                 path_parts = relay_ref.path.split('/')
                 client_id = path_parts[3]
                 panel_id = path_parts[5]
                 relay_id = path_parts[7]
 
-                # NUEVA CONDICIÓN: Ignorar notificaciones del relay Sistema si están relacionadas con ONLINE/OFFLINE
                 if relay_id.lower() == "sistema" and (
                     old_data.get('status') in ['ONLINE', 'OFFLINE'] or 
                     new_data.get('status') in ['ONLINE', 'OFFLINE']):
                     logging.info(f"Ignorando notificación de relay Sistema para cambio ONLINE/OFFLINE")
                     return
 
-                # Crear clave única para esta combinación específica de cambio
-                # Usar relay_id, estados viejo y nuevo, y un timestamp redondeado a ventanas de 5 segundos
+                if not new_data:
+                    try:
+                        relay_doc = relay_ref.get()
+                        new_data = relay_doc.to_dict() if relay_doc.exists else {}
+                    except:
+                        new_data = {}
+
+                relay_display_name = self._get_relay_display_name(relay_id, new_data)
+
                 window_time = int(time.time() * 1000 / 5000)
                 cache_key = f"{client_id}_{panel_id}_{relay_id}_{old_data.get('status')}_{new_data.get('status')}_{window_time}"
                 
-                # Si se proporcionó update_id, añadir información pero no como parte de la clave
-                # para mantener la compatibilidad con eventos de distintas fuentes
                 logging_extra = f" (update_id: {update_id})" if update_id else ""
                 
                 current_time = time.time() * 1000
                 
-                # Inicializar caché de notificaciones si no existe
                 if not hasattr(self, '_notification_cache'):
                     self._notification_cache = {}
                     
-                # Verificar si esta combinación específica fue notificada recientemente (1 segundo)
-                debounce_window = 1000  # 1 segundo en milisegundos
+                debounce_window = 1000
                 if cache_key in self._notification_cache:
                     last_time = self._notification_cache[cache_key]
                     if current_time - last_time < debounce_window:
-                        logging.info(f"PREVENCIÓN DUPLICADO: Ignorando notificación para relay {relay_id}: {old_data.get('status')} → {new_data.get('status')}{logging_extra}")
+                        logging.info(f"PREVENCIÓN DUPLICADO: Ignorando notificación para {relay_display_name}: {old_data.get('status')} → {new_data.get('status')}{logging_extra}")
                         logging.info(f"Tiempo desde última notificación: {current_time - last_time}ms (ventana: {debounce_window}ms)")
                         return
                         
-                # Registrar esta notificación en el caché
                 self._notification_cache[cache_key] = current_time
                 logging.info(f"Registrando nueva notificación en caché: {cache_key}{logging_extra}")
 
-                # Verificar notificaciones recientes similares en Firestore
                 try:
                     notifications_ref = self.db.collection(f'hdd-monitor/accounts/clients/{client_id}/notifications')
                     recent_query = notifications_ref.where('type', '==', 'relay') \
@@ -260,40 +258,33 @@ class NotificationHandler:
                     
                     recent_docs = list(recent_query.stream())
                     
-                    # Si hay notificación reciente (menos de 1 segundo) para este relay, ignorar
                     if recent_docs and len(recent_docs) > 0:
                         recent_doc = recent_docs[0]
                         recent_time = recent_doc.to_dict().get('timestamp', 0)
                         if current_time - recent_time < debounce_window:
-                            logging.info(f"PREVENCIÓN DUPLICADO DB: Notificación reciente para {relay_id} hace {(current_time - recent_time)/1000:.1f}s")
+                            logging.info(f"PREVENCIÓN DUPLICADO DB: Notificación reciente para {relay_display_name} hace {(current_time - recent_time)/1000:.1f}s")
                             return
                 except Exception as e:
                     logging.error(f"Error verificando notificaciones recientes: {e}")
 
-                # Obtener información del panel
                 panel_doc = self.db.document(f'hdd-monitor/accounts/clients/{client_id}/panels/{panel_id}').get()
                 panel_data = panel_doc.to_dict() or {}
                 panel_name = panel_data.get('name', '')
 
-                # Obtener cliente info
                 client_doc = self.db.document(f'hdd-monitor/accounts/clients/{client_id}').get()
                 client_data = client_doc.to_dict() or {}
                 client_name = client_data.get('name', '')
 
-                # Preparar notificación
                 notification_id = f"relay_{client_id}_{panel_id}_{relay_id}_{int(time.time() * 1000)}"
                 
-                # Crear el mensaje para la notificación
-                message_text = f"El relay {relay_id} del panel \"{panel_name}\" ha cambiado de {old_data.get('status')} a {new_data.get('status')}"
+                message_text = f"El {relay_display_name} del panel \"{panel_name}\" ha cambiado de {old_data.get('status')} a {new_data.get('status')}"
                 logging.info(f"Enviando notificación: {message_text}")
                 
-                # Preparar mensaje de notificación
                 notification = messaging.Notification(
                     title=f"{client_name} - Cambio de Estado",
                     body=message_text
                 )
 
-                # Configuración Android
                 android_config = messaging.AndroidConfig(
                     priority='high',
                     notification=messaging.AndroidNotification(
@@ -304,7 +295,6 @@ class NotificationHandler:
                     )
                 )
 
-                # Datos para la notificación
                 message_data = {
                     'type': 'relay',
                     'clientDocName': client_id,
@@ -315,7 +305,6 @@ class NotificationHandler:
                     'timestamp': str(int(time.time() * 1000))
                 }
 
-                # Primero crear el documento de notificación para evitar duplicados
                 notification_doc = {
                     'type': 'relay',
                     'relay': relay_id,
@@ -333,12 +322,10 @@ class NotificationHandler:
                     'timestamp': int(time.time() * 1000)
                 }
                 
-                # *** IMPORTANTE: Guardar la notificación ANTES de enviar FCM ***
                 notifications_ref = self.db.collection(f'hdd-monitor/accounts/clients/{client_id}/notifications')
                 notifications_ref.document(notification_id).set(notification_doc)
                 logging.info(f"Documento de notificación creado con ID: {notification_id}")
                 
-                # Enviar a usuarios del cliente
                 users_sent = 0
                 users_ref = self.db.collection(f'hdd-monitor/accounts/clients/{client_id}/users')
                 for user_doc in users_ref.stream():
@@ -354,12 +341,10 @@ class NotificationHandler:
                             users_sent += 1
                             logging.info(f"Notificación enviada a usuario {user_doc.id}. Response: {response}")
                         except messaging.UnregisteredError:
-                            # Actualizar token inválido
                             users_ref.document(user_doc.id).update({'fcmToken': None})
                         except Exception as e:
                             logging.error(f"Error enviando FCM a usuario {user_doc.id}: {e}")
 
-                # Enviar a administradores
                 admins_sent = 0
                 admins_ref = self.db.collection('hdd-monitor/accounts/admins')
                 for admin_doc in admins_ref.stream():
@@ -375,17 +360,14 @@ class NotificationHandler:
                             admins_sent += 1
                             logging.info(f"Notificación enviada a admin {admin_doc.id}. Response: {response}")
                         except messaging.UnregisteredError:
-                            # Actualizar token inválido
                             admins_ref.document(admin_doc.id).update({'fcmToken': None})
                         except Exception as e:
                             logging.error(f"Error enviando FCM a admin {admin_doc.id}: {e}")
                 
                 logging.info(f"Notificación procesada: enviada a {users_sent} usuarios y {admins_sent} administradores")
                 
-                # Limpiar notificaciones antiguas
                 self.cleanup_notifications(client_id)
                 
-                # Limpiar caché periódicamente (solo cada 100 llamadas para evitar sobrecarga)
                 if not hasattr(self, '_cleanup_counter'):
                     self._cleanup_counter = 0
                 self._cleanup_counter += 1
@@ -395,6 +377,14 @@ class NotificationHandler:
                     
         except Exception as e:
             logging.error(f"Error en process_relay_update: {e}", exc_info=True)
+
+    def _get_relay_display_name(self, relay_id: str, relay_data: Dict[str, Any]) -> str:
+        custom_name = relay_data.get('customName', '').strip()
+        
+        if custom_name:
+            return f"relay {custom_name}"
+        else:
+            return relay_id
 
     def send_online_notification(self, esp32_id: str):
         """Envía notificación de dispositivo ONLINE después de haber estado OFFLINE"""

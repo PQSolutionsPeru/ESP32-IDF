@@ -514,9 +514,19 @@ class FirestoreHandler:
         except Exception as e:
             logging.error(f"Error en handle_panel_message: {e}", exc_info=True)
 
-    def _send_relay_notification_fast(self, client_id: str, panel_id: str, relay_name: str, old_status: str, new_status: str):
+    def _send_relay_notification_fast(self, client_id: str, panel_id: str, relay_name: str, old_status: str, new_status: str, relay_data: Dict[str, Any] = None):
         try:
             current_time = time.time() * 1000
+            
+            if relay_data is None:
+                try:
+                    relay_ref = self.db.document(f'hdd-monitor/accounts/clients/{client_id}/panels/{panel_id}/relays/{relay_name}')
+                    relay_doc = relay_ref.get()
+                    relay_data = relay_doc.to_dict() if relay_doc.exists else {}
+                except Exception as e:
+                    logging.error(f"Error obteniendo datos del relay: {e}")
+                    relay_data = {}
+            
             cache_key = f"{client_id}_{panel_id}_{relay_name}_{old_status}_{new_status}_{int(current_time / 1000)}"
             
             if cache_key in self._notification_cache:
@@ -537,7 +547,9 @@ class FirestoreHandler:
             except:
                 pass
             
-            message_text = f"El relay {relay_name} del panel \"{panel_name}\" ha cambiado de {old_status} a {new_status}"
+            relay_display_name = self._get_relay_display_name(relay_name, relay_data)
+            
+            message_text = f"El {relay_display_name} del panel \"{panel_name}\" ha cambiado de {old_status} a {new_status}"
             
             notification_id = f"relay_{client_id}_{panel_id}_{relay_name}_{int(current_time)}"
             
@@ -571,10 +583,18 @@ class FirestoreHandler:
                 'message': message_text
             }, 'relay')
             
-            logging.info(f"Notificación rápida enviada para {relay_name}: {old_status} -> {new_status}")
+            logging.info(f"Notificación rápida enviada para {relay_display_name}: {old_status} -> {new_status}")
             
         except Exception as e:
             logging.error(f"Error en notificación rápida: {e}")
+
+    def _get_relay_display_name(self, relay_id: str, relay_data: Dict[str, Any]) -> str:
+        custom_name = relay_data.get('customName', '').strip()
+        
+        if custom_name:
+            return f"relay {custom_name}"
+        else:
+            return relay_id
 
     def _update_relay_state(self, client_id: str, panel_id: str, payload: Dict[str, Any]):
         try:
@@ -599,16 +619,21 @@ class FirestoreHandler:
                 if 'contact_type' in payload:
                     new_data['contactType'] = payload['contact_type']
                 
-                logging.info(f"Relay {relay_name}: {old_status} -> {new_state}")
+                complete_relay_data = old_data.copy()
+                complete_relay_data.update(new_data)
                 
-                self._send_relay_notification_fast(client_id, panel_id, relay_name, old_status, new_state)
+                relay_display_name = self._get_relay_display_name(relay_name, complete_relay_data)
+                
+                logging.info(f"{relay_display_name}: {old_status} -> {new_state}")
+                
+                self._send_relay_notification_fast(client_id, panel_id, relay_name, old_status, new_state, complete_relay_data)
                 
                 try:
                     relay_ref.set(new_data, merge=True)
                     doc_path = relay_ref.path
-                    self._relay_states[doc_path] = new_data
+                    self._relay_states[doc_path] = complete_relay_data
                 except Exception as e:
-                    logging.error(f"Error actualizando BD para {relay_name}: {e}")
+                    logging.error(f"Error actualizando BD para {relay_display_name}: {e}")
                     
         except Exception as e:
             logging.error(f"Error en _update_relay_state: {e}", exc_info=True)
