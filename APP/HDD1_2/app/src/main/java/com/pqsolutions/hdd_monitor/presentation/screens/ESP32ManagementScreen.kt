@@ -85,7 +85,7 @@ fun ESP32ManagementScreen(
                 .padding(16.dp)
         ) {
             when {
-                uiState.isLoading -> {
+                uiState.isLoading && uiState.panels.isEmpty() -> {
                     LoadingSection()
                 }
                 uiState.error != null -> {
@@ -102,6 +102,27 @@ fun ESP32ManagementScreen(
                         onCustomizeRelays = onCustomizeRelays,
                         onCreatePanel = onCreatePanel,
                         onRefresh = { viewModel.refreshData() }
+                    )
+                }
+            }
+
+            if (uiState.isLoading && uiState.panels.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Actualizando...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
                 }
             }
@@ -191,7 +212,7 @@ private fun ESP32Content(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 if (uiState.panels.isNotEmpty()) {
-                    item {
+                    item(key = "panels_header") {
                         Text(
                             text = "Paneles Configurados (${uiState.panels.size})",
                             style = MaterialTheme.typography.titleMedium,
@@ -202,7 +223,7 @@ private fun ESP32Content(
 
                     items(
                         items = uiState.panels,
-                        key = { panel -> panel.documentName }
+                        key = { panel -> "panel_${panel.documentName}" }
                     ) { panel ->
                         PanelCard(
                             panel = panel,
@@ -212,11 +233,13 @@ private fun ESP32Content(
                         )
                     }
 
-                    item { Spacer(modifier = Modifier.height(16.dp)) }
+                    item(key = "panels_spacer") {
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
                 }
 
                 if (uiState.availableESP32s.isNotEmpty()) {
-                    item {
+                    item(key = "available_header") {
                         Text(
                             text = "ESP32s Disponibles (${uiState.availableESP32s.size})",
                             style = MaterialTheme.typography.titleMedium,
@@ -227,7 +250,7 @@ private fun ESP32Content(
 
                     items(
                         items = uiState.availableESP32s,
-                        key = { esp32 -> esp32.documentName }
+                        key = { esp32 -> "esp32_${esp32.documentName}" }
                     ) { esp32 ->
                         AvailableESP32Card(
                             esp32 = esp32,

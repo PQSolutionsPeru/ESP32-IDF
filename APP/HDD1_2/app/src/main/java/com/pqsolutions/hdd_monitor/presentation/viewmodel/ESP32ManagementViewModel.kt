@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import javax.inject.Inject
 
 @HiltViewModel
@@ -28,6 +29,7 @@ class ESP32ManagementViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "ESP32ManagementViewModel"
+        private const val CACHE_TIMEOUT_MS = 30000L
     }
 
     private val _uiState = MutableStateFlow(ESP32ManagementState())
@@ -37,25 +39,30 @@ class ESP32ManagementViewModel @Inject constructor(
     private var assignedESP32Job: Job? = null
     private var unassignedESP32Job: Job? = null
     private var isInitialized = false
+    private var lastLoadTime = 0L
 
     private var panelsReceived = false
     private var assignedESP32sReceived = false
     private var unassignedESP32sReceived = false
 
     fun initializeIfNeeded() {
-        if (!isInitialized) {
+        val currentTime = System.currentTimeMillis()
+        if (isInitialized && (currentTime - lastLoadTime) < CACHE_TIMEOUT_MS) {
+            Log.d(TAG, "Usando datos cacheados (${currentTime - lastLoadTime}ms ago)")
+            return
+        }
+
+        if (!isInitialized || !_uiState.value.isLoading) {
             isInitialized = true
-            Log.d(TAG, "ESP32ManagementViewModel inicializado")
+            lastLoadTime = currentTime
+            Log.d(TAG, "ESP32ManagementViewModel inicializando...")
             loadData()
+        } else {
+            Log.d(TAG, "Ya inicializando, saltando...")
         }
     }
 
     private fun loadData() {
-        if (_uiState.value.isLoading) {
-            Log.d(TAG, "Ya está cargando datos, saltando")
-            return
-        }
-
         Log.d(TAG, "Iniciando carga de datos")
 
         panelsReceived = false
@@ -64,7 +71,10 @@ class ESP32ManagementViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+                // 🔧 FIX: Mostrar loading solo si no hay datos previos
+                if (_uiState.value.panels.isEmpty() && _uiState.value.availableESP32s.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+                }
 
                 val currentUser = userRepository.getCurrentUser()
                 if (currentUser == null) {
@@ -82,7 +92,7 @@ class ESP32ManagementViewModel @Inject constructor(
                     UserRole.ADMIN -> null
                 }
 
-                startDataListeners(clientDocName)
+                startDataListenersStaggered(clientDocName)
 
             } catch (e: Exception) {
                 Log.e(TAG, "Error cargando datos", e)
@@ -94,66 +104,101 @@ class ESP32ManagementViewModel @Inject constructor(
         }
     }
 
-    private fun startDataListeners(clientDocName: String?) {
+    private fun startDataListenersStaggered(clientDocName: String?) {
         cancelJobs()
 
         panelsJob = viewModelScope.launch {
-            panelRepository.getPanels(clientDocName)
-                .catch { error ->
-                    Log.e(TAG, "Error en listener de paneles", error)
-                    panelsReceived = true
-                    checkInitialDataLoaded()
-                }
-                .collect { panels ->
-                    Log.d(TAG, "Paneles recibidos: ${panels.size}")
-                    updatePanels(panels)
-                    if (!panelsReceived) {
+            try {
+                panelRepository.getPanels(clientDocName)
+                    .catch { error ->
+                        Log.e(TAG, "Error en listener de paneles", error)
                         panelsReceived = true
-                        checkInitialDataLoaded()
+                        checkAndUpdateLoadingState()
                     }
-                }
+                    .collect { panels ->
+                        Log.d(TAG, "Paneles recibidos: ${panels.size}")
+                        updatePanels(panels)
+                        if (!panelsReceived) {
+                            panelsReceived = true
+                            checkAndUpdateLoadingState()
+                        }
+                    }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error en panelsJob", e)
+                panelsReceived = true
+                checkAndUpdateLoadingState()
+            }
         }
 
-        assignedESP32Job = viewModelScope.launch {
-            esp32Repository.observeAssignedESP32s(clientDocName)
-                .catch { error ->
-                    Log.e(TAG, "Error en listener de ESP32s asignados", error)
+        viewModelScope.launch {
+            delay(100)
+            assignedESP32Job = launch {
+                try {
+                    esp32Repository.observeAssignedESP32s(clientDocName)
+                        .catch { error ->
+                            Log.e(TAG, "Error en listener de ESP32s asignados", error)
+                            assignedESP32sReceived = true
+                            checkAndUpdateLoadingState()
+                        }
+                        .collect { assignedESP32s ->
+                            Log.d(TAG, "ESP32s asignados recibidos: ${assignedESP32s.size}")
+                            updateAssignedESP32s(assignedESP32s)
+                            if (!assignedESP32sReceived) {
+                                assignedESP32sReceived = true
+                                checkAndUpdateLoadingState()
+                            }
+                        }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error en assignedESP32Job", e)
                     assignedESP32sReceived = true
-                    checkInitialDataLoaded()
+                    checkAndUpdateLoadingState()
                 }
-                .collect { assignedESP32s ->
-                    Log.d(TAG, "ESP32s asignados recibidos: ${assignedESP32s.size}")
-                    updateAssignedESP32s(assignedESP32s)
-                    if (!assignedESP32sReceived) {
-                        assignedESP32sReceived = true
-                        checkInitialDataLoaded()
-                    }
-                }
+            }
         }
 
-        unassignedESP32Job = viewModelScope.launch {
-            esp32Repository.observeUnassignedESP32s()
-                .catch { error ->
-                    Log.e(TAG, "Error en listener de ESP32s no asignados", error)
+        viewModelScope.launch {
+            delay(200)
+            unassignedESP32Job = launch {
+                try {
+                    esp32Repository.observeUnassignedESP32s()
+                        .catch { error ->
+                            Log.e(TAG, "Error en listener de ESP32s no asignados", error)
+                            unassignedESP32sReceived = true
+                            checkAndUpdateLoadingState()
+                        }
+                        .collect { unassignedESP32s ->
+                            Log.d(TAG, "ESP32s no asignados recibidos: ${unassignedESP32s.size}")
+                            updateUnassignedESP32s(unassignedESP32s)
+                            if (!unassignedESP32sReceived) {
+                                unassignedESP32sReceived = true
+                                checkAndUpdateLoadingState()
+                            }
+                        }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error en unassignedESP32Job", e)
                     unassignedESP32sReceived = true
-                    checkInitialDataLoaded()
+                    checkAndUpdateLoadingState()
                 }
-                .collect { unassignedESP32s ->
-                    Log.d(TAG, "ESP32s no asignados recibidos: ${unassignedESP32s.size}")
-                    updateUnassignedESP32s(unassignedESP32s)
-                    if (!unassignedESP32sReceived) {
-                        unassignedESP32sReceived = true
-                        checkInitialDataLoaded()
-                    }
-                }
+            }
         }
     }
 
-    private fun checkInitialDataLoaded() {
-        if (panelsReceived && assignedESP32sReceived && unassignedESP32sReceived) {
-            if (_uiState.value.isLoading) {
-                Log.d(TAG, "Datos iniciales cargados completamente")
-                _uiState.value = _uiState.value.copy(isLoading = false)
+    private fun checkAndUpdateLoadingState() {
+        val allDataReceived = panelsReceived && assignedESP32sReceived && unassignedESP32sReceived
+        val criticalDataReceived = panelsReceived && assignedESP32sReceived
+
+        when {
+            allDataReceived -> {
+                if (_uiState.value.isLoading) {
+                    Log.d(TAG, "Todos los datos cargados completamente")
+                    _uiState.value = _uiState.value.copy(isLoading = false)
+                }
+            }
+            criticalDataReceived -> {
+                if (_uiState.value.isLoading) {
+                    Log.d(TAG, "Datos críticos cargados, mostrando UI")
+                    _uiState.value = _uiState.value.copy(isLoading = false)
+                }
             }
         }
     }
@@ -162,6 +207,9 @@ class ESP32ManagementViewModel @Inject constructor(
         panelsJob?.cancel()
         assignedESP32Job?.cancel()
         unassignedESP32Job?.cancel()
+        panelsJob = null
+        assignedESP32Job = null
+        unassignedESP32Job = null
     }
 
     private fun updatePanels(panels: List<Panel>) {
@@ -226,6 +274,7 @@ class ESP32ManagementViewModel @Inject constructor(
 
     fun refreshData() {
         Log.d(TAG, "Refresh manual solicitado")
+        lastLoadTime = 0L
         loadData()
     }
 
@@ -322,6 +371,9 @@ class ESP32ManagementViewModel @Inject constructor(
             } catch (e: Exception) {
                 Log.e(TAG, "Error clearing panel listeners", e)
             }
+
+            isInitialized = false
+            lastLoadTime = 0L
 
             Log.d(TAG, "ESP32ManagementViewModel limpiado exitosamente")
         } catch (e: Exception) {

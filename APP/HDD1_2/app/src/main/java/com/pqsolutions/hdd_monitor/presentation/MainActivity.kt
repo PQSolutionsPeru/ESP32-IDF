@@ -73,7 +73,6 @@ class MainActivity : ComponentActivity() {
         if (allGranted) {
             startMonitoringService()
         } else {
-            // Algunos permisos fueron denegados
             Log.d(TAG, "Algunos permisos fueron denegados")
         }
     }
@@ -82,26 +81,34 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "onCreate: Iniciando aplicación")
 
-        // Configurar contenido UI primero para evitar frames saltados
+        setupWindow()
         setAppContent()
 
-        // Luego hacer las inicializaciones pesadas en background
         lifecycleScope.launch(Dispatchers.IO) {
             initializeInBackground()
         }
     }
 
+    private fun setupWindow() {
+        try {
+            Log.d(TAG, "Configuración de ventana completada")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error configurando ventana", e)
+        }
+    }
+
     private suspend fun initializeInBackground() {
         try {
-            // Verificar permisos
+            delay(1000)
+
             withContext(Dispatchers.Main) {
                 checkAndRequestPermissions()
             }
 
-            // Verificar optimización de batería
+            delay(500)
             checkBatteryOptimization()
 
-            // Actualizar token FCM si es necesario
+            delay(500)
             updateFCMTokenIfNeeded()
 
         } catch (e: Exception) {
@@ -125,10 +132,11 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val powerManager = getSystemService(POWER_SERVICE) as PowerManager
             if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
-                // No mostrar diálogo inmediatamente, puede causar lag
                 lifecycleScope.launch(Dispatchers.Main) {
-                    delay(3000) // Esperar 3 segundos después del inicio
-                    showBatteryOptimizationDialog()
+                    delay(5000)
+                    if (!isFinishing && !isDestroyed) {
+                        showBatteryOptimizationDialog()
+                    }
                 }
             }
         }
@@ -136,17 +144,21 @@ class MainActivity : ComponentActivity() {
 
     private fun showBatteryOptimizationDialog() {
         if (!isFinishing && !isDestroyed) {
-            AlertDialog.Builder(this)
-                .setTitle("Optimización de batería")
-                .setMessage("Para asegurar el correcto funcionamiento de la aplicación, es necesario desactivar la optimización de batería. ¿Desea hacerlo ahora?")
-                .setPositiveButton("Sí") { _, _ ->
-                    requestBatteryOptimizationExemption()
-                }
-                .setNegativeButton("Más tarde") { dialog, _ ->
-                    dialog.dismiss()
-                }
-                .setCancelable(true)
-                .show()
+            try {
+                AlertDialog.Builder(this)
+                    .setTitle("Optimización de batería")
+                    .setMessage("Para asegurar el correcto funcionamiento de la aplicación, es necesario desactivar la optimización de batería. ¿Desea hacerlo ahora?")
+                    .setPositiveButton("Sí") { _, _ ->
+                        requestBatteryOptimizationExemption()
+                    }
+                    .setNegativeButton("Más tarde") { dialog, _ ->
+                        dialog.dismiss()
+                    }
+                    .setCancelable(true)
+                    .show()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error mostrando diálogo de batería", e)
+            }
         }
     }
 
@@ -231,7 +243,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Suscribirse a tópicos
             FirebaseMessaging.getInstance().subscribeToTopic("relay-status")
                 .addOnCompleteListener { task ->
                     if (task.isSuccessful) {
@@ -251,9 +262,15 @@ class MainActivity : ComponentActivity() {
         try {
             setContent {
                 HDD1_2Theme {
-                    AppNavigation(viewModel)
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        AppNavigation(viewModel)
+                    }
                 }
             }
+            Log.d(TAG, "Contenido de aplicación configurado exitosamente")
         } catch (e: Exception) {
             Log.e(TAG, "Error crítico configurando la aplicación", e)
             showErrorScreen(e)

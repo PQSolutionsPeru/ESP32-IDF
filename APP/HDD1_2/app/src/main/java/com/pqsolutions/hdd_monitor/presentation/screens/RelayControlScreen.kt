@@ -28,7 +28,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.filled.Block
-import com.pqsolutions.hdd_monitor.presentation.theme.HDD1_2Theme
 import com.pqsolutions.hdd_monitor.presentation.theme.PanelColors
 import com.pqsolutions.hdd_monitor.presentation.util.performHapticFeedback
 import com.pqsolutions.hdd_monitor.presentation.viewmodel.RelayControlViewModel
@@ -39,7 +38,6 @@ private const val TAG = "RelayControlScreen"
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RelayControlScreen(
-    panelId: String? = null,
     viewModel: RelayControlViewModel = hiltViewModel(),
     onBackClick: () -> Unit,
     hasPendingNotifications: Boolean,
@@ -52,26 +50,6 @@ fun RelayControlScreen(
     var selectedPanel by remember { mutableStateOf<Panel?>(null) }
     var selectedRelay by remember { mutableStateOf<Relay?>(null) }
 
-    LaunchedEffect(panelId) {
-        Log.d(TAG, "RelayControlScreen iniciado - Panel específico: $panelId")
-        if (panelId != null) {
-            viewModel.loadSpecificPanel(panelId)
-        } else {
-            viewModel.loadPanels()
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            Log.d(TAG, "RelayControlScreen disposed")
-            try {
-                viewModel.cleanup()
-            } catch (e: Exception) {
-                Log.e(TAG, "Error during cleanup", e)
-            }
-        }
-    }
-
     LaunchedEffect(uiState.error) {
         if (uiState.error != null) {
             kotlinx.coroutines.delay(5000)
@@ -79,111 +57,91 @@ fun RelayControlScreen(
         }
     }
 
-    HDD1_2Theme {
-        Scaffold(
-            topBar = {
-                AppTopBar(
-                    title = if (panelId != null && uiState.panels.isNotEmpty()) {
-                        "Relays - ${uiState.panels.first().name}"
-                    } else {
-                        stringResource(R.string.relay_control_title)
-                    },
-                    onBackClick = {
-                        showRelayConfigDialog = false
-                        onBackClick()
-                    },
-                    actions = {
-                        IconButton(
-                            onClick = {
-                                performHapticFeedback(context)
-                                if (panelId != null) {
-                                    viewModel.refreshSpecificPanel(panelId)
-                                } else {
-                                    viewModel.refreshPanels()
-                                }
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Actualizar"
-                            )
+    Scaffold(
+        topBar = {
+            AppTopBar(
+                title = stringResource(R.string.relay_control_title),
+                onBackClick = onBackClick,
+                actions = {
+                    IconButton(
+                        onClick = {
+                            performHapticFeedback(context)
+                            viewModel.refreshPanels()
                         }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Actualizar"
+                        )
+                    }
 
-                        AnimatedNotificationBell(
-                            hasNewNotifications = hasPendingNotifications,
-                            onClick = {
-                                performHapticFeedback(context)
-                                onNotificationClick()
-                            }
-                        )
-                    }
-                )
-            }
-        ) { paddingValues ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(16.dp)
-            ) {
-                when {
-                    uiState.isLoading -> {
-                        LoadingSection()
-                    }
-                    uiState.error != null -> {
-                        ErrorSection(
-                            error = uiState.error!!,
-                            onRetry = {
-                                if (panelId != null) {
-                                    viewModel.loadSpecificPanel(panelId)
-                                } else {
-                                    viewModel.loadPanels()
-                                }
-                            },
-                            onDismiss = { viewModel.clearError() }
-                        )
-                    }
-                    uiState.groupedPanels.isEmpty() -> {
-                        EmptyStateSection()
-                    }
-                    else -> {
-                        PanelsWithRelaysSection(
-                            groupedPanels = uiState.groupedPanels,
-                            onRelayConfig = { panel, relay ->
-                                Log.d(TAG, "Configurar relay ${relay.name} del panel ${panel.name}")
-                                selectedPanel = panel
-                                selectedRelay = relay
-                                showRelayConfigDialog = true
-                            }
-                        )
-                    }
+                    AnimatedNotificationBell(
+                        hasNewNotifications = hasPendingNotifications,
+                        onClick = {
+                            performHapticFeedback(context)
+                            onNotificationClick()
+                        }
+                    )
                 }
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp)
+        ) {
+            when {
+                uiState.isLoading -> {
+                    LoadingSection()
+                }
+                uiState.error != null -> {
+                    ErrorSection(
+                        error = uiState.error!!,
+                        onRetry = { viewModel.loadPanels() },
+                        onDismiss = { viewModel.clearError() }
+                    )
+                }
+                uiState.groupedPanels.isEmpty() -> {
+                    EmptyStateSection()
+                }
+                else -> {
+                    PanelsWithRelaysSection(
+                        groupedPanels = uiState.groupedPanels,
+                        onRelayConfig = { panel, relay ->
+                            selectedPanel = panel
+                            selectedRelay = relay
+                            showRelayConfigDialog = true
+                        }
+                    )
+                }
+            }
 
-                AnimatedVisibility(visible = uiState.operationInProgress) {
-                    Card(
+            AnimatedVisibility(visible = uiState.operationInProgress) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 16.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Text(
-                                text = "Actualizando configuración...",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Text(
+                            text = "Actualizando configuración...",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
                     }
                 }
             }

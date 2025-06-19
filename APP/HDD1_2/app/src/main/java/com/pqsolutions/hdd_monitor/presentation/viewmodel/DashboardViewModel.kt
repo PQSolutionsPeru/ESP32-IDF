@@ -55,61 +55,29 @@ class DashboardViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .collect { update ->
                     Log.d(TAG, "Recibida actualización de estado: ${update.panelDocName} -> ${update.newStatus}")
+                    processStatusUpdate(update)
+                }
+        }
+    }
 
+    private fun processStatusUpdate(update: StatusUpdateManager.StatusUpdate) {
+        _uiState.update { currentState ->
+            val updatedPanels = currentState.panels.map { panel ->
+                if (panel.documentName == update.panelDocName) {
                     if (update.isEsp32) {
-                        updatePanelESP32Status(update.panelDocName, update.newStatus)
+                        Log.d(TAG, "Actualizando ESP32 de ${panel.name} a ${update.newStatus}")
+                        panel.copy(esp32Status = update.newStatus)
                     } else {
-                        updatePanelRelayStatus(update.panelDocName, update.relayName, update.newStatus)
-                    }
-
-                    _uiState.update { it.copy(lastUpdate = System.currentTimeMillis()) }
-                }
-        }
-    }
-
-    private fun updatePanelESP32Status(panelDocName: String, newStatus: String) {
-        Log.d(TAG, "Actualizando estado ESP32 en UI para panel $panelDocName a $newStatus")
-
-        _uiState.update { currentState ->
-            val updatedPanels = currentState.panels.map { panel ->
-                if (panel.documentName == panelDocName) {
-                    Log.d(TAG, "Actualizando estado ESP32 del panel ${panel.name} a $newStatus")
-                    val updatedPanel = panel.copy(esp32Status = newStatus)
-                    Log.d(TAG, "Panel actualizado: isESP32Offline=${updatedPanel.isESP32Offline()}, " +
-                            "hasIssues=${updatedPanel.hasIssues}, overallStatus=${updatedPanel.overallStatus}")
-                    updatedPanel
-                } else {
-                    panel
-                }
-            }
-
-            val updatedGroupedPanels = updatedPanels.groupBy {
-                currentState.clientNames[it.clientName] ?: it.clientName
-            }
-
-            currentState.copy(
-                panels = updatedPanels,
-                groupedPanels = updatedGroupedPanels,
-                lastUpdate = System.currentTimeMillis()
-            )
-        }
-    }
-
-    private fun updatePanelRelayStatus(panelDocName: String, relayName: String, newStatus: String) {
-        Log.d(TAG, "Actualizando estado relay en UI: $panelDocName, $relayName -> $newStatus")
-
-        _uiState.update { currentState ->
-            val updatedPanels = currentState.panels.map { panel ->
-                if (panel.documentName == panelDocName) {
-                    val updatedRelays = panel.relays.map { relay ->
-                        if (relay.name == relayName) {
-                            Log.d(TAG, "Actualizando relay ${relay.name} del panel ${panel.name} a $newStatus")
-                            relay.copy(status = newStatus)
-                        } else {
-                            relay
+                        Log.d(TAG, "Actualizando relay ${update.relayName} de ${panel.name} a ${update.newStatus}")
+                        val updatedRelays = panel.relays.map { relay ->
+                            if (relay.name == update.relayName) {
+                                relay.copy(status = update.newStatus)
+                            } else {
+                                relay
+                            }
                         }
+                        panel.copy(relays = updatedRelays)
                     }
-                    panel.copy(relays = updatedRelays)
                 } else {
                     panel
                 }

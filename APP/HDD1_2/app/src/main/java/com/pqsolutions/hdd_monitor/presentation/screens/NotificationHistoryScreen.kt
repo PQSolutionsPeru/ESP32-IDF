@@ -48,6 +48,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.pqsolutions.hdd_monitor.R
 import com.pqsolutions.hdd_monitor.presentation.components.AnimatedNotificationBell
 import com.pqsolutions.hdd_monitor.presentation.components.DefaultErrorContent
@@ -62,41 +63,24 @@ import kotlinx.coroutines.delay
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationHistoryScreen(
-    notificationViewModel: NotificationViewModel,
+    notificationViewModel: NotificationViewModel = hiltViewModel(),
     onBackClick: () -> Unit,
     hasPendingNotifications: Boolean,
     onNavigateToEvent: (String) -> Unit,
     onNavigateToPanel: (String) -> Unit
 ) {
     val uiState by notificationViewModel.uiState.collectAsState()
-
-    // Estado para controlar cuando estamos haciendo la carga inicial
     var isInitialLoading by remember { mutableStateOf(true) }
     val loadingKey = remember { mutableStateOf(0) }
 
-    // LaunchedEffect para la carga inicial
     LaunchedEffect(loadingKey.value) {
         try {
-            // Solo mostramos el indicador de carga en la carga inicial
-            // Para recargas posteriores, mantenemos el contenido visible
             notificationViewModel.setLoading(isInitialLoading)
-
-            // Pequeña pausa para estabilizar
             delay(200)
-
-            // Realizar la carga
             notificationViewModel.refresh()
-
-            // Esperar a que la carga termine
             delay(800)
-
-            // Marcar como leídas
             notificationViewModel.markAllAsRead()
-
-            // Ya no es la carga inicial después de la primera carga
             isInitialLoading = false
-
-            // Finalizar estado de carga
             notificationViewModel.setLoading(false)
         } catch (e: Exception) {
             Log.e("NotificationHistoryScreen", "Error cargando notificaciones", e)
@@ -105,10 +89,8 @@ fun NotificationHistoryScreen(
         }
     }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            notificationViewModel.clearError()
-        }
+    LaunchedEffect(Unit) {
+        notificationViewModel.clearError()
     }
 
     BackHandler { onBackClick() }
@@ -127,13 +109,9 @@ fun NotificationHistoryScreen(
                 .padding(paddingValues),
             contentAlignment = Alignment.Center
         ) {
-            // Si es la carga inicial y estamos cargando, mostrar solo el indicador
             if (isInitialLoading && uiState.isLoading) {
                 CircularProgressIndicator()
-            }
-            // Para los demás casos, mostrar el contenido correspondiente
-            else {
-                // Si hay error, mostrar mensaje
+            } else {
                 if (uiState.error != null) {
                     Column(
                         modifier = Modifier.padding(16.dp),
@@ -150,15 +128,10 @@ fun NotificationHistoryScreen(
                             Text(text = stringResource(R.string.retry))
                         }
                     }
-                }
-                // Si no hay notificaciones, mostrar mensaje
-                else if (uiState.notifications.isEmpty()) {
+                } else if (uiState.notifications.isEmpty()) {
                     EmptyNotificationsContent()
-                }
-                // Si hay notificaciones, mostrarlas
-                else {
+                } else {
                     Box {
-                        // Lista de notificaciones
                         NotificationsList(
                             notifications = uiState.notifications,
                             onNotificationClick = { notification ->
@@ -170,7 +143,6 @@ fun NotificationHistoryScreen(
                             }
                         )
 
-                        // Si está recargando (no es carga inicial), mostrar indicador superpuesto
                         if (!isInitialLoading && uiState.isLoading) {
                             Box(
                                 modifier = Modifier

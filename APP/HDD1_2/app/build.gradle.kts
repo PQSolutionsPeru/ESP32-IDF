@@ -163,7 +163,7 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.room.ktx)
 
-    implementation(libs.androidx.navigation.compose.v281)
+    implementation(libs.androidx.navigation.compose.v276)
     implementation(libs.androidx.paging.compose)
 
     implementation(libs.kotlinx.coroutines.android)

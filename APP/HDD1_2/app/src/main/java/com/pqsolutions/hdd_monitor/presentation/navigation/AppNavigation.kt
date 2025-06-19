@@ -1,25 +1,22 @@
 package com.pqsolutions.hdd_monitor.presentation.navigation
 
 import android.util.Log
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
-import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
 import com.pqsolutions.hdd_monitor.domain.model.UserRole
 import com.pqsolutions.hdd_monitor.presentation.screens.*
 import com.pqsolutions.hdd_monitor.presentation.state.MainUiEvent
-import com.pqsolutions.hdd_monitor.presentation.state.MainUiState
-import com.pqsolutions.hdd_monitor.presentation.viewmodel.DashboardViewModel
 import com.pqsolutions.hdd_monitor.presentation.viewmodel.LoginViewModel
 import com.pqsolutions.hdd_monitor.presentation.viewmodel.MainViewModel
-import com.pqsolutions.hdd_monitor.presentation.viewmodel.NotificationViewModel
 
 private const val TAG = "AppNavigation"
 
@@ -33,30 +30,27 @@ sealed class Screen(val route: String) {
     object RelayControl : Screen("relay_control")
     object ESP32Management : Screen("esp32_management")
     object PanelConfiguration : Screen("panel_configuration")
-
-    companion object {
-        fun eventDetail(eventId: String) = "events/$eventId"
-        fun panelDetail(panelId: String) = "dashboard?panelId=$panelId"
-        fun panelConfiguration(panelId: String? = null) = if (panelId != null) "panel_configuration?panelId=$panelId" else "panel_configuration"
-        fun relayControl(panelId: String? = null) = if (panelId != null) "relay_control?panelId=$panelId" else "relay_control"
-    }
 }
 
 @Composable
-fun AppNavigation(
-    viewModel: MainViewModel,
-    startDestination: String = Screen.Login.route
-) {
+fun AppNavigation(viewModel: MainViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val navController = rememberNavController()
     val hasPendingNotifications by viewModel.hasPendingNotifications.collectAsState()
 
-    val dashboardViewModel: DashboardViewModel = hiltViewModel()
-    val notificationViewModel: NotificationViewModel = hiltViewModel()
+    val startDestination = when {
+        uiState.isFirstLaunch -> Screen.Onboarding.route
+        uiState.isLoggedIn -> Screen.Dashboard.route
+        else -> Screen.Login.route
+    }
 
     NavHost(
         navController = navController,
-        startDestination = getStartDestination(uiState)
+        startDestination = startDestination,
+        enterTransition = { fadeIn() },
+        exitTransition = { fadeOut() },
+        popEnterTransition = { fadeIn() },
+        popExitTransition = { fadeOut() }
     ) {
         composable(Screen.Onboarding.route) {
             OnboardingScreen(
@@ -80,60 +74,27 @@ fun AppNavigation(
             )
         }
 
-        composable(
-            route = "${Screen.Dashboard.route}?panelId={panelId}",
-            arguments = listOf(
-                navArgument("panelId") {
-                    type = NavType.StringType
-                    nullable = true
-                    defaultValue = null
-                }
-            )
-        ) { entry ->
-            val panelId = entry.arguments?.getString("panelId")
-
+        composable(Screen.Dashboard.route) {
             when (uiState.userData?.role) {
                 UserRole.ADMIN -> {
                     AdminDashboardScreen(
-                        viewModel = dashboardViewModel,
-                        notificationViewModel = notificationViewModel,
-                        onLogoutClick = {
-                            viewModel.onEvent(MainUiEvent.Logout)
-                        },
-                        onManageUsersClick = {
-                            navController.navigate(Screen.ClientManagement.route)
-                        },
-                        onViewEventsClick = {
-                            navController.navigate(Screen.Events.route)
-                        },
-                        onViewNotificationHistoryClick = {
-                            navController.navigate(Screen.NotificationHistory.route)
-                        },
-                        onManageESP32Click = {
-                            navController.navigate(Screen.ESP32Management.route)
-                        },
+                        onLogoutClick = { viewModel.onEvent(MainUiEvent.Logout) },
+                        onManageUsersClick = { navController.navigate(Screen.ClientManagement.route) },
+                        onViewEventsClick = { navController.navigate(Screen.Events.route) },
+                        onViewNotificationHistoryClick = { navController.navigate(Screen.NotificationHistory.route) },
+                        onManageESP32Click = { navController.navigate(Screen.ESP32Management.route) },
                         hasPendingNotifications = hasPendingNotifications,
-                        selectedPanelId = panelId
+                        selectedPanelId = null
                     )
                 }
                 UserRole.USER -> {
                     UserDashboardScreen(
-                        viewModel = dashboardViewModel,
-                        notificationViewModel = notificationViewModel,
-                        onLogoutClick = {
-                            viewModel.onEvent(MainUiEvent.Logout)
-                        },
-                        onViewNotificationHistoryClick = {
-                            navController.navigate(Screen.NotificationHistory.route)
-                        },
-                        onViewEventsClick = {
-                            navController.navigate(Screen.Events.route)
-                        },
-                        onManageESP32Click = {
-                            navController.navigate(Screen.ESP32Management.route)
-                        },
+                        onLogoutClick = { viewModel.onEvent(MainUiEvent.Logout) },
+                        onViewNotificationHistoryClick = { navController.navigate(Screen.NotificationHistory.route) },
+                        onViewEventsClick = { navController.navigate(Screen.Events.route) },
+                        onManageESP32Click = { navController.navigate(Screen.ESP32Management.route) },
                         hasPendingNotifications = hasPendingNotifications,
-                        selectedPanelId = panelId
+                        selectedPanelId = null
                     )
                 }
                 null -> {
@@ -150,177 +111,102 @@ fun AppNavigation(
         composable(Screen.ClientManagement.route) {
             ClientManagementScreen(
                 onBackClick = {
-                    navController.popBackStack()
+                    if (!navController.popBackStack()) {
+                        navController.navigate(Screen.Dashboard.route)
+                    }
                 },
                 hasPendingNotifications = hasPendingNotifications,
-                onNotificationClick = {
-                    navController.navigate(Screen.NotificationHistory.route)
-                }
+                onNotificationClick = { navController.navigate(Screen.NotificationHistory.route) }
             )
         }
 
         composable(Screen.NotificationHistory.route) {
             NotificationHistoryScreen(
-                notificationViewModel = notificationViewModel,
                 onBackClick = {
-                    notificationViewModel.clearError()
-                    navController.popBackStack()
-                },
-                hasPendingNotifications = hasPendingNotifications,
-                onNavigateToEvent = { eventId ->
-                    if (eventId.isBlank()) {
-                        navController.navigate(Screen.Events.route)
-                    } else {
-                        navController.navigate(Screen.eventDetail(eventId))
+                    if (!navController.popBackStack()) {
+                        navController.navigate(Screen.Dashboard.route)
                     }
                 },
-                onNavigateToPanel = { panelId ->
-                    navController.navigate(Screen.panelDetail(panelId))
-                }
+                hasPendingNotifications = hasPendingNotifications,
+                onNavigateToEvent = { navController.navigate(Screen.Events.route) },
+                onNavigateToPanel = { navController.navigate(Screen.Dashboard.route) }
             )
         }
 
         composable(Screen.Events.route) {
             EventScreen(
                 onBackClick = {
-                    navController.popBackStack()
+                    if (!navController.popBackStack()) {
+                        navController.navigate(Screen.Dashboard.route)
+                    }
                 },
                 isAdmin = uiState.userData?.role == UserRole.ADMIN,
                 hasPendingNotifications = hasPendingNotifications,
-                onNavigateToEvent = { eventId ->
-                    navController.navigate(Screen.eventDetail(eventId))
-                },
-                onNavigateToPanel = { panelId ->
-                    navController.navigate(Screen.panelDetail(panelId))
-                },
-                onViewNotificationHistoryClick = {
-                    navController.navigate(Screen.NotificationHistory.route)
-                }
+                onNavigateToEvent = { navController.navigate(Screen.Events.route) },
+                onNavigateToPanel = { navController.navigate(Screen.Dashboard.route) },
+                onViewNotificationHistoryClick = { navController.navigate(Screen.NotificationHistory.route) }
             )
         }
 
-        composable(
-            route = "${Screen.Events.route}/{eventId}",
-            arguments = listOf(
-                navArgument("eventId") { type = NavType.StringType }
-            )
-        ) { backStackEntry ->
-            val eventId = backStackEntry.arguments?.getString("eventId")
-            EventScreen(
-                onBackClick = {
-                    navController.popBackStack()
-                },
-                isAdmin = uiState.userData?.role == UserRole.ADMIN,
-                hasPendingNotifications = hasPendingNotifications,
-                eventId = eventId,
-                onNavigateToEvent = { newEventId ->
-                    navController.navigate(Screen.eventDetail(newEventId))
-                },
-                onNavigateToPanel = { panelId ->
-                    navController.navigate(Screen.panelDetail(panelId))
-                },
-                onViewNotificationHistoryClick = {
-                    navController.navigate(Screen.NotificationHistory.route)
-                }
-            )
-        }
-
-        composable(
-            route = "${Screen.RelayControl.route}?panelId={panelId}",
-            arguments = listOf(
-                navArgument("panelId") {
-                    type = NavType.StringType
-                    nullable = true
-                    defaultValue = null
-                }
-            )
-        ) { backStackEntry ->
-            val panelId = backStackEntry.arguments?.getString("panelId")
+        composable(Screen.RelayControl.route) {
             RelayControlScreen(
-                panelId = panelId,
                 onBackClick = {
-                    navController.popBackStack()
+                    if (!navController.popBackStack()) {
+                        navController.navigate(Screen.Dashboard.route)
+                    }
                 },
                 hasPendingNotifications = hasPendingNotifications,
-                onNotificationClick = {
-                    navController.navigate(Screen.NotificationHistory.route)
-                }
+                onNotificationClick = { navController.navigate(Screen.NotificationHistory.route) }
             )
         }
 
         composable(Screen.ESP32Management.route) {
             ESP32ManagementScreen(
                 onBackClick = {
-                    navController.popBackStack()
+                    if (!navController.popBackStack()) {
+                        navController.navigate(Screen.Dashboard.route)
+                    }
                 },
-                onCreatePanel = {
-                    navController.navigate(Screen.panelConfiguration())
-                },
-                onEditPanel = { panelId ->
-                    navController.navigate(Screen.panelConfiguration(panelId))
-                },
-                onCustomizeRelays = { panelId ->
-                    navController.navigate(Screen.relayControl(panelId))
-                },
+                onCreatePanel = { navController.navigate(Screen.PanelConfiguration.route) },
+                onEditPanel = { navController.navigate(Screen.PanelConfiguration.route) },
+                onCustomizeRelays = { navController.navigate(Screen.RelayControl.route) },
                 hasPendingNotifications = hasPendingNotifications,
-                onNotificationClick = {
-                    navController.navigate(Screen.NotificationHistory.route)
-                }
+                onNotificationClick = { navController.navigate(Screen.NotificationHistory.route) }
             )
         }
 
-        composable(
-            route = "${Screen.PanelConfiguration.route}?panelId={panelId}",
-            arguments = listOf(
-                navArgument("panelId") {
-                    type = NavType.StringType
-                    nullable = true
-                    defaultValue = null
-                }
-            )
-        ) { backStackEntry ->
-            val panelId = backStackEntry.arguments?.getString("panelId")
+        composable(Screen.PanelConfiguration.route) {
             PanelConfigurationScreen(
-                panelId = panelId,
+                panelId = null,
                 onBackClick = {
-                    navController.popBackStack()
+                    if (!navController.popBackStack()) {
+                        navController.navigate(Screen.ESP32Management.route)
+                    }
                 },
                 onSaveSuccess = {
-                    navController.popBackStack()
+                    if (!navController.popBackStack()) {
+                        navController.navigate(Screen.ESP32Management.route)
+                    }
                 },
                 hasPendingNotifications = hasPendingNotifications,
-                onNotificationClick = {
-                    navController.navigate(Screen.NotificationHistory.route)
-                }
+                onNotificationClick = { navController.navigate(Screen.NotificationHistory.route) }
             )
         }
     }
 
-    LaunchedEffect(uiState.isLoggedIn) {
-        if (uiState.isLoggedIn) {
-            val currentRoute = navController.currentDestination?.route
-            if (currentRoute == Screen.Login.route || currentRoute == Screen.Onboarding.route) {
-                navController.navigate(Screen.Dashboard.route) {
-                    popUpTo(0) { inclusive = true }
-                    launchSingleTop = true
-                }
+    LaunchedEffect(uiState.isLoggedIn, startDestination) {
+        val currentRoute = navController.currentDestination?.route
+
+        if (uiState.isLoggedIn && currentRoute == Screen.Login.route) {
+            navController.navigate(Screen.Dashboard.route) {
+                popUpTo(Screen.Login.route) { inclusive = true }
+                launchSingleTop = true
             }
-        } else {
-            val currentRoute = navController.currentDestination?.route
-            if (currentRoute != Screen.Login.route && currentRoute != Screen.Onboarding.route) {
-                navController.navigate(Screen.Login.route) {
-                    popUpTo(0) { inclusive = true }
-                    launchSingleTop = true
-                }
+        } else if (!uiState.isLoggedIn && currentRoute != Screen.Login.route && currentRoute != Screen.Onboarding.route) {
+            navController.navigate(Screen.Login.route) {
+                popUpTo(0) { inclusive = true }
+                launchSingleTop = true
             }
         }
-    }
-}
-
-private fun getStartDestination(uiState: MainUiState): String {
-    return when {
-        uiState.isFirstLaunch -> Screen.Onboarding.route
-        uiState.isLoggedIn -> Screen.Dashboard.route
-        else -> Screen.Login.route
     }
 }

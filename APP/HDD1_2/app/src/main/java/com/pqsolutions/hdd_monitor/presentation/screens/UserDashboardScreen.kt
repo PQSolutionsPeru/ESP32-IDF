@@ -77,66 +77,64 @@ fun UserDashboardScreen(
         notificationViewModel.restartNotificationCollection()
     }
 
-    HDD1_2Theme {
-        Scaffold(
-            topBar = {
-                ScreenTopBar(
-                    title = stringResource(R.string.user_dashboard_title),
-                    actions = {
-                        AnimatedNotificationBell(
-                            hasNewNotifications = hasPendingNotifications,
-                            notificationCount = notificationUiState.pendingCount,
-                            onClick = onViewNotificationHistoryClick
-                        )
-                    }
-                )
-            },
-            bottomBar = {
-                Button(
-                    onClick = {
-                        performHapticFeedback(context)
-                        onLogoutClick()
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.secondary
+    Scaffold(
+        topBar = {
+            ScreenTopBar(
+                title = stringResource(R.string.user_dashboard_title),
+                actions = {
+                    AnimatedNotificationBell(
+                        hasNewNotifications = hasPendingNotifications,
+                        notificationCount = notificationUiState.pendingCount,
+                        onClick = onViewNotificationHistoryClick
                     )
-                ) {
-                    Text(stringResource(R.string.logout))
                 }
-            }
-        ) { paddingValues ->
-            Column(
+            )
+        },
+        bottomBar = {
+            Button(
+                onClick = {
+                    performHapticFeedback(context)
+                    onLogoutClick()
+                },
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-            ) {
-                DashboardActions(
-                    onViewEventsClick = onViewEventsClick,
-                    onViewNotificationHistoryClick = onViewNotificationHistoryClick,
-                    onManageESP32Click = onManageESP32Click,
-                    context = context
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondary
                 )
+            ) {
+                Text(stringResource(R.string.logout))
+            }
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            DashboardActions(
+                onViewEventsClick = onViewEventsClick,
+                onViewNotificationHistoryClick = onViewNotificationHistoryClick,
+                onManageESP32Click = onManageESP32Click,
+                context = context
+            )
 
-                Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-                LazyColumn(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 16.dp)
-                ) {
-                    if (uiState.panels.isEmpty()) {
-                        item {
-                            EmptyPanelsContent()
-                        }
-                    } else {
-                        uiState.panels.forEach { panel ->
-                            item(key = panel.documentName) {
-                                UserPanelItem(panel)
-                                Spacer(modifier = Modifier.height(8.dp))
-                            }
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 16.dp)
+            ) {
+                if (uiState.panels.isEmpty()) {
+                    item {
+                        EmptyPanelsContent()
+                    }
+                } else {
+                    uiState.panels.forEach { panel ->
+                        item(key = panel.documentName) {
+                            UserPanelItem(panel)
+                            Spacer(modifier = Modifier.height(8.dp))
                         }
                     }
                 }

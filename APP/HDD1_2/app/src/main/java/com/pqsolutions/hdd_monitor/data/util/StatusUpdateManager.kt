@@ -3,29 +3,29 @@ package com.pqsolutions.hdd_monitor.util
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.Flow
 
-/**
- * Administrador de actualizaciones de estado
- * Coordina las actualizaciones de estado de paneles y relays en tiempo real
- */
 object StatusUpdateManager {
     private const val TAG = "StatusUpdateManager"
 
     private val _statusUpdates = MutableSharedFlow<StatusUpdate>(
         replay = 0,
-        extraBufferCapacity = 10,
+        extraBufferCapacity = 50,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
-    val statusUpdates: SharedFlow<StatusUpdate> = _statusUpdates.asSharedFlow()
 
-    /**
-     * Emite una actualización de estado de relay de forma suspendida
-     */
+    @OptIn(FlowPreview::class)
+    val statusUpdates: Flow<StatusUpdate> = _statusUpdates.asSharedFlow()
+        .debounce(100)
+
     suspend fun emitRelayStatusUpdate(panelDocName: String, relayName: String, newStatus: String) {
         try {
             val update = StatusUpdate(
@@ -42,9 +42,6 @@ object StatusUpdateManager {
         }
     }
 
-    /**
-     * Emite una actualización de estado de ESP32 de forma suspendida
-     */
     suspend fun emitEsp32StatusUpdate(panelDocName: String, newStatus: String) {
         try {
             val update = StatusUpdate(
@@ -61,27 +58,18 @@ object StatusUpdateManager {
         }
     }
 
-    /**
-     * Método para uso síncrono (desde listeners)
-     */
     fun emitRelayStatusUpdateSync(panelDocName: String, relayName: String, newStatus: String) {
         CoroutineScope(Dispatchers.IO).launch {
             emitRelayStatusUpdate(panelDocName, relayName, newStatus)
         }
     }
 
-    /**
-     * Método para uso síncrono (desde listeners)
-     */
     fun emitEsp32StatusUpdateSync(panelDocName: String, newStatus: String) {
         CoroutineScope(Dispatchers.IO).launch {
             emitEsp32StatusUpdate(panelDocName, newStatus)
         }
     }
 
-    /**
-     * Clase de datos para representar una actualización de estado
-     */
     data class StatusUpdate(
         val panelDocName: String,
         val relayName: String,

@@ -35,9 +35,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
-/**
- * ViewModel principal que maneja la lógica de negocio de la aplicación
- */
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val authRepository: AuthRepository,
@@ -56,7 +53,6 @@ class MainViewModel @Inject constructor(
     private val _hasPendingNotifications = MutableStateFlow(false)
     val hasPendingNotifications: StateFlow<Boolean> = _hasPendingNotifications.asStateFlow()
 
-    // Estado para navegación al control de relays
     private val _navigateToRelayControl = MutableStateFlow(false)
     val navigateToRelayControl: StateFlow<Boolean> = _navigateToRelayControl.asStateFlow()
 
@@ -85,7 +81,6 @@ class MainViewModel @Inject constructor(
                     }
                 }
                 RELAY_CONTROL_ACTION -> {
-                    // Manejar eventos específicos de control de relays si es necesario
                     Log.d(TAG, "Relay control action received")
                 }
             }
@@ -102,8 +97,7 @@ class MainViewModel @Inject constructor(
             if (savedUser != null && authRepository.isUserLoggedIn()) {
                 _uiState.value = _uiState.value.copy(
                     isLoggedIn = true,
-                    userData = savedUser,
-                    currentRoute = "dashboard"
+                    userData = savedUser
                 )
                 startSessionCheck()
                 checkPendingNotifications()
@@ -111,7 +105,7 @@ class MainViewModel @Inject constructor(
 
             combineUserPreferences().collect { state ->
                 _uiState.value = state
-                Log.d(TAG, "UI State updated: $state")
+                Log.d(TAG, "UI State updated")
                 if (state.isLoggedIn) {
                     checkPendingNotifications()
                 }
@@ -130,7 +124,7 @@ class MainViewModel @Inject constructor(
                     handleLogout()
                     break
                 }
-                kotlinx.coroutines.delay(60000) // Verificar cada minuto
+                kotlinx.coroutines.delay(60000)
             }
         }
     }
@@ -148,17 +142,9 @@ class MainViewModel @Inject constructor(
             userData = userData,
             theme = theme,
             language = language,
-            notificationsEnabled = notificationsEnabled,
-            currentRoute = determineRoute(isFirstLaunch, userData)
+            notificationsEnabled = notificationsEnabled
         )
     }
-
-    private fun determineRoute(isFirstLaunch: Boolean, userData: UserData?): String =
-        when {
-            isFirstLaunch -> Screen.Onboarding.route
-            userData != null -> Screen.Dashboard.route
-            else -> Screen.Login.route
-        }
 
     private fun registerPanelUpdateReceiver() {
         val intentFilter = IntentFilter().apply {
@@ -175,7 +161,6 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 FirebaseMessaging.getInstance().subscribeToTopic("relay-status").await()
-                // Suscribirse también al tópico de control de relays
                 FirebaseMessaging.getInstance().subscribeToTopic("relay-control").await()
                 Log.d(TAG, "Suscrito exitosamente a temas relay-status y relay-control")
             } catch (e: Exception) {
@@ -207,9 +192,6 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Función para navegar al control de relays
-     */
     fun navigateToRelayControl() {
         viewModelScope.launch {
             try {
@@ -226,34 +208,13 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Función para completar la navegación al control de relays
-     */
     fun onRelayControlNavigationCompleted() {
         _navigateToRelayControl.value = false
     }
 
-    /**
-     * Verifica si el usuario actual puede acceder al control de relays
-     */
     fun canAccessRelayControl(): Boolean {
         val userData = _uiState.value.userData
         return userData != null && (userData.role == UserRole.ADMIN || userData.role == UserRole.USER)
-    }
-
-    /**
-     * Obtiene la ruta de navegación actual
-     */
-    fun getCurrentRoute(): String {
-        return _uiState.value.currentRoute
-    }
-
-    /**
-     * Actualiza la ruta de navegación actual
-     */
-    fun updateCurrentRoute(route: String) {
-        _uiState.value = _uiState.value.copy(currentRoute = route)
-        Log.d(TAG, "Ruta actualizada a: $route")
     }
 
     private fun login(email: String, password: String) {
@@ -284,8 +245,7 @@ class MainViewModel @Inject constructor(
             isLoading = false,
             isLoggedIn = true,
             userData = user,
-            error = null,
-            currentRoute = "dashboard"
+            error = null
         )
         Log.d(TAG, "Login successful for user: ${user.name}")
         checkPendingNotifications()
@@ -311,23 +271,14 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             Log.d(TAG, "Attempting logout")
             try {
-                // 1. Primero: aseguramos que los listeners se limpien
                 sessionCheckJob?.cancel()
                 sessionCheckJob = null
                 panelRepository.clearListeners()
                 notificationRepository.clearListeners()
                 eventRepository.clearListeners()
 
-                // 2. Resetear estados de navegación
                 _navigateToRelayControl.value = false
 
-                // 3. Luego cambiamos la ruta (esto desencadenará la navegación)
-                _uiState.value = _uiState.value.copy(currentRoute = "login")
-
-                // 4. Esperamos para que empiece la navegación
-                kotlinx.coroutines.delay(300)
-
-                // 5. Actualizamos el resto del estado
                 _uiState.value = _uiState.value.copy(
                     isLoggedIn = false,
                     userData = null,
@@ -335,22 +286,18 @@ class MainViewModel @Inject constructor(
                 )
                 _hasPendingNotifications.value = false
 
-                // 6. Procedemos con el logout en Firebase
                 authRepository.logout().fold(
                     onSuccess = {
-                        // 7. Limpiamos datos locales al final
                         userPreferences.clearUserData()
                         Log.d(TAG, "Logout successful")
                     },
                     onFailure = { e ->
                         Log.e(TAG, "Logout failed: ${e.message}", e)
-                        // Aseguramos que los datos locales se limpien incluso si falla Firebase
                         userPreferences.clearUserData()
                     }
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "Logout failed: ${e.message}", e)
-                // Intentamos limpiar datos aunque falle
                 try {
                     userPreferences.clearUserData()
                 } catch (e: Exception) {
@@ -364,23 +311,14 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             Log.d(TAG, "Handling automatic logout")
 
-            // 1. Cancelar trabajos y limpiar listeners primero
             sessionCheckJob?.cancel()
             sessionCheckJob = null
             panelRepository.clearListeners()
             notificationRepository.clearListeners()
             eventRepository.clearListeners()
 
-            // 2. Resetear estados de navegación
             _navigateToRelayControl.value = false
 
-            // 3. Actualizar la ruta para iniciar navegación
-            _uiState.value = _uiState.value.copy(currentRoute = "login")
-
-            // 4. Pequeña pausa para que se inicie la navegación
-            kotlinx.coroutines.delay(300)
-
-            // 5. Limpiar el resto del estado
             userPreferences.clearUserData()
             _uiState.value = _uiState.value.copy(
                 isLoggedIn = false,
@@ -392,20 +330,17 @@ class MainViewModel @Inject constructor(
     }
 
     private fun checkPendingNotifications() {
-        // Cancelar trabajo existente
         pendingNotificationsJob?.cancel()
 
         pendingNotificationsJob = viewModelScope.launch {
             uiState.value.userData?.let { user ->
                 try {
-                    // Usar enfoque de consulta periódica en lugar de listener permanente
                     while (isActive) {
                         val hasUnread = checkUnreadNotificationsDirectly(user)
                         if (hasUnread != _hasPendingNotifications.value) {
                             _hasPendingNotifications.value = hasUnread
                             Log.d(TAG, "Estado de notificaciones pendientes actualizado: $hasUnread")
                         }
-                        // Consultar cada 5 segundos
                         delay(5000)
                     }
                 } catch (e: Exception) {
@@ -415,14 +350,11 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // Método para consultar notificaciones sin establecer listener permanente
     private suspend fun checkUnreadNotificationsDirectly(user: UserData): Boolean {
         return try {
             val clientDocName = user.clientDocName
 
-            // Primero verificar notificaciones no leídas
             val hasUnreadNotifications = if (user.role == UserRole.ADMIN) {
-                // Consultar para admins usando collectionGroup (más eficiente)
                 firestore.collectionGroup("notifications")
                     .whereEqualTo("isRead", false)
                     .limit(1)
@@ -430,7 +362,6 @@ class MainViewModel @Inject constructor(
                     .await()
                     .size() > 0
             } else {
-                // Consultar para usuarios normales en su cliente específico
                 if (clientDocName.isNotEmpty()) {
                     firestore.collection("$BASE_PATH/$clientDocName/notifications")
                         .whereEqualTo("isRead", false)
@@ -439,15 +370,12 @@ class MainViewModel @Inject constructor(
                         .await()
                         .size() > 0
                 } else {
-                    // Protección contra clientDocName vacío
                     false
                 }
             }
 
-            // Luego verificar eventos pendientes de manera segura
             val hasPendingEvents = checkPendingEvents(clientDocName)
 
-            // Retornar true si hay notificaciones no leídas o eventos pendientes
             hasUnreadNotifications || hasPendingEvents
         } catch (e: Exception) {
             Log.e(TAG, "Error checking unread notifications", e)
@@ -455,11 +383,9 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // Método para verificar eventos pendientes
     private suspend fun checkPendingEvents(clientDocName: String?): Boolean {
         return try {
             if (clientDocName.isNullOrEmpty()) {
-                // Para administradores, buscar eventos pendientes en todos los clientes
                 val clientsSnapshot = firestore.collection(BASE_PATH).get().await()
                 var hasPendingEvents = false
 
@@ -478,13 +404,11 @@ class MainViewModel @Inject constructor(
                         }
                     } catch (e: Exception) {
                         Log.e(TAG, "Error checking events for client $clientId", e)
-                        // Continuar con el siguiente cliente en caso de error
                     }
                 }
 
                 hasPendingEvents
             } else {
-                // Para usuarios normales, buscar en su cliente específico
                 val events = firestore.collection("$BASE_PATH/$clientDocName/events")
                     .whereEqualTo("status", "PROGRAMADO")
                     .limit(1)

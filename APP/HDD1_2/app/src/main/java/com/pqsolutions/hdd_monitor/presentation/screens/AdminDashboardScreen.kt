@@ -67,121 +67,114 @@ fun AdminDashboardScreen(
     hasPendingNotifications: Boolean,
     selectedPanelId: String? = null
 ) {
-    Log.d(TAG, "AdminDashboardScreen composition started")
-
     val uiState by viewModel.uiState.collectAsState()
-    Log.d(TAG, "Current UI State: $uiState")
     val notificationUiState by notificationViewModel.uiState.collectAsState()
     val context = LocalContext.current
 
     LaunchedEffect(Unit) {
-        Log.d(TAG, "LaunchedEffect: Loading panels for admin dashboard")
         viewModel.loadPanels()
         notificationViewModel.restartNotificationCollection()
     }
 
-    HDD1_2Theme {
-        Scaffold(
-            topBar = {
-                ScreenTopBar(
-                    title = stringResource(R.string.admin_dashboard_title),
-                    actions = {
-                        AnimatedNotificationBell(
-                            hasNewNotifications = hasPendingNotifications,
-                            notificationCount = notificationUiState.pendingCount,
-                            onClick = onViewNotificationHistoryClick,
-                            modifier = Modifier.size(48.dp)
+    Scaffold(
+        topBar = {
+            ScreenTopBar(
+                title = stringResource(R.string.admin_dashboard_title),
+                actions = {
+                    AnimatedNotificationBell(
+                        hasNewNotifications = hasPendingNotifications,
+                        notificationCount = notificationUiState.pendingCount,
+                        onClick = onViewNotificationHistoryClick,
+                        modifier = Modifier.size(48.dp)
+                    )
+                }
+            )
+        },
+        bottomBar = {
+            Button(
+                onClick = {
+                    performHapticFeedback(context)
+                    onLogoutClick()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondary
+                )
+            ) {
+                Text(stringResource(R.string.logout))
+            }
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            DashboardActions(
+                onManageUsersClick = onManageUsersClick,
+                onViewEventsClick = onViewEventsClick,
+                onViewNotificationHistoryClick = onViewNotificationHistoryClick,
+                onManageESP32Click = onManageESP32Click,
+                context = context
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 16.dp)
+            ) {
+                if (uiState.isLoading) {
+                    item {
+                        Text(
+                            "Cargando paneles...",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(vertical = 16.dp)
                         )
                     }
-                )
-            },
-            bottomBar = {
-                Button(
-                    onClick = {
-                        performHapticFeedback(context)
-                        onLogoutClick()
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.secondary
-                    )
-                ) {
-                    Text(stringResource(R.string.logout))
+                } else if (uiState.groupedPanels.isEmpty()) {
+                    item {
+                        Text(
+                            "No hay paneles disponibles",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(vertical = 16.dp)
+                        )
+                    }
                 }
-            }
-        ) { paddingValues ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-            ) {
-                DashboardActions(
-                    onManageUsersClick = onManageUsersClick,
-                    onViewEventsClick = onViewEventsClick,
-                    onViewNotificationHistoryClick = onViewNotificationHistoryClick,
-                    onManageESP32Click = onManageESP32Click,
-                    context = context
-                )
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                LazyColumn(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 16.dp)
-                ) {
-                    if (uiState.isLoading) {
-                        item {
-                            Text(
-                                "Cargando paneles...",
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.padding(vertical = 16.dp)
-                            )
-                        }
-                    } else if (uiState.groupedPanels.isEmpty()) {
-                        item {
-                            Text(
-                                "No hay paneles disponibles",
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.padding(vertical = 16.dp)
-                            )
-                        }
+                uiState.groupedPanels.forEach { (clientName, clientPanels) ->
+                    item {
+                        Text(
+                            text = "Cliente: $clientName",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
                     }
 
-                    uiState.groupedPanels.forEach { (clientName, clientPanels) ->
-                        item {
-                            Text(
-                                text = "Cliente: $clientName",
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
-                        }
-
-                        clientPanels.forEach { panel ->
-                            item(key = panel.documentName) {
-                                AdminPanelItem(panel)
-                                Spacer(modifier = Modifier.height(8.dp))
-                            }
+                    clientPanels.forEach { panel ->
+                        item(key = panel.documentName) {
+                            AdminPanelItem(panel)
+                            Spacer(modifier = Modifier.height(8.dp))
                         }
                     }
+                }
 
-                    if (uiState.error != null) {
-                        item {
-                            Text(
-                                "Error: ${uiState.error}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.Red,
-                                modifier = Modifier.padding(vertical = 16.dp)
-                            )
-                        }
+                if (uiState.error != null) {
+                    item {
+                        Text(
+                            "Error: ${uiState.error}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Red,
+                            modifier = Modifier.padding(vertical = 16.dp)
+                        )
                     }
                 }
             }
         }
     }
-    Log.d(TAG, "AdminDashboardScreen composition finished")
 }
 
 @Composable
