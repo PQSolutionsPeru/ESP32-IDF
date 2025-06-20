@@ -1,8 +1,4 @@
-me dijiste que No use Core Dump en Flash si no es crítico, podrías indicarme si en verdad es crítico o no? qué archivos necesitas ver para saberlo? También me dijiste que Considere usar un estado intermedio para evitar reinicializaciones rápidas, igual, qué archivos necesitas ver para implementarlo?
-
-por qué se sigue este proceso? es necesario para manetner el ESP32 en óptimas condiciones funcionando bien las 24 horas?
-Recibes una notificación de eliminación y llamas a relay_manager_deinit()
-Inmediatamente reinicias el Relay Manager
+CORREGIR QUE LA VM ENVIE MENSAJE DE CONFIGURACIÓN CADA VEZ QUE EL ESP32 ENVÍA network status message? DEBERIA VERIFICAR SI ES QUE ESTÁ ASIGNADO A UN CLIENTE DETERMINADO Y SI NO, SI ESTÁ REGISTRADO EN LA BD EN LA SECCIÓN REGISTERED
 
 EL DASHBOARD, YA SEA DE USUARIO O DE ADMINISTRADOR, NO REFLEJA EN TIEMPO REAL LO QUE ESTÁ EN LA BD
 

@@ -8,6 +8,8 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.pqsolutions.hdd_monitor.data.util.IdManager
 import com.pqsolutions.hdd_monitor.domain.model.UserRole
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -22,6 +24,11 @@ class UserRepository @Inject constructor(
         private const val TAG = "UserRepository"
         private const val BASE_PATH = "hdd-monitor/accounts"
     }
+
+    private val getUserMutex = Mutex()
+    private var cachedUser: UserData? = null
+    private var lastCacheTime: Long = 0
+    private val CACHE_DURATION = 5000L
 
     suspend fun getClients(): Result<List<Client>> = withContext(Dispatchers.IO) {
         try {
@@ -91,16 +98,13 @@ class UserRepository @Inject constructor(
             val clientRef = firestore.document("$BASE_PATH/clients/$clientDocName")
             val batch = firestore.batch()
 
-            // Eliminar todos los usuarios del cliente
             val usersSnapshot = clientRef.collection("users").get().await()
             usersSnapshot.documents.forEach { doc ->
                 batch.delete(doc.reference)
             }
 
-            // Eliminar todos los paneles y sus subcolecciones
             val panelsSnapshot = clientRef.collection("panels").get().await()
             panelsSnapshot.documents.forEach { panelDoc ->
-                // Eliminar las subcolecciones de cada panel
                 val relaysSnapshot = panelDoc.reference.collection("relays").get().await()
                 relaysSnapshot.documents.forEach { doc ->
                     batch.delete(doc.reference)
@@ -116,28 +120,23 @@ class UserRepository @Inject constructor(
                     batch.delete(doc.reference)
                 }
 
-                // Eliminar el panel
                 batch.delete(panelDoc.reference)
             }
 
-            // Eliminar las notificaciones del cliente
             val notificationsSnapshot = clientRef.collection("notifications").get().await()
             notificationsSnapshot.documents.forEach { doc ->
                 batch.delete(doc.reference)
             }
 
-            // Eliminar los eventos del cliente
             val eventsSnapshot = clientRef.collection("events").get().await()
             eventsSnapshot.documents.forEach { doc ->
                 batch.delete(doc.reference)
             }
 
-            // Finalmente eliminar el documento del cliente
             batch.delete(clientRef)
-
-            // Ejecutar todas las operaciones en batch
             batch.commit().await()
 
+            invalidateUserCache()
             Log.d(TAG, "Client and all related documents deleted successfully: $clientDocName")
             Result.success(Unit)
         } catch (e: Exception) {
@@ -149,11 +148,8 @@ class UserRepository @Inject constructor(
     suspend fun getUsers(): Result<List<UserData>> = withContext(Dispatchers.IO) {
         try {
             val users = mutableListOf<UserData>()
-
-            // Obtener todos los clientes
             val clientsQuery = firestore.collection("$BASE_PATH/clients").get().await()
 
-            // Para cada cliente, obtener sus usuarios
             clientsQuery.documents.forEach { clientDoc ->
                 val clientName = clientDoc.getString("name") ?: clientDoc.id
                 val usersQuery = clientDoc.reference.collection("users").get().await()
@@ -198,7 +194,7 @@ class UserRepository @Inject constructor(
                 clientDocName = clientDocName,
                 clientName = clientName,
                 fcmToken = getString("fcmToken"),
-                phone = getString("phone") ?: "" // Agregado el campo phone
+                phone = getString("phone") ?: ""
             )
         } catch (e: Exception) {
             Log.e(TAG, "Error converting document to UserData: ${e.message}")
@@ -208,7 +204,6 @@ class UserRepository @Inject constructor(
 
     suspend fun createUser(user: UserData): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            // Primero crear la cuenta en Firebase Authentication
             val authResult = auth.createUserWithEmailAndPassword(user.email, user.password).await()
             Log.d(TAG, "Usuario creado en Firebase Auth: ${authResult.user?.uid}")
 
@@ -230,7 +225,7 @@ class UserRepository @Inject constructor(
                 "clientDocName" to user.clientDocName,
                 "fcmToken" to user.fcmToken,
                 "phone" to user.phone,
-                "password" to user.password // Guardar la contraseña en Firestore para referencia
+                "password" to user.password
             )
 
             firestore.collection(collectionPath)
@@ -238,6 +233,7 @@ class UserRepository @Inject constructor(
                 .set(userMap)
                 .await()
 
+            invalidateUserCache()
             Log.d(TAG, "Usuario creado exitosamente: $documentName")
             Result.success(Unit)
         } catch (e: Exception) {
@@ -264,7 +260,7 @@ class UserRepository @Inject constructor(
                 "role" to UserRole.toFirestoreValue(user.role),
                 "clientDocName" to user.clientDocName,
                 "fcmToken" to user.fcmToken,
-                "phone" to user.phone // Agregado el campo phone
+                "phone" to user.phone
             )
 
             firestore.collection(collectionPath)
@@ -272,6 +268,7 @@ class UserRepository @Inject constructor(
                 .set(userMap)
                 .await()
 
+            invalidateUserCache()
             Log.d(TAG, "User updated successfully: ${user.documentName}")
             Result.success(Unit)
         } catch (e: Exception) {
@@ -298,6 +295,7 @@ class UserRepository @Inject constructor(
                 .delete()
                 .await()
 
+            invalidateUserCache()
             Log.d(TAG, "User deleted successfully: $documentName")
             Result.success(Unit)
         } catch (e: Exception) {
@@ -331,7 +329,6 @@ class UserRepository @Inject constructor(
         }
     }
 
-    // Nuevo método updateFCMToken sin parámetros para FirebaseMessagingService
     suspend fun updateFCMToken(token: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val currentUser = getCurrentUser()
@@ -358,44 +355,67 @@ class UserRepository @Inject constructor(
         }
     }
 
-    suspend fun getCurrentUser(): UserData? = withContext(Dispatchers.IO) {
-        val firebaseUser = auth.currentUser
-        if (firebaseUser == null) {
-            Log.d(TAG, "No Firebase user found")
-            return@withContext null
-        }
-        Log.d(TAG, "Firebase user: ${firebaseUser.uid}")
-
-        try {
-            val adminUser = findUserInCollection("$BASE_PATH/admins", firebaseUser.email, UserRole.ADMIN)
-            if (adminUser != null) return@withContext adminUser
-
-            val clientsQuery = firestore.collection("$BASE_PATH/clients").get().await()
-            for (clientDoc in clientsQuery.documents) {
-                val clientName = clientDoc.getString("name") ?: clientDoc.id
-                val user = findUserInCollection(
-                    "$BASE_PATH/clients/${clientDoc.id}/users",
-                    firebaseUser.email,
-                    UserRole.USER,
-                    clientDoc.id,
-                    clientName
-                )
-                if (user != null) return@withContext user
+    suspend fun getCurrentUser(): UserData? = getUserMutex.withLock {
+        withContext(Dispatchers.IO) {
+            val currentTime = System.currentTimeMillis()
+            if (cachedUser != null && (currentTime - lastCacheTime) < CACHE_DURATION) {
+                Log.d(TAG, "Returning cached user: ${cachedUser?.documentName}")
+                return@withContext cachedUser
             }
 
-            Log.e(TAG, "User not found in Firestore")
-            null
-        } catch (e: Exception) {
-            Log.e(TAG, "Error getting current user: ${e.message}")
-            null
+            val firebaseUser = auth.currentUser
+            if (firebaseUser == null) {
+                Log.d(TAG, "No Firebase user found")
+                cachedUser = null
+                return@withContext null
+            }
+            Log.d(TAG, "Firebase user: ${firebaseUser.uid}")
+
+            try {
+                val adminUser = findUserInCollection("$BASE_PATH/admins", firebaseUser.email, UserRole.ADMIN)
+                if (adminUser != null) {
+                    cachedUser = adminUser
+                    lastCacheTime = currentTime
+                    return@withContext adminUser
+                }
+
+                val clientsQuery = firestore.collection("$BASE_PATH/clients").get().await()
+                for (clientDoc in clientsQuery.documents) {
+                    val clientName = clientDoc.getString("name") ?: clientDoc.id
+                    val user = findUserInCollection(
+                        "$BASE_PATH/clients/${clientDoc.id}/users",
+                        firebaseUser.email,
+                        UserRole.USER,
+                        clientDoc.id,
+                        clientName
+                    )
+                    if (user != null) {
+                        cachedUser = user
+                        lastCacheTime = currentTime
+                        return@withContext user
+                    }
+                }
+
+                Log.e(TAG, "User not found in Firestore")
+                cachedUser = null
+                null
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting current user: ${e.message}")
+                cachedUser = null
+                null
+            }
         }
+    }
+
+    private fun invalidateUserCache() {
+        cachedUser = null
+        lastCacheTime = 0
     }
 
     suspend fun getAllUsers(): Result<List<UserData>> = withContext(Dispatchers.IO) {
         try {
             val allUsers = mutableListOf<UserData>()
 
-            // Obtener usuarios administradores
             val adminsSnapshot = firestore.collection("$BASE_PATH/admins")
                 .get()
                 .await()
@@ -415,7 +435,6 @@ class UserRepository @Inject constructor(
                 }
             }
 
-            // Obtener usuarios cliente
             val clientsQuery = firestore.collection("$BASE_PATH/clients").get().await()
             for (clientDoc in clientsQuery.documents) {
                 val clientName = clientDoc.getString("name") ?: clientDoc.id

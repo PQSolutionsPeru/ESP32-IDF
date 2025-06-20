@@ -7,12 +7,9 @@ import com.google.firebase.firestore.Query
 import com.pqsolutions.hdd_monitor.data.util.IdManager
 import com.pqsolutions.hdd_monitor.domain.model.UserRole
 import com.pqsolutions.hdd_monitor.util.Constants
-import com.pqsolutions.hdd_monitor.util.Constants.DocumentPrefixes
 import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -22,23 +19,16 @@ import javax.inject.Singleton
 @Singleton
 class NotificationRepository @Inject constructor(
     private val firestore: FirebaseFirestore,
-    private val userRepository: UserRepository,
-    private var lastProcessedTimestamp: Long = 0L,
-    private val documentProcessCache: MutableSet<String> = mutableSetOf<String>(),
-    private val PROCESS_THROTTLE_TIME: Long = 2000L
+    private val userRepository: UserRepository
 ) {
     companion object {
         private const val TAG = "NotificationRepository"
         private const val BASE_PATH = "hdd-monitor/accounts/clients"
-        private const val DATE_FORMAT = "dd/MM/yyyy, HH:mm"  // Formato unificado
+        private const val DATE_FORMAT = "dd/MM/yyyy, HH:mm"
         private const val MAX_NOTIFICATIONS = 20
         private const val HOURS_TO_KEEP = 24L
-
-        // NUNCA mostrar notificaciones visuales desde aquí
-        private const val SHOW_VISUAL_NOTIFICATIONS = false
     }
 
-    // Flow principal de notificaciones para un cliente específico (usuarios)
     private val activeListeners = mutableListOf<ListenerRegistration>()
 
     fun clearListeners() {
@@ -55,33 +45,6 @@ class NotificationRepository @Inject constructor(
         }
     }
 
-    private fun shouldProcessSnapshot(documents: List<com.google.firebase.firestore.DocumentSnapshot>, clientId: String): Boolean {
-        if (documents.isEmpty()) return false
-
-        // Crear una huella digital del snapshot
-        val snapshotSignature = documents.take(3).joinToString("|") { it.id } + "|" + clientId
-        val currentTimestamp = System.currentTimeMillis()
-
-        // Si una firma similar fue procesada recientemente, ignorar
-        if (documentProcessCache.contains(snapshotSignature) &&
-            currentTimestamp - lastProcessedTimestamp < PROCESS_THROTTLE_TIME) {
-            Log.d(TAG, "Ignorando snapshot duplicado: $snapshotSignature")
-            return false
-        }
-
-        // Actualizar caché
-        documentProcessCache.add(snapshotSignature)
-        lastProcessedTimestamp = currentTimestamp
-
-        // Limpiar caché si crece demasiado
-        if (documentProcessCache.size > 10) {
-            val oldestEntries = documentProcessCache.take(documentProcessCache.size - 5)
-            documentProcessCache.removeAll(oldestEntries.toSet())
-        }
-
-        return true
-    }
-
     fun getNotificationsFlow(clientDocName: String): Flow<List<Notification>> = callbackFlow {
         if (clientDocName.isBlank()) {
             Log.w(TAG, "Intento de obtener notificaciones con clientDocName vacío")
@@ -92,9 +55,6 @@ class NotificationRepository @Inject constructor(
 
         val collectionPath = "$BASE_PATH/$clientDocName/notifications"
         Log.d(TAG, "Consultando notificaciones en: $collectionPath")
-
-        // Usar un mapa para cachear notificaciones
-        val notificationsCache = mutableMapOf<String, Notification>()
 
         val notificationsRef = firestore.collection(collectionPath)
             .orderBy("timestamp", Query.Direction.DESCENDING)
@@ -123,19 +83,9 @@ class NotificationRepository @Inject constructor(
                         return@addSnapshotListener
                     }
 
-                    // Verificar si debemos procesar este snapshot o es un duplicado
-                    if (!shouldProcessSnapshot(documents, clientDocName)) {
-                        return@addSnapshotListener
-                    }
-
-                    Log.d(TAG, "Primer documento: ${documents[0].id}")
-
                     val notifications = documents.mapNotNull { doc ->
                         try {
                             val data = doc.data ?: emptyMap()
-                            // Log para ver qué datos llegan
-                            Log.d(TAG, "Datos de documento ${doc.id}: ${data.keys}")
-
                             val notificationMap = data.toMutableMap().apply {
                                 this["documentName"] = doc.id
                                 this["clientDocName"] = clientDocName
@@ -143,34 +93,19 @@ class NotificationRepository @Inject constructor(
                                     val timestampValue = doc.getTimestamp("lastUpdate")?.toDate()?.time
                                         ?: System.currentTimeMillis()
                                     this["timestamp"] = timestampValue
-                                    Log.d(TAG, "Generado timestamp para ${doc.id}: $timestampValue")
                                 }
                             }
 
-                            // Verificar validez de la notificación
                             val notification = Notification.fromMap(notificationMap)
-                            if (!notification.isValid()) {
-                                Log.w(TAG, "Notificación inválida: ${doc.id}")
-                                null
-                            } else {
-                                // Cachear la notificación válida
-                                notificationsCache[doc.id] = notification
-                                notification
-                            }
+                            if (notification.isValid()) notification else null
                         } catch (e: Exception) {
                             Log.e(TAG, "Error procesando documento ${doc.id}", e)
                             null
                         }
                     }
 
-                    // IMPORTANTE: Verificar que realmente estamos enviando notificaciones
                     Log.d(TAG, "Enviando ${notifications.size} notificaciones al flow")
-                    if (notifications.isNotEmpty()) {
-                        trySend(notifications)
-                    } else {
-                        // Agregamos una rama else explícita para mayor claridad
-                        Log.d(TAG, "No hay notificaciones válidas para enviar")
-                    }
+                    trySend(notifications)
                 } catch (e: Exception) {
                     Log.e(TAG, "Error procesando snapshot", e)
                     trySend(emptyList())
@@ -198,7 +133,6 @@ class NotificationRepository @Inject constructor(
         }
     }
 
-    // Flow para todas las notificaciones (para administradores)
     fun getNotificationsFlow(): Flow<List<Notification>> = callbackFlow {
         Log.d(TAG, "Iniciando consulta de todas las notificaciones (admin)")
 
@@ -223,11 +157,6 @@ class NotificationRepository @Inject constructor(
                         val documents = querySnapshot.documents
                         Log.d(TAG, "Documentos encontrados (admin): ${documents.size}")
 
-                        // Verificar si debemos procesar este snapshot o es un duplicado
-                        if (documents.isEmpty() || !shouldProcessSnapshot(documents, "admin")) {
-                            return@addSnapshotListener
-                        }
-
                         val notifications = documents.mapNotNull { doc ->
                             try {
                                 val data = doc.data ?: emptyMap()
@@ -243,7 +172,6 @@ class NotificationRepository @Inject constructor(
                                 }
 
                                 val notification = Notification.fromMap(notificationMap)
-                                // Solo enviar notificaciones válidas
                                 if (notification.isValid()) notification else null
                             } catch (e: Exception) {
                                 Log.e(TAG, "Error procesando documento admin ${doc.id}", e)
@@ -251,12 +179,8 @@ class NotificationRepository @Inject constructor(
                             }
                         }
 
-                        if (notifications.isNotEmpty()) {
-                            Log.d(TAG, "Enviando ${notifications.size} notificaciones admin al flow")
-                            trySend(notifications)
-                        } else {
-                            Log.d(TAG, "No hay notificaciones válidas para enviar (admin)")
-                        }
+                        Log.d(TAG, "Enviando ${notifications.size} notificaciones admin al flow")
+                        trySend(notifications)
                     } catch (e: Exception) {
                         Log.e(TAG, "Error procesando snapshot (admin)", e)
                         trySend(emptyList())
@@ -284,54 +208,15 @@ class NotificationRepository @Inject constructor(
         }
     }
 
-    private var lastCleanupTime: Long = 0
-    private val CLEANUP_INTERVAL = 60 * 60 * 1000 // 1 hora
-
-    private suspend fun cleanupOldNotifications(clientDocName: String) {
-        val currentTime = System.currentTimeMillis()
-        // CORREGIDO: Ejecutar limpieza más agresivamente
-        if (currentTime - lastCleanupTime < CLEANUP_INTERVAL / 2) {
-            return  // Evitar limpiezas demasiado frecuentes
-        }
-
+    suspend fun cleanupOldNotifications(clientDocName: String) {
         try {
-            Log.d(TAG, "Iniciando limpieza de notificaciones para cliente: $clientDocName")
+            val currentTime = System.currentTimeMillis()
             val cutoffTime = currentTime - (HOURS_TO_KEEP * 60 * 60 * 1000)
 
-            coroutineScope {
-                // Primero mantener solo las últimas MAX_NOTIFICATIONS
-                launch {
-                    keepOnlyLastN(clientDocName, MAX_NOTIFICATIONS)
-                        .onSuccess { Log.d(TAG, "Mantenidas últimas $MAX_NOTIFICATIONS notificaciones") }
-                        .onFailure { e -> Log.e(TAG, "Error manteniendo últimas notificaciones", e) }
-                }
-
-                // Luego eliminar notificaciones más antiguas que HOURS_TO_KEEP
-                launch {
-                    deleteNotificationsOlderThan(clientDocName, cutoffTime)
-                        .onSuccess { Log.d(TAG, "Eliminadas notificaciones más antiguas que $HOURS_TO_KEEP horas") }
-                        .onFailure { e -> Log.e(TAG, "Error limpiando notificaciones antiguas", e) }
-                }
-            }
-
-            lastCleanupTime = currentTime
-            Log.d(TAG, "Limpieza de notificaciones completada para: $clientDocName")
+            deleteNotificationsOlderThan(clientDocName, cutoffTime)
+            keepOnlyLastN(clientDocName, MAX_NOTIFICATIONS)
         } catch (e: Exception) {
             Log.e(TAG, "Error en cleanup de notificaciones", e)
-        }
-    }
-
-    private suspend fun cleanupAllClientsOldNotifications() {
-        try {
-            val clients = firestore.collection(BASE_PATH)
-                .get()
-                .await()
-
-            clients.documents.forEach { clientDoc ->
-                cleanupOldNotifications(clientDoc.id)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error en cleanup de todos los clientes", e)
         }
     }
 
@@ -385,7 +270,6 @@ class NotificationRepository @Inject constructor(
 
     suspend fun markAllNotificationsAsRead(clientDocName: String, isAdmin: Boolean = false): Result<Unit> = runCatching {
         if (isAdmin) {
-            // Para admins, marcar todas las notificaciones como leídas pero mantener el estado separado
             val batch = firestore.batch()
             val notifications = firestore.collectionGroup("notifications")
                 .whereEqualTo("isRead", false)
@@ -400,7 +284,6 @@ class NotificationRepository @Inject constructor(
             }
             batch.commit().await()
         } else {
-            // Para usuarios, solo marcar las de su cliente
             val batch = firestore.batch()
             val notifications = firestore.collection("$BASE_PATH/$clientDocName/notifications")
                 .whereEqualTo("isRead", false)
@@ -414,24 +297,6 @@ class NotificationRepository @Inject constructor(
         }
     }
 
-    suspend fun updateFcmToken(userDocName: String, newToken: String): Result<Unit> = runCatching {
-        val user = userRepository.getCurrentUser() ?:
-        throw IllegalStateException("Usuario no encontrado")
-
-        val collectionPath = when (user.role) {
-            UserRole.ADMIN -> "hdd-monitor/accounts/admins"
-            UserRole.USER -> "$BASE_PATH/${user.clientDocName}/users"
-        }
-
-        firestore.collection(collectionPath)
-            .document(userDocName)
-            .update("fcmToken", newToken)
-            .await()
-
-        Log.d(TAG, "Token FCM actualizado: $userDocName")
-    }
-
-    // NUEVO: Crear notificación para cambios de relay con información de comando
     suspend fun createRelayNotification(
         clientDocName: String,
         panelDocName: String,
@@ -443,7 +308,6 @@ class NotificationRepository @Inject constructor(
         val notificationDocName = IdManager.generateNotificationDocumentName("relay_$relayName", clientDocName)
         val now = LocalDateTime.now(Constants.TimeZone.PERU_ZONE)
 
-        // Obtener el nombre real del panel
         val panelName = try {
             val panelDoc = firestore.document("$BASE_PATH/$clientDocName/panels/$panelDocName")
                 .get()
@@ -454,7 +318,6 @@ class NotificationRepository @Inject constructor(
             ""
         }
 
-        // Crear mensaje dependiendo del origen del cambio
         val message = when (commandSource) {
             "app" -> "Relay $relayName del panel \"$panelName\" cambiado remotamente de $oldStatus a $newStatus"
             "web" -> "Relay $relayName del panel \"$panelName\" cambiado desde web de $oldStatus a $newStatus"
@@ -497,7 +360,6 @@ class NotificationRepository @Inject constructor(
         val notificationDocName = IdManager.generateNotificationDocumentName(message, clientDocName)
         val now = LocalDateTime.now(Constants.TimeZone.PERU_ZONE)
 
-        // Obtener el nombre real del panel
         val panelName = try {
             val panelDoc = firestore.document("$BASE_PATH/$clientDocName/panels/$panelDocName")
                 .get()
@@ -511,7 +373,7 @@ class NotificationRepository @Inject constructor(
         val notificationData = hashMapOf(
             "panelDocName" to panelDocName,
             "panel_id" to panelDocName,
-            "panel_name" to panelName,  // Guardar el nombre real del panel
+            "panel_name" to panelName,
             "relayName" to relayName,
             "message" to message,
             "date_time" to now.format(DateTimeFormatter.ofPattern(DATE_FORMAT)),

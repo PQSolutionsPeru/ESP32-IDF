@@ -2,10 +2,6 @@ package com.pqsolutions.hdd_monitor.presentation.screens
 
 import android.util.Log
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -35,13 +31,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -50,47 +42,24 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.pqsolutions.hdd_monitor.R
-import com.pqsolutions.hdd_monitor.presentation.components.AnimatedNotificationBell
-import com.pqsolutions.hdd_monitor.presentation.components.DefaultErrorContent
-import com.pqsolutions.hdd_monitor.presentation.components.LoadingContent
 import com.pqsolutions.hdd_monitor.presentation.components.ScreenTopBar
-import com.pqsolutions.hdd_monitor.presentation.theme.HDD1_2Theme
+import com.pqsolutions.hdd_monitor.presentation.viewmodel.NotificationHistoryViewModel
 import com.pqsolutions.hdd_monitor.presentation.viewmodel.NotificationItem
 import com.pqsolutions.hdd_monitor.presentation.viewmodel.NotificationType
-import com.pqsolutions.hdd_monitor.presentation.viewmodel.NotificationViewModel
-import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationHistoryScreen(
-    notificationViewModel: NotificationViewModel = hiltViewModel(),
     onBackClick: () -> Unit,
     hasPendingNotifications: Boolean,
     onNavigateToEvent: (String) -> Unit,
     onNavigateToPanel: (String) -> Unit
 ) {
-    val uiState by notificationViewModel.uiState.collectAsState()
-    var isInitialLoading by remember { mutableStateOf(true) }
-    val loadingKey = remember { mutableStateOf(0) }
-
-    LaunchedEffect(loadingKey.value) {
-        try {
-            notificationViewModel.setLoading(isInitialLoading)
-            delay(200)
-            notificationViewModel.refresh()
-            delay(800)
-            notificationViewModel.markAllAsRead()
-            isInitialLoading = false
-            notificationViewModel.setLoading(false)
-        } catch (e: Exception) {
-            Log.e("NotificationHistoryScreen", "Error cargando notificaciones", e)
-            isInitialLoading = false
-            notificationViewModel.setLoading(false)
-        }
-    }
+    val viewModel: NotificationHistoryViewModel = hiltViewModel()
+    val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(Unit) {
-        notificationViewModel.clearError()
+        viewModel.markAllAsRead()
     }
 
     BackHandler { onBackClick() }
@@ -106,16 +75,24 @@ fun NotificationHistoryScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues),
-            contentAlignment = Alignment.Center
+                .padding(paddingValues)
         ) {
-            if (isInitialLoading && uiState.isLoading) {
-                CircularProgressIndicator()
-            } else {
-                if (uiState.error != null) {
+            when {
+                uiState.isLoading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+                uiState.error != null -> {
                     Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
                         Text(
                             text = uiState.error ?: "Error desconocido",
@@ -124,36 +101,30 @@ fun NotificationHistoryScreen(
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = { loadingKey.value++ }) {
+                        Button(onClick = { viewModel.refreshNotifications() }) {
                             Text(text = stringResource(R.string.retry))
                         }
                     }
-                } else if (uiState.notifications.isEmpty()) {
+                }
+                uiState.notifications.isEmpty() -> {
                     EmptyNotificationsContent()
-                } else {
-                    Box {
-                        NotificationsList(
-                            notifications = uiState.notifications,
-                            onNotificationClick = { notification ->
-                                notificationViewModel.onNotificationClick(
-                                    notification = notification,
-                                    onNavigateToEvent = onNavigateToEvent,
-                                    onNavigateToPanel = onNavigateToPanel
-                                )
-                            }
-                        )
-
-                        if (!isInitialLoading && uiState.isLoading) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator()
+                }
+                else -> {
+                    NotificationsList(
+                        notifications = uiState.notifications,
+                        onNotificationClick = { notification ->
+                            when (notification.notificationType) {
+                                NotificationType.EVENT -> {
+                                    onNavigateToEvent("")
+                                }
+                                NotificationType.RELAY -> {
+                                    notification.panelDocName?.let { panelId ->
+                                        onNavigateToPanel(panelId)
+                                    }
+                                }
                             }
                         }
-                    }
+                    )
                 }
             }
         }
@@ -182,10 +153,7 @@ private fun NotificationsList(
     notifications: List<NotificationItem>,
     onNotificationClick: (NotificationItem) -> Unit
 ) {
-    // IMPORTANTE: Asegurar que las notificaciones siempre estén ordenadas por timestamp
-    val sortedNotifications = remember(notifications) {
-        notifications.sortedByDescending { it.timestamp }
-    }
+    val sortedNotifications = notifications.sortedByDescending { it.timestamp }
 
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -227,7 +195,6 @@ private fun NotificationCard(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Icono según tipo de notificación
             Icon(
                 imageVector = when {
                     notification.notificationType == NotificationType.EVENT -> Icons.Filled.Event
