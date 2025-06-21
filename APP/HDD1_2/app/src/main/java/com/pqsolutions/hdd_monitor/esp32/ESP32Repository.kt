@@ -12,7 +12,6 @@ import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.Source
-import com.pqsolutions.hdd_monitor.util.StatusUpdateManager
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -260,19 +259,6 @@ class ESP32Repository @Inject constructor(
                     val status = snapshot?.getString("status") ?: "UNKNOWN"
                     Log.d(TAG, "Estado de ESP32 $esp32Id actualizado: $status")
                     trySend(status)
-
-                    if (snapshot != null && snapshot.exists()) {
-                        val clientId = snapshot.getString("client_id") ?: ""
-                        val panelId = snapshot.getString("panel_id") ?: ""
-
-                        if (clientId.isNotEmpty() && panelId.isNotEmpty()) {
-                            StatusUpdateManager.emitEsp32StatusUpdateSync(panelId, status)
-
-                            if (status == ESP32Device.STATUS_RUNNING) {
-                                observeRelayStates(clientId, panelId)
-                            }
-                        }
-                    }
                 }
 
             activeListeners[listenerId] = listenerRegistration
@@ -285,41 +271,6 @@ class ESP32Repository @Inject constructor(
             Log.e(TAG, "Error al configurar listener de estado de ESP32", e)
             close(e)
         }
-    }
-
-    private fun observeRelayStates(clientId: String, panelId: String) {
-        val listenerId = "relays_${clientId}_${panelId}"
-
-        if (activeListeners.containsKey(listenerId)) {
-            return
-        }
-
-        Log.d(TAG, "Configurando listener de relays para panel $panelId")
-
-        val relaysRef = firestore
-            .collection("hdd-monitor/accounts/clients")
-            .document(clientId)
-            .collection("panels")
-            .document(panelId)
-            .collection("relays")
-
-        val registration = relaysRef.addSnapshotListener { snapshot, error ->
-            if (error != null) {
-                Log.e(TAG, "Error observando relays", error)
-                return@addSnapshotListener
-            }
-
-            snapshot?.documentChanges?.forEach { change ->
-                val relay = change.document
-                val relayName = relay.id
-                val status = relay.getString("status") ?: "UNKNOWN"
-                Log.d(TAG, "Cambio en relay $relayName: $status")
-
-                StatusUpdateManager.emitRelayStatusUpdateSync(panelId, relayName, status)
-            }
-        }
-
-        activeListeners[listenerId] = registration
     }
 
     fun observeAssignedESP32s(clientId: String? = null): Flow<List<ESP32Device>> = callbackFlow {

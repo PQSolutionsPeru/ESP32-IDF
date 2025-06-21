@@ -10,13 +10,11 @@ import com.pqsolutions.hdd_monitor.data.UserRepository
 import com.pqsolutions.hdd_monitor.data.ClientRepository
 import com.pqsolutions.hdd_monitor.domain.model.UserRole
 import com.pqsolutions.hdd_monitor.util.Constants.DocumentPrefixes
-import com.pqsolutions.hdd_monitor.util.StatusUpdateManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -34,7 +32,6 @@ class DashboardViewModel @Inject constructor(
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
 
     private var panelsJob: Job? = null
-    private var statusUpdateJob: Job? = null
 
     companion object {
         private const val TAG = "DashboardViewModel"
@@ -42,56 +39,6 @@ class DashboardViewModel @Inject constructor(
 
     init {
         Log.d(TAG, "DashboardViewModel initialized")
-        listenForStatusUpdates()
-    }
-
-    private fun listenForStatusUpdates() {
-        statusUpdateJob?.cancel()
-        statusUpdateJob = viewModelScope.launch {
-            Log.d(TAG, "Comenzando a escuchar actualizaciones de estado")
-
-            StatusUpdateManager.statusUpdates
-                .distinctUntilChanged()
-                .collect { update ->
-                    Log.d(TAG, "Recibida actualización de estado: ${update.panelDocName} -> ${update.newStatus}")
-                    processStatusUpdate(update)
-                }
-        }
-    }
-
-    private fun processStatusUpdate(update: StatusUpdateManager.StatusUpdate) {
-        _uiState.update { currentState ->
-            val updatedPanels = currentState.panels.map { panel ->
-                if (panel.documentName == update.panelDocName) {
-                    if (update.isEsp32) {
-                        Log.d(TAG, "Actualizando ESP32 de ${panel.name} a ${update.newStatus}")
-                        panel.copy(esp32Status = update.newStatus)
-                    } else {
-                        Log.d(TAG, "Actualizando relay ${update.relayName} de ${panel.name} a ${update.newStatus}")
-                        val updatedRelays = panel.relays.map { relay ->
-                            if (relay.name == update.relayName) {
-                                relay.copy(status = update.newStatus)
-                            } else {
-                                relay
-                            }
-                        }
-                        panel.copy(relays = updatedRelays)
-                    }
-                } else {
-                    panel
-                }
-            }
-
-            val updatedGroupedPanels = updatedPanels.groupBy {
-                currentState.clientNames[it.clientName] ?: it.clientName
-            }
-
-            currentState.copy(
-                panels = updatedPanels,
-                groupedPanels = updatedGroupedPanels,
-                lastUpdate = System.currentTimeMillis()
-            )
-        }
     }
 
     fun loadPanels() {
@@ -212,10 +159,7 @@ class DashboardViewModel @Inject constructor(
             Log.d(TAG, "DashboardViewModel clearing")
 
             panelsJob?.cancel()
-            statusUpdateJob?.cancel()
-
             panelsJob = null
-            statusUpdateJob = null
 
             Log.d(TAG, "DashboardViewModel cleared successfully")
         } catch (e: Exception) {

@@ -8,7 +8,6 @@ import com.google.firebase.firestore.FieldValue
 import com.pqsolutions.hdd_monitor.data.util.IdManager
 import com.pqsolutions.hdd_monitor.esp32.ESP32Device
 import com.pqsolutions.hdd_monitor.esp32.ESP32Repository
-import com.pqsolutions.hdd_monitor.util.StatusUpdateManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -306,86 +305,6 @@ class PanelRepository @Inject constructor(
         }
     }
 
-    private fun setupAllClientsPanelsListener(
-        onUpdate: (List<Panel>) -> Unit
-    ): ListenerRegistration {
-        return firestore.collection(BASE_PATH)
-            .addSnapshotListener { clientsSnapshot, error ->
-                if (error != null) {
-                    Log.e(TAG, "Error in clients listener", error)
-                    return@addSnapshotListener
-                }
-
-                if (clientsSnapshot == null) {
-                    onUpdate(emptyList())
-                    return@addSnapshotListener
-                }
-
-                coroutineScope.launch {
-                    val allPanels = mutableListOf<Panel>()
-
-                    for (clientDoc in clientsSnapshot.documents) {
-                        if (clientDoc.exists()) {
-                            val clientId = clientDoc.id
-                            val clientDisplayName = clientDoc.getString("name") ?: clientId
-
-                            val clientListenerId = "client_panels_$clientId"
-
-                            if (!activeListeners.containsKey(clientListenerId)) {
-                                val clientListener = firestore.collection("$BASE_PATH/$clientId/panels")
-                                    .addSnapshotListener { panelsSnapshot, panelsError ->
-                                        if (panelsError != null) {
-                                            Log.e(TAG, "Error in client panels listener for $clientId", panelsError)
-                                            return@addSnapshotListener
-                                        }
-
-                                        if (panelsSnapshot != null) {
-                                            coroutineScope.launch {
-                                                try {
-                                                    val clientPanels = mutableListOf<Panel>()
-
-                                                    for (doc in panelsSnapshot.documents) {
-                                                        if (doc.exists()) {
-                                                            try {
-                                                                val panel = doc.toObject(Panel::class.java)?.copy(
-                                                                    documentName = doc.id,
-                                                                    clientName = clientId,
-                                                                    clientDisplayName = clientDisplayName,
-                                                                    lastUpdate = doc.getLong("lastUpdate") ?: System.currentTimeMillis()
-                                                                )
-
-                                                                if (panel != null) {
-                                                                    setupRelayListener(clientId, panel)
-                                                                    setupESP32Listener(panel)
-                                                                    clientPanels.add(panel)
-                                                                }
-                                                            } catch (e: Exception) {
-                                                                Log.e(TAG, "Error converting panel for client $clientId", e)
-                                                            }
-                                                        }
-                                                    }
-
-                                                    synchronized(allPanels) {
-                                                        allPanels.removeAll { it.clientName == clientId }
-                                                        allPanels.addAll(clientPanels)
-                                                    }
-
-                                                    onUpdate(allPanels.toList())
-                                                } catch (e: Exception) {
-                                                    Log.e(TAG, "Error processing client panels for $clientId", e)
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                activeListeners[clientListenerId] = clientListener
-                            }
-                        }
-                    }
-                }
-            }
-    }
-
     private fun setupRelayListener(clientDocName: String, panel: Panel) {
         val relayListenerId = "relays_${clientDocName}_${panel.documentName}"
 
@@ -430,29 +349,6 @@ class PanelRepository @Inject constructor(
 
                             panel.relays = updatedRelays
 
-                            relaysSnapshot.documentChanges.forEach { change ->
-                                try {
-                                    when (change.type) {
-                                        DocumentChange.Type.ADDED, DocumentChange.Type.MODIFIED -> {
-                                            val relay = change.document
-                                            if (relay.exists()) {
-                                                val relayName = relay.id
-                                                val status = relay.getString("status") ?: "UNKNOWN"
-
-                                                Log.d(TAG, "Cambio en relay $relayName: $status")
-                                                StatusUpdateManager.emitRelayStatusUpdateSync(
-                                                    panel.documentName,
-                                                    relayName,
-                                                    status
-                                                )
-                                            }
-                                        }
-                                        else -> {}
-                                    }
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "Error procesando cambio en relay", e)
-                                }
-                            }
                         } catch (e: Exception) {
                             Log.e(TAG, "Error procesando snapshot de relays para panel ${panel.documentName}", e)
                         }
@@ -496,7 +392,7 @@ class PanelRepository @Inject constructor(
                 }
 
                 Log.d(TAG, "ESP32 ${panel.esp32_id} cambió a $newStatus")
-                StatusUpdateManager.emitEsp32StatusUpdateSync(panel.documentName, newStatus)
+                panel.esp32Status = newStatus
             }
 
         activeListeners[esp32ListenerId] = registration
