@@ -35,7 +35,6 @@ class DashboardViewModel @Inject constructor(
 
     private var panelsJob: Job? = null
     private var statusUpdateJob: Job? = null
-    private var isInitialized = false
 
     companion object {
         private const val TAG = "DashboardViewModel"
@@ -98,11 +97,6 @@ class DashboardViewModel @Inject constructor(
     fun loadPanels() {
         Log.d(TAG, "loadPanels() called")
 
-        if (isInitialized && panelsJob?.isActive == true) {
-            Log.d(TAG, "Panels already initialized and loading, skipping")
-            return
-        }
-
         _uiState.update { it.copy(isLoading = true, error = null) }
 
         panelsJob?.cancel()
@@ -149,10 +143,7 @@ class DashboardViewModel @Inject constructor(
                             )
                         }
 
-                        if (!isInitialized) {
-                            isInitialized = true
-                            Log.d(TAG, "Dashboard initialized successfully")
-                        }
+                        Log.d(TAG, "Dashboard panels updated successfully")
                     }
                 } else {
                     Log.e(TAG, "No authenticated user found")
@@ -225,12 +216,6 @@ class DashboardViewModel @Inject constructor(
 
             panelsJob = null
             statusUpdateJob = null
-
-            try {
-                panelRepository.clearListeners()
-            } catch (e: Exception) {
-                Log.e(TAG, "Error clearing panel listeners", e)
-            }
 
             Log.d(TAG, "DashboardViewModel cleared successfully")
         } catch (e: Exception) {

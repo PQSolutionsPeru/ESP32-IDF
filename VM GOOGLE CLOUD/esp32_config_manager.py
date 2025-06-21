@@ -15,9 +15,7 @@ ESP32_STATES = {
     'AWAITING_CONFIG': 'AWAITING_CONFIG',
     'ONLINE': 'ONLINE',
     'ERROR': 'ERROR',
-    'OK': 'OK',
-    'DISC': 'DISC',
-    'REGISTERED': 'REGISTERED'
+    'OFFLINE': 'OFFLINE'
 }
 
 RELAY_STATES = {
@@ -26,9 +24,7 @@ RELAY_STATES = {
     'ERROR': 'ERROR'
 }
 
-DEFAULT_STATUS = 'OK'
 DEFAULT_RELAY_STATUS = RELAY_STATES['DISC']
-DEFAULT_ESP32_STATUS = ESP32_STATES['AWAITING_CONFIG']
 
 class ESP32ConfigManager:
     def __init__(self):
@@ -42,8 +38,37 @@ class ESP32ConfigManager:
         
         self._config_cache = {}
         self._esp32_status = {}
+        self._last_config_sent = {}
 
         self._watch_references = []
+
+    def _should_send_config(self, esp32_id: str, esp32_data: Dict[str, Any]) -> bool:
+        try:
+            current_status = esp32_data.get('status')
+            client_id = esp32_data.get('client_id')
+            panel_id = esp32_data.get('panel_id')
+            
+            if current_status != ESP32_STATES['AWAITING_CONFIG']:
+                logging.debug(f"ESP32 {esp32_id} en estado {current_status}, no necesita configuración")
+                return False
+            
+            if not client_id or not panel_id:
+                logging.debug(f"ESP32 {esp32_id} sin asignación completa (client: {client_id}, panel: {panel_id})")
+                return False
+            
+            current_time = time.time()
+            last_sent = self._last_config_sent.get(esp32_id, 0)
+            
+            if current_time - last_sent < 300:
+                time_diff = int(current_time - last_sent)
+                logging.info(f"Configuración enviada a ESP32 {esp32_id} hace {time_diff}s, saltando")
+                return False
+            
+            return True
+            
+        except Exception as e:
+            logging.error(f"Error verificando si enviar config a {esp32_id}: {e}")
+            return False
 
     def _handle_registration(self, esp32_id: str, payload: Dict[str, Any]):
         try:
@@ -60,13 +85,24 @@ class ESP32ConfigManager:
                     'status': ESP32_STATES['AWAITING_CONFIG']
                 }
                 esp32_ref.set(esp32_data)
-                logging.info(f"Nuevo ESP32 registrado: {esp32_id}")
+                logging.info(f"Nuevo ESP32 registrado: {esp32_id} (AWAITING_CONFIG)")
                 
             else:
                 esp32_data = esp32_doc.to_dict()
+                current_status = esp32_data.get('status')
                 
                 if esp32_data.get('client_id') and esp32_data.get('panel_id'):
-                    self._send_config(esp32_id, esp32_data)
+                    if current_status == ESP32_STATES['AWAITING_CONFIG']:
+                        if self._should_send_config(esp32_id, esp32_data):
+                            self._send_config(esp32_id, esp32_data)
+                    else:
+                        updates = {
+                            'IP': payload.get('IP', ''),
+                            'lastUpdate': current_time,
+                            'lastNetworkUpdate': current_time
+                        }
+                        esp32_ref.update(updates)
+                        logging.debug(f"ESP32 {esp32_id} ya configurado, solo actualizando info de red")
                 else:
                     updates = {
                         'IP': payload.get('IP', ''),
@@ -74,7 +110,7 @@ class ESP32ConfigManager:
                         'status': ESP32_STATES['AWAITING_CONFIG']
                     }
                     esp32_ref.update(updates)
-                    logging.info(f"ESP32 {esp32_id} actualizado con: {updates}")
+                    logging.info(f"ESP32 {esp32_id} sin asignación, marcado como AWAITING_CONFIG")
 
         except Exception as e:
             logging.error(f"Error en registro de ESP32: {e}", exc_info=True)
@@ -101,11 +137,10 @@ class ESP32ConfigManager:
                 'client_id': client_id,
                 'panel_id': panel_id,
                 'panel_name': panel_data.get('name', ''),
-                'location': panel_data.get('location', ''),
-                'status': ESP32_STATES['REGISTERED']
+                'location': panel_data.get('location', '')
             }
 
-            logging.info(f"Enviando configuración compacta para ESP32 {esp32_id}")
+            logging.info(f"Enviando configuración a ESP32 {esp32_id}: {config}")
 
             config_json = json.dumps(config, separators=(',', ':'))
             
@@ -115,25 +150,19 @@ class ESP32ConfigManager:
                 qos=MQTT_CONFIG['QOS']
             )
             
-            esp32_ref = self.db.document(f'hdd-monitor/esp32/registered/{esp32_id}')
-            esp32_ref.update({
-                'status': ESP32_STATES['ONLINE'],
-                'lastUpdate': datetime.now(pytz.UTC)
-            })
+            self._last_config_sent[esp32_id] = time.time()
             
             self._create_initial_relays(client_id, panel_id, esp32_id)
-        
-            logging.info(f"Configuración enviada a ESP32 {esp32_id}")
+            
+            logging.info(f"Configuración enviada exitosamente a ESP32 {esp32_id}")
             
         except Exception as e:
             logging.error(f"Error enviando configuración: {e}", exc_info=True)
 
     def _create_initial_relays(self, client_id: str, panel_id: str, esp32_id: str):
-        """Crea los documentos iniciales de los 6 relays para un panel"""
         try:
             relays_ref = self.db.collection(f'hdd-monitor/accounts/clients/{client_id}/panels/{panel_id}/relays')
             
-            # Definir los 6 relays por defecto
             default_relays = [
                 {'id': 'relay_1', 'name': 'Relay 1'},
                 {'id': 'relay_2', 'name': 'Relay 2'},
@@ -143,18 +172,16 @@ class ESP32ConfigManager:
                 {'id': 'relay_6', 'name': 'Relay 6'}
             ]
             
-            # Crear cada relay si no existe
             for relay in default_relays:
                 relay_doc = relays_ref.document(relay['id'])
                 
-                # Verificar si ya existe
                 if not relay_doc.get().exists:
                     relay_data = {
                         'name': relay['name'],
                         'customName': '',
-                        'status': 'DISC',  # Estado inicial desconectado
-                        'isActive': False,  # Desactivado por defecto
-                        'contactType': 'NO',  # Normally Open por defecto
+                        'status': 'DISC',
+                        'isActive': False,
+                        'contactType': 'NO',
                         'date_time': datetime.now(pytz.timezone('America/Lima')).strftime('%d/%m/%Y, %H:%M'),
                         'lastUpdate': firestore.SERVER_TIMESTAMP,
                         'created': firestore.SERVER_TIMESTAMP
@@ -163,7 +190,7 @@ class ESP32ConfigManager:
                     relay_doc.set(relay_data)
                     logging.info(f"Relay {relay['id']} creado para panel {panel_id}")
             
-            logging.info(f"Relays iniciales creados para panel {panel_id} del cliente {client_id}")
+            logging.info(f"Relays iniciales verificados para panel {panel_id} del cliente {client_id}")
             
         except Exception as e:
             logging.error(f"Error creando relays iniciales: {e}", exc_info=True)
@@ -174,9 +201,10 @@ class ESP32ConfigManager:
                 esp32_ref = self.db.document(f'hdd-monitor/esp32/registered/{esp32_id}')
                 esp32_ref.update({
                     'status': ESP32_STATES['ONLINE'],
-                    'lastUpdate': datetime.now(pytz.UTC)
+                    'lastUpdate': datetime.now(pytz.UTC),
+                    'lastConfigResponse': datetime.now(pytz.UTC)
                 })
-                logging.info(f"ESP32 {esp32_id} configurado exitosamente")
+                logging.info(f"ESP32 {esp32_id} configurado exitosamente - Estado: ONLINE")
             else:
                 error_msg = payload.get('message', 'Unknown error')
                 logging.error(f"Error configurando ESP32 {esp32_id}: {error_msg}")
@@ -198,6 +226,7 @@ class ESP32ConfigManager:
             if esp32_doc.exists:
                 esp32_data = esp32_doc.to_dict()
                 current_time = datetime.now(pytz.UTC)
+                reported_status = payload.get('status')
 
                 if not esp32_data.get('client_id') or not esp32_data.get('panel_id'):
                     existing_panel = self._find_existing_panel_assignment(esp32_id)
@@ -205,18 +234,26 @@ class ESP32ConfigManager:
                         esp32_data.update(existing_panel)
                         esp32_ref.update(existing_panel)
 
-                updates = {
-                    'lastUpdate': current_time,
-                    'status': payload.get('status', esp32_data.get('status'))
-                }
+                if esp32_data.get('client_id') and esp32_data.get('panel_id'):
+                    if reported_status == ESP32_STATES['AWAITING_CONFIG']:
+                        if self._should_send_config(esp32_id, esp32_data):
+                            self._send_config(esp32_id, esp32_data)
+                        updates = {'lastUpdate': current_time}
+                    elif reported_status in [ESP32_STATES['ONLINE'], ESP32_STATES['ERROR']]:
+                        updates = {
+                            'lastUpdate': current_time,
+                            'status': reported_status
+                        }
+                    else:
+                        updates = {'lastUpdate': current_time}
+                else:
+                    updates = {
+                        'lastUpdate': current_time,
+                        'status': ESP32_STATES['AWAITING_CONFIG']
+                    }
+                
                 esp32_ref.update(updates)
                 logging.info(f"Estado de ESP32 {esp32_id} actualizado: {updates}")
-
-                if ((payload.get('status') == ESP32_STATES['AWAITING_CONFIG'] or 
-                    not payload.get('status')) and 
-                    esp32_data.get('client_id') and 
-                    esp32_data.get('panel_id')):
-                    self._send_config(esp32_id, esp32_data)
 
         except Exception as e:
             logging.error(f"Error procesando actualización de estado: {e}", exc_info=True)
@@ -339,7 +376,7 @@ class ESP32ConfigManager:
     def _on_message(self, client, userdata, msg):
         try:
             if msg.retain:
-                logging.info(f"Ignorando mensaje retain en {msg.topic}")
+                logging.debug(f"Ignorando mensaje retain en {msg.topic}")
                 return
 
             import json
@@ -348,7 +385,7 @@ class ESP32ConfigManager:
                 payload_str = msg.payload.decode().strip('[] ')
                 payload = json.loads(payload_str)
                 
-                logging.info(f"Mensaje recibido en {msg.topic}: {payload}")
+                logging.debug(f"Mensaje recibido en {msg.topic}: {payload}")
                 
                 topic_parts = msg.topic.split('/')
 
@@ -358,8 +395,9 @@ class ESP32ConfigManager:
                         network_info = {
                             'MAC': payload.get('MAC'),
                             'IP': payload.get('IP'),
-                            'status': payload.get('status')
+                            'status': payload.get('status', 'ONLINE')
                         }
+                        logging.info(f"Procesando network_info de ESP32 {esp32_id}")
                         self._handle_registration(esp32_id, network_info)
                         
                 elif topic_parts[0] == "esp32":
@@ -375,6 +413,7 @@ class ESP32ConfigManager:
             logging.error(f"Error en _on_message: {e}", exc_info=True)
 
     def _on_disconnect(self, client, userdata, rc):
+        self.connected = False
         if rc != 0:
             logging.warning(f"Desconexión inesperada del broker MQTT: {rc}")
 
@@ -413,12 +452,12 @@ class ESP32ConfigManager:
             esp32_ref.update({
                 'client_id': client_id,
                 'panel_id': panel_id,
+                'status': ESP32_STATES['AWAITING_CONFIG'],
                 'lastUpdate': datetime.now(pytz.UTC)
             })
 
-            esp32_data = esp32_doc.to_dict()
-            esp32_data.update({'client_id': client_id, 'panel_id': panel_id})
-            self._send_config(esp32_id, esp32_data)
+            if esp32_id in self._last_config_sent:
+                del self._last_config_sent[esp32_id]
 
             logging.info(f"ESP32 {esp32_id} asignado al panel {panel_id} del cliente {client_id}")
 
@@ -477,6 +516,9 @@ class ESP32ConfigManager:
                             esp32_id = change.document.id
                             logging.info(f"ESP32 {esp32_id} eliminado de la base de datos")
                             
+                            if esp32_id in self._last_config_sent:
+                                del self._last_config_sent[esp32_id]
+                            
                             delete_message = json.dumps({
                                 'action': 'DELETED',
                                 'timestamp': int(time.time() * 1000)
@@ -503,7 +545,6 @@ class ESP32ConfigManager:
     def _watch_panel_assignments(self):
         try:
             esp32s_ref = self.db.collection('hdd-monitor/esp32/registered')
-            query = esp32s_ref.where('status', '==', ESP32_STATES['AWAITING_CONFIG'])
             
             def on_snapshot(doc_snapshot, changes, read_time):
                 for change in changes:
@@ -512,14 +553,18 @@ class ESP32ConfigManager:
                             esp32_data = change.document.to_dict()
                             esp32_id = change.document.id
                             
-                            if esp32_data.get('client_id') and esp32_data.get('panel_id'):
-                                logging.info(f"Detectada nueva asignación para ESP32 {esp32_id}")
-                                self._send_config(esp32_id, esp32_data)
+                            if (esp32_data.get('client_id') and 
+                                esp32_data.get('panel_id') and
+                                esp32_data.get('status') == ESP32_STATES['AWAITING_CONFIG']):
+                                
+                                if self._should_send_config(esp32_id, esp32_data):
+                                    logging.info(f"Detectada nueva asignación para ESP32 {esp32_id}")
+                                    self._send_config(esp32_id, esp32_data)
                                 
                     except Exception as e:
                         logging.error(f"Error procesando cambio de panel: {e}")
 
-            query_watch = query.on_snapshot(on_snapshot)
+            query_watch = esp32s_ref.on_snapshot(on_snapshot)
             self._watch_references.append(query_watch)
             logging.info("Observador de asignaciones de paneles iniciado")
             
@@ -544,8 +589,11 @@ class ESP32ConfigManager:
                     
                     if (esp32_data.get('client_id') and 
                         esp32_data.get('panel_id') and 
-                        esp32_data.get('status') in ['AWAITING_CONFIG', None]):
-                        self._send_config(esp32_id, esp32_data)
+                        esp32_data.get('status') == ESP32_STATES['AWAITING_CONFIG']):
+                        
+                        if self._should_send_config(esp32_id, esp32_data):
+                            logging.info(f"Enviando configuración pendiente a ESP32 {esp32_id}")
+                            self._send_config(esp32_id, esp32_data)
                         
                 except Exception as e:
                     logging.error(f"Error procesando ESP32 {esp32_doc.id}: {e}")

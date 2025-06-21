@@ -182,8 +182,6 @@ class PanelRepository @Inject constructor(
     fun getPanels(clientDocName: String?): Flow<List<Panel>> = callbackFlow {
         Log.d(TAG, "getPanels called with clientDocName: $clientDocName")
 
-        val listenerId = "panels_${System.currentTimeMillis()}_${clientDocName ?: "all"}"
-
         try {
             val registration = if (clientDocName != null) {
                 setupClientPanelsListener(clientDocName) { panels ->
@@ -195,17 +193,13 @@ class PanelRepository @Inject constructor(
                 }
             }
 
-            activeListeners[listenerId] = registration
-
+            awaitClose {
+                Log.d(TAG, "Closing panel flow for clientDocName: $clientDocName")
+                registration.remove()
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error setting up panels listener", e)
             close(e)
-        }
-
-        awaitClose {
-            Log.d(TAG, "Closing panel flow")
-            activeListeners[listenerId]?.remove()
-            activeListeners.remove(listenerId)
         }
     }.flowOn(Dispatchers.IO)
 

@@ -38,7 +38,6 @@
 #define DEFAULT_MAX_RETRIES 3
 #define DEFAULT_BUFFER_SIZE 1024
 #define DEFAULT_MAX_QUEUE_SIZE 3
-#define DEFAULT_STATUS_INTERVAL_MS 300000
 #define MAX_TOPIC_LENGTH 128
 #define MAX_MESSAGE_LENGTH 512
 #define MIN_MESSAGE_INTERVAL_MS 200
@@ -76,7 +75,6 @@ typedef struct {
     int reconnect_attempts;
     int64_t last_reconnect_time;
     int64_t last_activity_time;
-    int64_t last_heartbeat_time;
     int64_t last_message_time;
     
     mqtt_manager_message_callback_t message_callback;
@@ -116,11 +114,6 @@ static esp_err_t validate_esp32_id(const char *esp32_id) {
     }
     
     return ESP_OK;
-}
-
-static void generate_message_id(char *buffer, size_t size) {
-    uint32_t random = esp_random();
-    snprintf(buffer, size, "msg_%08lX", (unsigned long)random);
 }
 
 static bool should_process_message(int64_t current_time) {
@@ -339,7 +332,7 @@ esp_err_t mqtt_manager_set_esp32_id(const char *esp32_id) {
         }
         
         snprintf(ctx->lwt_message, sizeof(ctx->lwt_message),
-                "{\"esp32_id\":\"%.8s\",\"status\":\"OFFLINE\",\"timestamp\":%.15s}",
+                "{\"esp32_id\":\"%.8s\",\"status\":\"OFFLINE\",\"timestamp\":%.15s,\"type\":\"lwt\"}",
                 esp32_id, timestamp_str);
         
         xSemaphoreGive(ctx->mutex);
@@ -442,7 +435,7 @@ esp_err_t mqtt_manager_connect(void) {
             char timestamp_str[20];
             time_manager_get_timestamp(timestamp_str, sizeof(timestamp_str));
             snprintf(ctx->lwt_message, sizeof(ctx->lwt_message),
-                    "{\"esp32_id\":\"%s\",\"status\":\"OFFLINE\",\"timestamp\":%s}",
+                    "{\"esp32_id\":\"%s\",\"status\":\"OFFLINE\",\"timestamp\":%s,\"type\":\"lwt\"}",
                     ctx->esp32_id, timestamp_str);
         }
         
@@ -659,11 +652,6 @@ esp_err_t mqtt_manager_loop(int timeout_ms) {
     
     int64_t current_time = esp_timer_get_time() / 1000;
     
-    if (mqtt_manager_is_connected() && 
-        (current_time - ctx->last_heartbeat_time > DEFAULT_STATUS_INTERVAL_MS)) {
-        mqtt_manager_send_heartbeat();
-    }
-    
     if (ctx->state == MQTT_MANAGER_STATE_RECONNECTING && 
         (current_time - ctx->last_reconnect_time > DEFAULT_RECONNECT_TIMEOUT_MS)) {
         
@@ -791,68 +779,30 @@ esp_err_t mqtt_manager_send_network_info(void) {
     
     int len = snprintf(s_temp_buffer, sizeof(s_temp_buffer),
                       "{\"esp32_id\":\"%.8s\",\"MAC\":\"%.12s\",\"IP\":\"%.15s\","
-                      "\"status\":\"%s\",\"timestamp\":%.12s,\"time\":\"%.25s\"}",
+                      "\"status\":\"%s\",\"timestamp\":%.12s,\"time\":\"%.25s\"",
                       ctx->esp32_id, ctx->mac_address, ip_address, 
                       current_status, timestamp_str, time_str);
     
+    if (strlen(ctx->client_panel_id) > 0 && strlen(ctx->panel_id) > 0) {
+        int remaining_space = sizeof(s_temp_buffer) - len - 1;
+        if (remaining_space > 80) {
+            len += snprintf(s_temp_buffer + len, remaining_space,
+                           ",\"client_id\":\"%.20s\",\"panel_id\":\"%.20s\"",
+                           ctx->client_panel_id, ctx->panel_id);
+        }
+    }
+    
+    if (len < sizeof(s_temp_buffer) - 1) {
+        s_temp_buffer[len] = '}';
+        s_temp_buffer[len + 1] = '\0';
+        len++;
+    }
+    
     if (len > 0 && len < sizeof(s_temp_buffer)) {
-        return mqtt_manager_publish("esp32/network_info", s_temp_buffer, len, 0, false);
+        return mqtt_manager_publish("esp32/network_info", s_temp_buffer, len, 1, false);
     }
     
     ESP_LOGE(TAG, "Network info buffer overflow");
-    return ESP_ERR_NO_MEM;
-}
-
-esp_err_t mqtt_manager_send_heartbeat(void) {
-    mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
-    
-    if (ctx->event_group == NULL || strlen(ctx->esp32_id) == 0) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    
-    if (!mqtt_manager_is_connected()) {
-        return ESP_FAIL;
-    }
-    
-    char message_id[16];
-    generate_message_id(message_id, sizeof(message_id));
-    
-    char timestamp_str[16];
-    if (time_manager_is_synchronized()) {
-        time_manager_get_timestamp(timestamp_str, sizeof(timestamp_str));
-    } else {
-        snprintf(timestamp_str, sizeof(timestamp_str), "%lld", (long long)(esp_timer_get_time() / 1000));
-    }
-    
-    int len;
-    if (strlen(ctx->client_panel_id) > 0 && strlen(ctx->panel_id) > 0) {
-        len = snprintf(s_temp_buffer, sizeof(s_temp_buffer),
-                      "{\"esp32_id\":\"%.8s\",\"status\":\"ONLINE\","
-                      "\"timestamp\":%.12s,\"type\":\"heartbeat\","
-                      "\"message_id\":\"%.15s\",\"client_id\":\"%.20s\","
-                      "\"panel_id\":\"%.20s\"}",
-                      ctx->esp32_id, timestamp_str, message_id,
-                      ctx->client_panel_id, ctx->panel_id);
-    } else {
-        len = snprintf(s_temp_buffer, sizeof(s_temp_buffer),
-                      "{\"esp32_id\":\"%.8s\",\"status\":\"ONLINE\","
-                      "\"timestamp\":%.12s,\"type\":\"heartbeat\","
-                      "\"message_id\":\"%.15s\"}",
-                      ctx->esp32_id, timestamp_str, message_id);
-    }
-    
-    if (len > 0 && len < sizeof(s_temp_buffer)) {
-        snprintf(s_topic_buffer, sizeof(s_topic_buffer), "system/status/%.8s", ctx->esp32_id);
-        esp_err_t ret = mqtt_manager_publish(s_topic_buffer, s_temp_buffer, len, 1, false);
-        
-        if (ret == ESP_OK) {
-            ctx->last_heartbeat_time = esp_timer_get_time() / 1000;
-        }
-        
-        return ret;
-    }
-    
-    ESP_LOGE(TAG, "Heartbeat buffer overflow");
     return ESP_ERR_NO_MEM;
 }
 
