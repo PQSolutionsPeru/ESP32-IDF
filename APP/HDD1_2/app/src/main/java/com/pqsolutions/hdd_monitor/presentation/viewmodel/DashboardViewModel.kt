@@ -7,7 +7,6 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.pqsolutions.hdd_monitor.data.Panel
 import com.pqsolutions.hdd_monitor.data.PanelRepository
 import com.pqsolutions.hdd_monitor.data.UserRepository
-import com.pqsolutions.hdd_monitor.data.ClientRepository
 import com.pqsolutions.hdd_monitor.domain.model.UserRole
 import com.pqsolutions.hdd_monitor.util.Constants.DocumentPrefixes
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -24,7 +23,6 @@ import javax.inject.Inject
 class DashboardViewModel @Inject constructor(
     private val panelRepository: PanelRepository,
     private val userRepository: UserRepository,
-    private val clientRepository: ClientRepository,
     private val firestore: FirebaseFirestore
 ) : ViewModel() {
 
@@ -39,6 +37,7 @@ class DashboardViewModel @Inject constructor(
 
     init {
         Log.d(TAG, "DashboardViewModel initialized")
+        loadPanels()
     }
 
     fun loadPanels() {
@@ -65,10 +64,13 @@ class DashboardViewModel @Inject constructor(
                     }
 
                     val clientsMap = loadClientNames(clientDocName)
-                    _uiState.update { it.copy(clientNames = clientsMap) }
 
                     panelRepository.getPanels(clientDocName).collect { panels ->
                         Log.d(TAG, "Received ${panels.size} panels from repository")
+
+                        panels.forEach { panel ->
+                            Log.d(TAG, "Panel: ${panel.name}, Relays: ${panel.relays.size}, Active: ${panel.activeRelays.size}")
+                        }
 
                         val validPanels = panels.filter { panel ->
                             panel.documentName.startsWith(DocumentPrefixes.PANEL) &&
@@ -90,7 +92,7 @@ class DashboardViewModel @Inject constructor(
                             )
                         }
 
-                        Log.d(TAG, "Dashboard panels updated successfully")
+                        Log.d(TAG, "Dashboard panels updated successfully: ${validPanels.size} panels")
                     }
                 } else {
                     Log.e(TAG, "No authenticated user found")
@@ -160,6 +162,7 @@ class DashboardViewModel @Inject constructor(
 
             panelsJob?.cancel()
             panelsJob = null
+            panelRepository.clearListeners()
 
             Log.d(TAG, "DashboardViewModel cleared successfully")
         } catch (e: Exception) {
@@ -174,16 +177,5 @@ class DashboardViewModel @Inject constructor(
         val clientNames: Map<String, String> = emptyMap(),
         val error: String? = null,
         val lastUpdate: Long = System.currentTimeMillis()
-    ) {
-        override fun toString(): String {
-            return "DashboardUiState(" +
-                    "isLoading=$isLoading, " +
-                    "panels=${panels.size}, " +
-                    "groupedPanels=${groupedPanels.keys}, " +
-                    "clientNames=${clientNames.size}, " +
-                    "error=$error, " +
-                    "lastUpdate=$lastUpdate" +
-                    ")"
-        }
-    }
+    )
 }

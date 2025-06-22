@@ -19,7 +19,7 @@ data class Panel(
         get() = !isESP32Offline() && relays.none { it.status == STATUS_DISC }
 
     val relaysInDisc: String
-        get() = relays.filter { it.status == STATUS_DISC }
+        get() = activeRelays.filter { it.status == STATUS_DISC }
             .joinToString(", ") { it.displayName }
 
     val hasIssues: Boolean
@@ -27,6 +27,9 @@ data class Panel(
 
     val activeRelays: List<Relay>
         get() = relays.filter { it.isActive }
+
+    val activeRelaysInDiscCount: Int
+        get() = activeRelays.count { it.status == STATUS_DISC }
 
     fun toMap(): Map<String, Any?> = mapOf(
         "documentName" to documentName,

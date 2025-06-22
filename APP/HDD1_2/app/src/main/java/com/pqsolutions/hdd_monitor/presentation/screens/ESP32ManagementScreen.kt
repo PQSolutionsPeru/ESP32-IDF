@@ -42,11 +42,6 @@ fun ESP32ManagementScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    LaunchedEffect(Unit) {
-        Log.d(TAG, "ESP32ManagementScreen iniciado")
-        viewModel.initializeIfNeeded()
-    }
-
     Scaffold(
         topBar = {
             AppTopBar(
@@ -205,7 +200,7 @@ private fun ESP32Content(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        if (uiState.panels.isEmpty() && uiState.availableESP32s.isEmpty()) {
+        if (uiState.panels.isEmpty() && uiState.availableESP32s.isEmpty() && !uiState.isLoading) {
             EmptyStateSection(onCreatePanel = onCreatePanel)
         } else {
             LazyColumn(
@@ -373,11 +368,37 @@ private fun PanelCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            Text(
-                text = if (panel.hasIssues) "Relays con problemas: ${panel.relaysInDisc}" else "Todos los relays OK",
-                style = MaterialTheme.typography.bodySmall,
-                color = if (panel.hasIssues) Color.Red else Color.Green
-            )
+            if (panel.isESP32Offline()) {
+                Text(
+                    text = "ESP32 OFFLINE - Sin datos de relays",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = PanelColors.StatusDisc
+                )
+            } else {
+                val statusText = when {
+                    panel.activeRelays.isEmpty() -> "No hay relays activos configurados"
+                    panel.hasIssues -> {
+                        val problemRelays = panel.relaysInDisc
+                        if (problemRelays.isNotEmpty()) {
+                            "Relays con problemas: $problemRelays"
+                        } else {
+                            "${panel.activeRelaysInDiscCount} relay(s) activo(s) en DISC"
+                        }
+                    }
+                    else -> "Todos los relays activos OK (${panel.activeRelays.size}/${panel.relays.size})"
+                }
+
+                Text(
+                    text = statusText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = when {
+                        panel.isESP32Offline() -> PanelColors.StatusDisc
+                        panel.activeRelays.isEmpty() -> MaterialTheme.colorScheme.onSurfaceVariant
+                        panel.hasIssues -> Color.Red
+                        else -> Color.Green
+                    }
+                )
+            }
 
             Spacer(modifier = Modifier.height(12.dp))
 
