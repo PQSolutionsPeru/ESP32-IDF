@@ -64,7 +64,29 @@ class RelayControlViewModel @Inject constructor(
                 }
 
                 if (clientDocName != null) {
-                    observePanel(clientDocName, panelId)
+                    val clientsMap = loadClientNames(clientDocName)
+                    _uiState.value = _uiState.value.copy(clientNames = clientsMap)
+
+                    panelRepository.observePanelUpdates(clientDocName, panelId)
+                        .catch { error ->
+                            _uiState.value = _uiState.value.copy(isLoading = false, error = "Error: ${error.message}")
+                        }
+                        .collect { panel ->
+                            if (panel != null) {
+                                val clientDisplayName = clientsMap[panel.clientName] ?: panel.clientName
+                                val groupedPanels: Map<String, List<Panel>> = mapOf(clientDisplayName to listOf(panel))
+
+                                _uiState.value = _uiState.value.copy(
+                                    isLoading = false,
+                                    panels = listOf(panel),
+                                    groupedPanels = groupedPanels,
+                                    error = null,
+                                    lastUpdate = System.currentTimeMillis()
+                                )
+                            } else {
+                                _uiState.value = _uiState.value.copy(isLoading = false, error = "Panel no encontrado")
+                            }
+                        }
                 } else {
                     _uiState.value = _uiState.value.copy(isLoading = false, error = "Panel no encontrado")
                 }
@@ -110,7 +132,8 @@ class RelayControlViewModel @Inject constructor(
                             isLoading = false,
                             panels = panels,
                             groupedPanels = groupedPanels,
-                            error = null
+                            error = null,
+                            lastUpdate = System.currentTimeMillis()
                         )
                     }
 

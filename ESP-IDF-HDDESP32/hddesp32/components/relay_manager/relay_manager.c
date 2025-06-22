@@ -11,6 +11,7 @@
 #include "esp_timer.h"
 #include "esp_system.h"
 #include "config_manager.h"
+#include "time_manager.h"
 #include "cJSON.h"
 
 #define TAG "RELAY_MGR"
@@ -97,8 +98,6 @@ int relay_manager_read_stable_gpio(gpio_num_t gpio_pin) {
     
     if (fast_sum == 0 || fast_sum == RELAY_MANAGER_FAST_READINGS) {
         int level = (fast_sum > 0) ? 1 : 0;
-        ESP_LOGD(TAG, "Fast GPIO %d read: %d/%d = %d", 
-                gpio_pin, fast_sum, RELAY_MANAGER_FAST_READINGS, level);
         return level;
     }
     
@@ -109,10 +108,6 @@ int relay_manager_read_stable_gpio(gpio_num_t gpio_pin) {
     }
     
     int stable_level = (total_sum > (RELAY_MANAGER_STABLE_READINGS / 2)) ? 1 : 0;
-    
-    ESP_LOGD(TAG, "Extended GPIO %d read: %d/%d = %d", 
-            gpio_pin, total_sum, RELAY_MANAGER_STABLE_READINGS, stable_level);
-    
     return stable_level;
 }
 
@@ -330,6 +325,64 @@ static void IRAM_ATTR gpio_isr_handler(void *arg) {
     }
 }
 
+esp_err_t relay_manager_report_initial_states(void) {
+    relay_manager_context_t *ctx = &s_relay_ctx;
+    if (!ctx->initialized || ctx->state != RELAY_MGR_STATE_RUNNING) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    ESP_LOGI(TAG, "Reporting initial relay states after configuration");
+    
+    int64_t real_timestamp_ms;
+    if (time_manager_is_synchronized()) {
+        real_timestamp_ms = (int64_t)time_manager_get_time() * 1000;
+    } else {
+        real_timestamp_ms = esp_timer_get_time() / 1000;
+    }
+    
+    for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
+        relay_config_t *relay = &ctx->relays[i];
+        
+        if (!relay->is_active || !GPIO_IS_VALID_GPIO(relay->gpio_pin)) {
+            continue;
+        }
+        
+        int stable_reading = relay_manager_read_stable_gpio(relay->gpio_pin);
+        if (stable_reading >= 0) {
+            relay_state_t current_state = gpio_to_logical_state(stable_reading, relay->contact_type);
+            relay->current_state = current_state;
+            relay->last_change_time = real_timestamp_ms;
+            relay->last_report_time = real_timestamp_ms;
+            
+            ESP_LOGI(TAG, "Initial state report - Relay %s: %s (GPIO: %d)", 
+                    relay->relay_id,
+                    relay_state_to_string(current_state),
+                    stable_reading);
+            
+            if (ctx->state_callback) {
+                relay_event_t event = {
+                    .gpio_pin = relay->gpio_pin,
+                    .old_state = RELAY_STATE_DISC,
+                    .new_state = current_state,
+                    .timestamp = real_timestamp_ms,
+                    .contact_type = relay->contact_type
+                };
+                
+                strncpy(event.relay_id, relay->relay_id, sizeof(event.relay_id) - 1);
+                event.relay_id[sizeof(event.relay_id) - 1] = '\0';
+                
+                strncpy(event.name, relay->name, sizeof(event.name) - 1);
+                event.name[sizeof(event.name) - 1] = '\0';
+                
+                ctx->state_callback(&event, ctx->state_callback_user_data);
+            }
+        }
+    }
+    
+    ESP_LOGI(TAG, "Initial relay states reported");
+    return ESP_OK;
+}
+
 static void relay_event_task(void *pvParameters) {
     relay_manager_context_t *ctx = &s_relay_ctx;
     gpio_event_t gpio_event;
@@ -361,12 +414,6 @@ static void relay_event_task(void *pvParameters) {
                 relay_state_t expected_state = gpio_to_logical_state(current_gpio, relay->contact_type);
                 
                 if (expected_state != relay->current_state) {
-                    ESP_LOGW(TAG, "Auto-check detected missed change on %s: %s -> %s (GPIO=%d)", 
-                            relay->relay_id,
-                            relay_state_to_string(relay->current_state),
-                            relay_state_to_string(expected_state),
-                            current_gpio);
-                    
                     int stable_reading = relay_manager_read_stable_gpio(relay->gpio_pin);
                     if (stable_reading >= 0) {
                         relay_state_t confirmed_state = gpio_to_logical_state(stable_reading, relay->contact_type);
@@ -374,20 +421,23 @@ static void relay_event_task(void *pvParameters) {
                         if (confirmed_state != relay->current_state) {
                             relay_state_t old_state = relay->current_state;
                             relay->current_state = confirmed_state;
-                            relay->last_change_time = current_time;
-                            relay->last_report_time = current_time;
                             
-                            ESP_LOGI(TAG, "Auto-check confirmed: Relay %s: %s -> %s", 
-                                    relay->relay_id,
-                                    relay_state_to_string(old_state),
-                                    relay_state_to_string(confirmed_state));
+                            int64_t real_timestamp_ms;
+                            if (time_manager_is_synchronized()) {
+                                real_timestamp_ms = (int64_t)time_manager_get_time() * 1000;
+                            } else {
+                                real_timestamp_ms = esp_timer_get_time() / 1000;
+                            }
+                            
+                            relay->last_change_time = real_timestamp_ms;
+                            relay->last_report_time = real_timestamp_ms;
                             
                             if (ctx->state_callback) {
                                 relay_event_t event = {
                                     .gpio_pin = relay->gpio_pin,
                                     .old_state = old_state,
                                     .new_state = confirmed_state,
-                                    .timestamp = current_time,
+                                    .timestamp = real_timestamp_ms,
                                     .contact_type = relay->contact_type
                                 };
                                 
@@ -449,49 +499,31 @@ static void relay_event_task(void *pvParameters) {
                 continue;
             }
             
-            int64_t time_since_last_report = gpio_event.timestamp - relay->last_report_time;
-            if (time_since_last_report < (RELAY_MANAGER_MIN_REPORT_INTERVAL_MS * 1000)) {
-                bool massive_change = false;
-                if (new_state == RELAY_STATE_DISC) {
-                    int recent_changes = 0;
-                    int64_t recent_window = 200 * 1000;
-                    
-                    for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
-                        if (ctx->relays[i].is_active && 
-                            (gpio_event.timestamp - ctx->relays[i].last_change_time) < recent_window) {
-                            recent_changes++;
-                        }
-                    }
-                    
-                    if (recent_changes >= 2) {
-                        massive_change = true;
-                        ESP_LOGI(TAG, "Detected massive change pattern - allowing fast report");
-                    }
-                }
-                
-                if (!massive_change) {
-                    continue;
-                }
-            }
-            
             relay_state_t old_state = relay->current_state;
             relay->current_state = new_state;
-            relay->last_change_time = esp_timer_get_time();
-            relay->last_report_time = relay->last_change_time;
             
-            ESP_LOGI(TAG, "Relay %s state change: %s -> %s (stable: %d, time_diff: %lld ms)", 
+            int64_t real_timestamp_ms;
+            if (time_manager_is_synchronized()) {
+                real_timestamp_ms = (int64_t)time_manager_get_time() * 1000;
+            } else {
+                real_timestamp_ms = esp_timer_get_time() / 1000;
+            }
+            
+            relay->last_change_time = real_timestamp_ms;
+            relay->last_report_time = real_timestamp_ms;
+            
+            ESP_LOGI(TAG, "Relay %s state change: %s -> %s (stable: %d)", 
                     relay->relay_id,
                     relay_state_to_string(old_state),
                     relay_state_to_string(new_state),
-                    stable_reading,
-                    (relay->last_change_time - gpio_event.timestamp) / 1000);
+                    stable_reading);
             
             if (ctx->state_callback) {
                 relay_event_t event = {
                     .gpio_pin = relay->gpio_pin,
                     .old_state = old_state,
                     .new_state = new_state,
-                    .timestamp = relay->last_change_time,
+                    .timestamp = real_timestamp_ms,
                     .contact_type = relay->contact_type
                 };
                 
@@ -505,12 +537,6 @@ static void relay_event_task(void *pvParameters) {
             }
         } else {
             idle_cycles++;
-            
-            if (idle_cycles > 100) {
-                ESP_LOGD(TAG, "Relay task idle, processed %lu events, filtered %lu", 
-                        ctx->total_events_processed, ctx->debounce_filtered_events);
-                idle_cycles = 0;
-            }
         }
     }
     
@@ -544,46 +570,35 @@ esp_err_t relay_manager_set_active(const char *relay_id, bool active) {
     
     if (xSemaphoreTake(ctx->config_mutex, portMAX_DELAY) == pdTRUE) {
         relay_config_t *relay = &ctx->relays[index];
-        relay_state_t old_state = relay->current_state;
         
         relay->is_active = active;
         
         if (active && GPIO_IS_VALID_GPIO(relay->gpio_pin)) {
             ESP_LOGI(TAG, "Re-reading state for newly activated relay %s", relay_id);
             
-            vTaskDelay(pdMS_TO_TICKS(20));
+            gpio_intr_disable(relay->gpio_pin);
+            vTaskDelay(pdMS_TO_TICKS(50));
             
             int stable_reading = relay_manager_read_stable_gpio(relay->gpio_pin);
             if (stable_reading >= 0) {
-                relay->current_state = gpio_to_logical_state(stable_reading, relay->contact_type);
-                relay->last_change_time = esp_timer_get_time();
-                relay->last_report_time = relay->last_change_time;
+                relay_state_t new_state = gpio_to_logical_state(stable_reading, relay->contact_type);
+                relay->current_state = new_state;
+                
+                int64_t real_timestamp_ms;
+                if (time_manager_is_synchronized()) {
+                    real_timestamp_ms = (int64_t)time_manager_get_time() * 1000;
+                } else {
+                    real_timestamp_ms = esp_timer_get_time() / 1000;
+                }
+                
+                relay->last_change_time = real_timestamp_ms;
+                relay->last_report_time = real_timestamp_ms;
                 
                 ESP_LOGI(TAG, "Relay %s activation read: GPIO=%d, State=%s", 
                         relay_id, stable_reading, relay_state_to_string(relay->current_state));
                 
-                if (relay->current_state != old_state && ctx->state_callback) {
-                    relay_event_t event = {
-                        .gpio_pin = relay->gpio_pin,
-                        .old_state = old_state,
-                        .new_state = relay->current_state,
-                        .timestamp = relay->last_change_time,
-                        .contact_type = relay->contact_type
-                    };
-                    
-                    strncpy(event.relay_id, relay->relay_id, sizeof(event.relay_id) - 1);
-                    event.relay_id[sizeof(event.relay_id) - 1] = '\0';
-                    
-                    strncpy(event.name, relay->name, sizeof(event.name) - 1);
-                    event.name[sizeof(event.name) - 1] = '\0';
-                    
-                    xSemaphoreGive(ctx->config_mutex);
-                    ctx->state_callback(&event, ctx->state_callback_user_data);
-                    
-                    if (xSemaphoreTake(ctx->config_mutex, portMAX_DELAY) != pdTRUE) {
-                        return ESP_FAIL;
-                    }
-                }
+                gpio_intr_enable(relay->gpio_pin);
+                vTaskDelay(pdMS_TO_TICKS(100));
             }
         }
         
@@ -621,30 +636,47 @@ esp_err_t relay_manager_set_contact_type(const char *relay_id, relay_contact_typ
         relay->contact_type = contact_type;
         
         if (GPIO_IS_VALID_GPIO(relay->gpio_pin)) {
+            if (relay->is_active) {
+                gpio_intr_disable(relay->gpio_pin);
+                vTaskDelay(pdMS_TO_TICKS(30));
+            }
+            
             int stable_reading = relay_manager_read_stable_gpio(relay->gpio_pin);
             if (stable_reading >= 0) {
-                relay->current_state = gpio_to_logical_state(stable_reading, contact_type);
+                relay_state_t new_state = gpio_to_logical_state(stable_reading, contact_type);
+                relay->current_state = new_state;
                 
-                if (relay->is_active && relay->current_state != old_state && ctx->state_callback) {
-                    int64_t current_time = esp_timer_get_time();
-                    relay->last_change_time = current_time;
-                    relay->last_report_time = current_time;
+                if (relay->is_active) {
+                    int64_t real_timestamp_ms;
+                    if (time_manager_is_synchronized()) {
+                        real_timestamp_ms = (int64_t)time_manager_get_time() * 1000;
+                    } else {
+                        real_timestamp_ms = esp_timer_get_time() / 1000;
+                    }
                     
-                    relay_event_t event = {
-                        .gpio_pin = relay->gpio_pin,
-                        .old_state = old_state,
-                        .new_state = relay->current_state,
-                        .timestamp = current_time,
-                        .contact_type = relay->contact_type
-                    };
+                    relay->last_change_time = real_timestamp_ms;
+                    relay->last_report_time = real_timestamp_ms;
                     
-                    strncpy(event.relay_id, relay->relay_id, sizeof(event.relay_id) - 1);
-                    event.relay_id[sizeof(event.relay_id) - 1] = '\0';
+                    gpio_intr_enable(relay->gpio_pin);
+                    vTaskDelay(pdMS_TO_TICKS(50));
                     
-                    strncpy(event.name, relay->name, sizeof(event.name) - 1);
-                    event.name[sizeof(event.name) - 1] = '\0';
-                    
-                    ctx->state_callback(&event, ctx->state_callback_user_data);
+                    if (new_state != old_state && ctx->state_callback) {
+                        relay_event_t event = {
+                            .gpio_pin = relay->gpio_pin,
+                            .old_state = old_state,
+                            .new_state = new_state,
+                            .timestamp = real_timestamp_ms,
+                            .contact_type = relay->contact_type
+                        };
+                        
+                        strncpy(event.relay_id, relay->relay_id, sizeof(event.relay_id) - 1);
+                        event.relay_id[sizeof(event.relay_id) - 1] = '\0';
+                        
+                        strncpy(event.name, relay->name, sizeof(event.name) - 1);
+                        event.name[sizeof(event.name) - 1] = '\0';
+                        
+                        ctx->state_callback(&event, ctx->state_callback_user_data);
+                    }
                 }
             }
         }
@@ -965,7 +997,13 @@ esp_err_t relay_manager_check_all_states(bool force_report) {
         return ESP_ERR_INVALID_STATE;
     }
     
-    int64_t current_time = esp_timer_get_time();
+    int64_t real_timestamp_ms;
+    if (time_manager_is_synchronized()) {
+        real_timestamp_ms = (int64_t)time_manager_get_time() * 1000;
+    } else {
+        real_timestamp_ms = esp_timer_get_time() / 1000;
+    }
+    
     int state_changes = 0;
     
     ESP_LOGI(TAG, "Manual check starting (force_report=%s)", force_report ? "true" : "false");
@@ -992,8 +1030,8 @@ esp_err_t relay_manager_check_all_states(bool force_report) {
         if (current_state != relay->current_state || force_report) {
             relay_state_t old_state = relay->current_state;
             relay->current_state = current_state;
-            relay->last_change_time = current_time;
-            relay->last_report_time = current_time;
+            relay->last_change_time = real_timestamp_ms;
+            relay->last_report_time = real_timestamp_ms;
             
             state_changes++;
             
@@ -1008,7 +1046,7 @@ esp_err_t relay_manager_check_all_states(bool force_report) {
                     .gpio_pin = relay->gpio_pin,
                     .old_state = old_state,
                     .new_state = current_state,
-                    .timestamp = current_time,
+                    .timestamp = real_timestamp_ms,
                     .contact_type = relay->contact_type
                 };
                 
@@ -1020,11 +1058,6 @@ esp_err_t relay_manager_check_all_states(bool force_report) {
                 
                 ctx->state_callback(&event, ctx->state_callback_user_data);
             }
-        } else {
-            ESP_LOGD(TAG, "Manual check - Relay %s: unchanged %s (GPIO: %d)", 
-                    relay->relay_id,
-                    relay_state_to_string(current_state),
-                    stable_reading);
         }
     }
     

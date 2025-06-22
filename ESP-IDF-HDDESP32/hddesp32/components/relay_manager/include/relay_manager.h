@@ -15,12 +15,12 @@ extern "C" {
 #define RELAY_MANAGER_NAME_MAX_LENGTH 32
 #define RELAY_MANAGER_ID_MAX_LENGTH 16
 
-#define RELAY_MANAGER_DEBOUNCE_TIME_MS 30
-#define RELAY_MANAGER_MIN_REPORT_INTERVAL_MS 500
-#define RELAY_MANAGER_STABLE_READINGS 8
-#define RELAY_MANAGER_READING_DELAY_MS 3
-#define RELAY_MANAGER_FAST_READINGS 3
-#define RELAY_MANAGER_AUTO_CHECK_INTERVAL_MS 1000
+#define RELAY_MANAGER_DEBOUNCE_TIME_MS 50
+#define RELAY_MANAGER_MIN_REPORT_INTERVAL_MS 750
+#define RELAY_MANAGER_STABLE_READINGS 10
+#define RELAY_MANAGER_READING_DELAY_MS 5
+#define RELAY_MANAGER_FAST_READINGS 4
+#define RELAY_MANAGER_AUTO_CHECK_INTERVAL_MS 2000
 
 typedef enum {
     RELAY_STATE_OK = 0,
@@ -68,6 +68,8 @@ typedef enum {
 relay_mgr_state_t relay_manager_get_mgr_state(void);
 
 esp_err_t relay_manager_init(void);
+
+esp_err_t relay_manager_report_initial_states(void);
 
 esp_err_t relay_manager_set_state_callback(relay_state_change_callback_t callback, void *user_data);
 

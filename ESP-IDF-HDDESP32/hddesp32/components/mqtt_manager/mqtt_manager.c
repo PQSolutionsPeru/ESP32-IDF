@@ -39,7 +39,7 @@
 #define DEFAULT_BUFFER_SIZE 1024
 #define DEFAULT_MAX_QUEUE_SIZE 3
 #define MAX_TOPIC_LENGTH 128
-#define MAX_MESSAGE_LENGTH 512
+#define MAX_MESSAGE_LENGTH 1024
 #define MIN_MESSAGE_INTERVAL_MS 200
 
 typedef struct {
@@ -777,33 +777,43 @@ esp_err_t mqtt_manager_send_network_info(void) {
         current_status = "AWAITING_CONFIG";
     }
     
-    int len = snprintf(s_temp_buffer, sizeof(s_temp_buffer),
+    memset(s_temp_buffer, 0, sizeof(s_temp_buffer));
+    
+    int len = snprintf(s_temp_buffer, sizeof(s_temp_buffer) - 2,
                       "{\"esp32_id\":\"%.8s\",\"MAC\":\"%.12s\",\"IP\":\"%.15s\","
                       "\"status\":\"%s\",\"timestamp\":%.12s,\"time\":\"%.25s\"",
                       ctx->esp32_id, ctx->mac_address, ip_address, 
                       current_status, timestamp_str, time_str);
     
-    if (strlen(ctx->client_panel_id) > 0 && strlen(ctx->panel_id) > 0) {
-        int remaining_space = sizeof(s_temp_buffer) - len - 1;
-        if (remaining_space > 80) {
-            len += snprintf(s_temp_buffer + len, remaining_space,
-                           ",\"client_id\":\"%.20s\",\"panel_id\":\"%.20s\"",
-                           ctx->client_panel_id, ctx->panel_id);
+    if (strlen(ctx->client_panel_id) > 0 && strlen(ctx->panel_id) > 0 && len > 0) {
+        int remaining_space = sizeof(s_temp_buffer) - len - 2;
+        if (remaining_space > 50) {
+            int additional_len = snprintf(s_temp_buffer + len, remaining_space,
+                                        ",\"client_id\":\"%.20s\",\"panel_id\":\"%.20s\"",
+                                        ctx->client_panel_id, ctx->panel_id);
+            if (additional_len > 0 && additional_len < remaining_space) {
+                len += additional_len;
+            }
         }
     }
     
-    if (len < sizeof(s_temp_buffer) - 1) {
+    if (len > 0 && len < sizeof(s_temp_buffer) - 1) {
         s_temp_buffer[len] = '}';
         s_temp_buffer[len + 1] = '\0';
         len++;
+    } else {
+        ESP_LOGE(TAG, "Network info buffer overflow, len=%d, buffer_size=%zu", len, sizeof(s_temp_buffer));
+        return ESP_ERR_NO_MEM;
     }
     
-    if (len > 0 && len < sizeof(s_temp_buffer)) {
-        return mqtt_manager_publish("esp32/network_info", s_temp_buffer, len, 1, false);
+    if (len <= 2) {
+        ESP_LOGE(TAG, "Invalid JSON length: %d", len);
+        return ESP_ERR_INVALID_ARG;
     }
     
-    ESP_LOGE(TAG, "Network info buffer overflow");
-    return ESP_ERR_NO_MEM;
+    ESP_LOGI(TAG, "Sending network info to esp32/network_info (len=%d)", len);
+    
+    return mqtt_manager_publish("esp32/network_info", s_temp_buffer, len, 1, false);
 }
 
 esp_err_t mqtt_manager_set_panel_config(const char *client_id, const char *panel_id) {

@@ -123,8 +123,6 @@ static void relay_state_change_callback(const relay_event_t *event, void *user_d
     
     memset(g_relay_json_buffer, 0, sizeof(g_relay_json_buffer));
     
-    int64_t timestamp_ms = event->timestamp / 1000;
-    
     int len = snprintf(g_relay_json_buffer, sizeof(g_relay_json_buffer),
                       "{"
                       "\"relay\":\"%.16s\","
@@ -135,7 +133,7 @@ static void relay_state_change_callback(const relay_event_t *event, void *user_d
                       "}",
                       event->relay_id,
                       (event->new_state == RELAY_STATE_OK) ? "OK" : "DISC",
-                      (long long)timestamp_ms,
+                      (long long)event->timestamp,
                       (event->contact_type == RELAY_CONTACT_NC) ? "NC" : "NO",
                       (event->old_state == RELAY_STATE_OK) ? "OK" : "DISC");
     
@@ -158,7 +156,6 @@ static void relay_state_change_callback(const relay_event_t *event, void *user_d
     }
 
     xSemaphoreGive(g_callback_mutex);
-    
 }
 
 static esp_err_t relay_mqtt_command_callback(const char *topic, const char *command_json, void *user_data) {
@@ -340,6 +337,9 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
                             ESP_LOGI(TAG, "Relay %s custom name set to '%.30s'", relay_name, name_str);
                         }
                     }
+                    
+                    vTaskDelay(pdMS_TO_TICKS(500));
+                    relay_manager_report_initial_states();
                 }
             }
             cJSON_Delete(json);

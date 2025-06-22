@@ -51,6 +51,13 @@ static void config_response_task(void *pvParameters) {
         mqtt_manager_subscribe(topic, 1);
         vTaskDelay(pdMS_TO_TICKS(100));
         
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        
+        ESP_LOGI(TAG, "Sending initial relay states report");
+        if (relay_manager_get_mgr_state() == RELAY_MGR_STATE_RUNNING) {
+            relay_manager_check_all_states(true);
+        }
+        
         char online_json[256];
         snprintf(online_json, sizeof(online_json),
                  "{\"esp32_id\":\"%s\",\"status\":\"ONLINE\",\"client_id\":\"%s\",\"panel_id\":\"%s\"}",
