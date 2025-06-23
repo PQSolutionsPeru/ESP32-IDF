@@ -55,7 +55,7 @@ static void config_response_task(void *pvParameters) {
         
         ESP_LOGI(TAG, "Sending initial relay states report");
         if (relay_manager_get_mgr_state() == RELAY_MGR_STATE_RUNNING) {
-            relay_manager_check_all_states(true);
+            relay_manager_report_initial_states();
         }
         
         char online_json[256];

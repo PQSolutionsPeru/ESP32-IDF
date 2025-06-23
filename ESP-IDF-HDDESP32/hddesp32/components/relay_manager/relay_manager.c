@@ -1027,7 +1027,7 @@ esp_err_t relay_manager_check_all_states(bool force_report) {
         
         relay_state_t current_state = gpio_to_logical_state(stable_reading, relay->contact_type);
         
-        if (current_state != relay->current_state || force_report) {
+        if (current_state != relay->current_state) {
             relay_state_t old_state = relay->current_state;
             relay->current_state = current_state;
             relay->last_change_time = real_timestamp_ms;
