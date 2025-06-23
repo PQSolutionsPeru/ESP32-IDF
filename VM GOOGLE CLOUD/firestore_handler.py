@@ -266,7 +266,26 @@ class FirestoreHandler:
 
     def watch_events(self):
         try:
+            initial_load_complete = False
+            initial_load_timer = None
+            
+            def mark_initial_load_complete():
+                nonlocal initial_load_complete
+                initial_load_complete = True
+                self._initial_load_complete = True
+                logging.info("Carga inicial de eventos completada - Procesando cambios reales")
+            
             def on_event_change(doc_snapshot, changes, read_time):
+                nonlocal initial_load_complete, initial_load_timer
+                
+                if not initial_load_complete:
+                    if initial_load_timer:
+                        initial_load_timer.cancel()
+                    
+                    import threading
+                    initial_load_timer = threading.Timer(2.0, mark_initial_load_complete)
+                    initial_load_timer.start()
+                
                 for change in changes:
                     try:
                         doc = change.document
@@ -278,17 +297,21 @@ class FirestoreHandler:
                             new_data = doc.to_dict() if change.type.name != 'REMOVED' else None
                             
                             if change.type.name == 'MODIFIED':
-                                for existing_doc in doc_snapshot:
-                                    if existing_doc.id == doc.id and existing_doc.reference.path == doc_path:
-                                        old_data = self._events_initial_snapshots.get(doc_path, {})
-                                        break
+                                old_data = self._events_initial_snapshots.get(doc_path, {})
                             
-                            if change.type.name in ['ADDED', 'MODIFIED', 'REMOVED']:
+                            if change.type.name == 'ADDED' and not initial_load_complete:
+                                if new_data:
+                                    self._events_initial_snapshots[doc_path] = new_data
+                                logging.debug(f"Evento cargado inicialmente: {doc.id}")
+                                continue
+                            
+                            if change.type.name in ['ADDED', 'MODIFIED', 'REMOVED'] and initial_load_complete:
                                 logging.info(f"Evento {change.type.name}: {doc.id}")
                                 self.notification_handler.process_event_update(
                                     doc.reference,
                                     old_data if change.type.name == 'MODIFIED' else {},
-                                    new_data
+                                    new_data,
+                                    is_initial_load=False
                                 )
                             
                             if new_data and change.type.name != 'REMOVED':
@@ -310,25 +333,52 @@ class FirestoreHandler:
 
     def watch_relay_states(self):
         try:
+            initial_load_complete = False
+            initial_load_timer = None
+            
+            def mark_initial_load_complete():
+                nonlocal initial_load_complete
+                initial_load_complete = True
+                logging.info("Carga inicial de relays completada - Procesando cambios reales")
+            
             def on_relay_state_change(doc_snapshot, changes, read_time):
+                nonlocal initial_load_complete, initial_load_timer
+                
+                if not initial_load_complete:
+                    if initial_load_timer:
+                        initial_load_timer.cancel()
+                    
+                    import threading
+                    initial_load_timer = threading.Timer(3.0, mark_initial_load_complete)
+                    initial_load_timer.start()
+                
                 for change in changes:
                     try:
-                        if change.type.name == 'MODIFIED':
-                            doc = change.document
-                            doc_path = doc.reference.path
-                            path_parts = doc_path.split('/')
+                        doc = change.document
+                        doc_path = doc.reference.path
+                        path_parts = doc_path.split('/')
+                        
+                        if len(path_parts) >= 8 and path_parts[4] == 'panels' and path_parts[6] == 'relays':
+                            new_data = doc.to_dict() if change.type.name != 'REMOVED' else {}
                             
-                            if len(path_parts) >= 8 and path_parts[4] == 'panels' and path_parts[6] == 'relays':
-                                new_data = doc.to_dict()
+                            if change.type.name == 'ADDED' and not initial_load_complete:
+                                self._relay_states[doc_path] = new_data
+                                logging.debug(f"Relay cargado inicialmente: {doc.id}")
+                                continue
+                            
+                            if change.type.name == 'MODIFIED' and initial_load_complete:
                                 old_data = self._relay_states.get(doc_path, {})
                                 
                                 if old_data.get('status') != new_data.get('status'):
                                     if new_data.get('source') != 'mqtt':
                                         logging.info(f"Cambio de estado detectado: {doc.id}")
                                         self.notification_handler.process_relay_update(doc.reference, old_data, new_data)
-                                
+                            
+                            if change.type.name != 'REMOVED':
                                 self._relay_states[doc_path] = new_data
-                    
+                            elif doc_path in self._relay_states:
+                                del self._relay_states[doc_path]
+                            
                     except Exception as e:
                         logging.error(f"Error procesando cambio de estado: {e}")
             
@@ -491,25 +541,34 @@ class FirestoreHandler:
         try:
             current_time = time.time() * 1000
             
-            if relay_data is None:
-                try:
-                    relay_ref = self.db.document(f'hdd-monitor/accounts/clients/{client_id}/panels/{panel_id}/relays/{relay_name}')
-                    relay_doc = relay_ref.get()
-                    relay_data = relay_doc.to_dict() if relay_doc.exists else {}
-                except Exception as e:
-                    logging.error(f"Error obteniendo datos del relay: {e}")
-                    relay_data = {}
-            
+            try:
+                relay_ref = self.db.document(f'hdd-monitor/accounts/clients/{client_id}/panels/{panel_id}/relays/{relay_name}')
+                relay_doc = relay_ref.get()
+                if relay_doc.exists:
+                    complete_relay_data = relay_doc.to_dict()
+                else:
+                    complete_relay_data = relay_data if relay_data else {}
+            except Exception as e:
+                logging.error(f"Error obteniendo datos del relay: {e}")
+                complete_relay_data = relay_data if relay_data else {}
+
             cache_key = f"{client_id}_{panel_id}_{relay_name}_{old_status}_{new_status}_{int(current_time / 1000)}"
             
+            current_time = time.time() * 1000
+            
+            if not hasattr(self, '_notification_cache'):
+                self._notification_cache = {}
+                
+            debounce_window = 1000
             if cache_key in self._notification_cache:
-                time_diff = current_time - self._notification_cache[cache_key]
-                if time_diff < 1000:
-                    logging.debug(f"Notificación duplicada ignorada para {relay_name}")
+                last_time = self._notification_cache[cache_key]
+                if current_time - last_time < debounce_window:
+                    relay_display_name = self._get_relay_display_name(relay_name, complete_relay_data)
+                    logging.info(f"PREVENCIÓN DUPLICADO: Ignorando notificación para {relay_display_name}: {old_status} → {new_status}")
                     return
-            
+                    
             self._notification_cache[cache_key] = current_time
-            
+
             panel_name = "Panel"
             try:
                 panel_ref = self.db.document(f'hdd-monitor/accounts/clients/{client_id}/panels/{panel_id}')
@@ -520,7 +579,7 @@ class FirestoreHandler:
             except:
                 pass
             
-            relay_display_name = self._get_relay_display_name(relay_name, relay_data)
+            relay_display_name = self._get_relay_display_name(relay_name, complete_relay_data)
             
             message_text = f"El {relay_display_name} del panel \"{panel_name}\" ha cambiado de {old_status} a {new_status}"
             
@@ -562,12 +621,12 @@ class FirestoreHandler:
             logging.error(f"Error en notificación rápida: {e}")
 
     def _get_relay_display_name(self, relay_id: str, relay_data: Dict[str, Any]) -> str:
-        custom_name = relay_data.get('customName', '').strip()
+        if relay_data and isinstance(relay_data, dict):
+            custom_name = relay_data.get('customName', '').strip()
+            if custom_name:
+                return f"relay {custom_name}"
         
-        if custom_name:
-            return f"relay {custom_name}"
-        else:
-            return relay_id
+        return relay_id
 
     def _update_relay_state(self, client_id: str, panel_id: str, payload: Dict[str, Any]):
         try:
@@ -578,8 +637,8 @@ class FirestoreHandler:
             relay_ref = panel_ref.collection('relays').document(relay_name)
             
             relay_snap = relay_ref.get()
-            old_data = relay_snap.to_dict() if relay_snap.exists else {'status': None}
-            old_status = old_data.get('status')
+            complete_relay_data = relay_snap.to_dict() if relay_snap.exists else {}
+            old_status = complete_relay_data.get('status')
             
             if old_status != new_state:
                 new_data = {
@@ -592,7 +651,6 @@ class FirestoreHandler:
                 if 'contact_type' in payload:
                     new_data['contactType'] = payload['contact_type']
                 
-                complete_relay_data = old_data.copy()
                 complete_relay_data.update(new_data)
                 
                 relay_display_name = self._get_relay_display_name(relay_name, complete_relay_data)
