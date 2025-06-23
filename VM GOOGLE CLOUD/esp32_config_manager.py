@@ -49,19 +49,15 @@ class ESP32ConfigManager:
             panel_id = esp32_data.get('panel_id')
             
             if current_status != ESP32_STATES['AWAITING_CONFIG']:
-                logging.debug(f"ESP32 {esp32_id} en estado {current_status}, no necesita configuración")
                 return False
             
             if not client_id or not panel_id:
-                logging.debug(f"ESP32 {esp32_id} sin asignación completa (client: {client_id}, panel: {panel_id})")
                 return False
             
             current_time = time.time()
             last_sent = self._last_config_sent.get(esp32_id, 0)
             
             if current_time - last_sent < 300:
-                time_diff = int(current_time - last_sent)
-                logging.info(f"Configuración enviada a ESP32 {esp32_id} hace {time_diff}s, saltando")
                 return False
             
             return True
@@ -124,6 +120,13 @@ class ESP32ConfigManager:
                 logging.error(f"ESP32 {esp32_id} no tiene asignación de cliente/panel")
                 return
 
+            current_time = time.time()
+            if esp32_id in self._last_config_sent:
+                time_diff = current_time - self._last_config_sent[esp32_id]
+                if time_diff < 60:
+                    logging.info(f"Configuración enviada recientemente a {esp32_id}, saltando")
+                    return
+
             panel_ref = self.db.document(f'hdd-monitor/accounts/clients/{client_id}/panels/{panel_id}')
             panel_doc = panel_ref.get()
 
@@ -140,8 +143,6 @@ class ESP32ConfigManager:
                 'location': panel_data.get('location', '')
             }
 
-            logging.info(f"Enviando configuración a ESP32 {esp32_id}: {config}")
-
             config_json = json.dumps(config, separators=(',', ':'))
             
             self.client.publish(
@@ -150,8 +151,7 @@ class ESP32ConfigManager:
                 qos=MQTT_CONFIG['QOS']
             )
             
-            self._last_config_sent[esp32_id] = time.time()
-            
+            self._last_config_sent[esp32_id] = current_time
             self._create_initial_relays(client_id, panel_id, esp32_id)
             
             logging.info(f"Configuración enviada exitosamente a ESP32 {esp32_id}")
@@ -592,7 +592,6 @@ class ESP32ConfigManager:
                         esp32_data.get('status') == ESP32_STATES['AWAITING_CONFIG']):
                         
                         if self._should_send_config(esp32_id, esp32_data):
-                            logging.info(f"Enviando configuración pendiente a ESP32 {esp32_id}")
                             self._send_config(esp32_id, esp32_data)
                         
                 except Exception as e:

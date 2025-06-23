@@ -209,7 +209,6 @@ class FirestoreHandler:
         )
             
         self.notification_handler = NotificationHandler(self.db)
-        
         self.mqtt_client = MQTTClient(self.handle_mqtt_message, db=self.db)
         
         self._watch_references = []
@@ -218,19 +217,15 @@ class FirestoreHandler:
         self._initial_load_complete = False
         self._events_initial_snapshots = {}
         self._notification_cache = {}
+        self._config_cache = {}
+        self._last_config_sent = {}
 
         try:
-            logging.info("Iniciando observador de eventos...")
+            logging.info("Iniciando observadores...")
             self.watch_events()
-            logging.info("Observador de eventos iniciado correctamente")
-            
-            logging.info("Iniciando observador de estados de relay...")
             self.watch_relay_states()
-            logging.info("Observador de estados de relay iniciado correctamente")
-            
-            logging.info("Iniciando observador de configuraciones de relay...")
             self.watch_relay_configurations()
-            logging.info("Observador de configuraciones de relay iniciado correctamente")
+            logging.info("Observadores iniciados correctamente")
         except Exception as e:
             logging.error(f"Error crítico iniciando observadores: {e}", exc_info=True)
             raise
@@ -242,31 +237,6 @@ class FirestoreHandler:
             logging.info("Hilo de recordatorio de eventos iniciado correctamente")
         except Exception as e:
             logging.error(f"Error iniciando verificador de recordatorios de eventos: {e}", exc_info=True)
-
-        def wait_and_test():
-            try:
-                max_attempts = 10
-                attempt = 0
-                while attempt < max_attempts:
-                    if hasattr(self, 'mqtt_client') and self.mqtt_client and self.mqtt_client.connected:
-                        logging.info(f"MQTT conectado después de {attempt} intentos, ejecutando pruebas...")
-                        time.sleep(1)
-                        self.test_mqtt_connection()
-                        time.sleep(1)
-                        self.test_relay_config_manually()
-                        break
-                    else:
-                        attempt += 1
-                        logging.info(f"Esperando conexión MQTT, intento {attempt}/{max_attempts}")
-                        time.sleep(2)
-                
-                if attempt >= max_attempts:
-                    logging.error("Timeout esperando conexión MQTT para pruebas")
-            except Exception as e:
-                logging.error(f"Error en verificaciones iniciales: {e}")
-
-        test_thread = threading.Thread(target=wait_and_test, daemon=True)
-        test_thread.start()
 
     def handle_mqtt_message(self, msg):
         try:
@@ -388,8 +358,6 @@ class FirestoreHandler:
                             panel_id = path_parts[5]
                             relay_id = path_parts[7]
                             
-                            logging.info(f"Cambio detectado: {change.type.name} en {client_id}/{panel_id}/{relay_id}")
-                            
                             if change.type.name == 'REMOVED':
                                 if doc_path in self._relay_configs:
                                     del self._relay_configs[doc_path]
@@ -403,19 +371,26 @@ class FirestoreHandler:
                                 continue
                             
                             if change.type.name == 'MODIFIED':
+                                config_key = f"{client_id}_{panel_id}_{relay_id}"
+                                current_time = time.time()
+                                
+                                if config_key in self._last_config_sent:
+                                    time_diff = current_time - self._last_config_sent[config_key]
+                                    if time_diff < 5:
+                                        logging.debug(f"Configuración enviada recientemente para {relay_id}, saltando")
+                                        self._relay_configs[doc_path] = new_data
+                                        continue
+                                
                                 config_changed = False
                                 
                                 if old_data.get('isActive') != new_data.get('isActive'):
                                     config_changed = True
-                                    logging.info(f"isActive cambió: {old_data.get('isActive')} → {new_data.get('isActive')}")
                                 
                                 if old_data.get('customName') != new_data.get('customName'):
                                     config_changed = True
-                                    logging.info(f"customName cambió: '{old_data.get('customName')}' → '{new_data.get('customName')}'")
                                 
                                 if old_data.get('contactType') != new_data.get('contactType'):
                                     config_changed = True
-                                    logging.info(f"contactType cambió: {old_data.get('contactType')} → {new_data.get('contactType')}")
                                 
                                 if config_changed:
                                     panel_ref = self.db.document(f'hdd-monitor/accounts/clients/{client_id}/panels/{panel_id}')
@@ -426,8 +401,6 @@ class FirestoreHandler:
                                         esp32_id = panel_data.get('esp32_id')
                                         
                                         if esp32_id:
-                                            logging.info(f"Enviando configuración a ESP32 {esp32_id}")
-                                            
                                             command = {
                                                 'command': 'update_config',
                                                 'relay_id': relay_id,
@@ -450,9 +423,8 @@ class FirestoreHandler:
                                                         qos=2
                                                     )
                                                     if result.rc == mqtt.MQTT_ERR_SUCCESS:
-                                                        logging.info(f"Configuración enviada exitosamente")
-                                                    else:
-                                                        logging.error(f"Error enviando MQTT: {result.rc}")
+                                                        self._last_config_sent[config_key] = current_time
+                                                        logging.info(f"Configuración enviada para {relay_id}")
                                             except Exception as e:
                                                 logging.error(f"Error publicando MQTT: {e}")
                                 
@@ -665,120 +637,6 @@ class FirestoreHandler:
                 
         except Exception as e:
             logging.error(f"Error en prueba MQTT: {e}")
-            return False
-
-    def test_relay_config_manually(self):
-        try:
-            logging.info("Prueba manual de configuraciones de relay")
-            
-            if not self.mqtt_client:
-                logging.error("self.mqtt_client es None")
-                return False
-            
-            if not self.mqtt_client.connected:
-                logging.error(f"Cliente MQTT no conectado (connected={self.mqtt_client.connected})")
-                return False
-            
-            logging.info("Cliente MQTT conectado correctamente")
-            
-            clients_ref = self.db.collection('hdd-monitor/accounts/clients')
-            clients_snapshot = clients_ref.get()
-            
-            logging.info(f"Total clientes encontrados: {len(clients_snapshot)}")
-            
-            for client_doc in clients_snapshot:
-                client_id = client_doc.id
-                logging.info(f"Cliente: {client_id}")
-                
-                panels_ref = client_doc.reference.collection('panels')
-                panels_snapshot = panels_ref.get()
-                
-                logging.info(f"Paneles en {client_id}: {len(panels_snapshot)}")
-                
-                for panel_doc in panels_snapshot:
-                    panel_id = panel_doc.id
-                    panel_data = panel_doc.to_dict()
-                    esp32_id = panel_data.get('esp32_id') if panel_data else None
-                    
-                    logging.info(f"Panel: {panel_id}")
-                    logging.info(f"ESP32 ID: {esp32_id}")
-                    logging.info(f"Panel data: {panel_data}")
-                    
-                    if not esp32_id:
-                        logging.warning(f"Panel {panel_id} no tiene ESP32, saltando")
-                        continue
-                    
-                    relays_ref = panel_doc.reference.collection('relays')
-                    relays_snapshot = relays_ref.get()
-                    
-                    logging.info(f"Relays en panel {panel_id}: {len(relays_snapshot)}")
-                    
-                    relay_count = 0
-                    active_relay_count = 0
-                    
-                    for relay_doc in relays_snapshot:
-                        relay_count += 1
-                        relay_data = relay_doc.to_dict()
-                        relay_id = relay_doc.id
-                        
-                        is_active = relay_data.get('isActive', False)
-                        custom_name = relay_data.get('customName', '')
-                        contact_type = relay_data.get('contactType', 'NO')
-                        status = relay_data.get('status', 'UNKNOWN')
-                        
-                        logging.info(f"    Relay {relay_count}: {relay_id}")
-                        logging.info(f"      isActive: {is_active}")
-                        logging.info(f"      customName: '{custom_name}'")
-                        logging.info(f"      contactType: {contact_type}")
-                        logging.info(f"      status: {status}")
-                        
-                        if is_active:
-                            active_relay_count += 1
-                            
-                            command = {
-                                'command': 'update_config',
-                                'relay_id': relay_id,
-                                'is_active': is_active,
-                                'contact_type': contact_type,
-                                'timestamp': int(time.time() * 1000)
-                            }
-                            
-                            if custom_name and custom_name.strip():
-                                command['custom_name'] = custom_name.strip()
-                            
-                            topic = f"clients/{client_id}/panels/{panel_id}/relay_config"
-                            command_json = json.dumps(command)
-                            
-                            logging.info(f"      ENVIANDO configuración de prueba:")
-                            logging.info(f"        Tópico: {topic}")
-                            logging.info(f"        Comando: {command_json}")
-                            
-                            try:
-                                result = self.mqtt_client.client.publish(
-                                    topic,
-                                    command_json,
-                                    qos=2
-                                )
-                                
-                                logging.info(f"        Resultado: rc={result.rc}")
-                                
-                                if result.rc == 0:
-                                    logging.info(f"        ENVIADO EXITOSAMENTE")
-                                else:
-                                    logging.error(f"        ERROR MQTT código: {result.rc}")
-                            
-                            except Exception as e:
-                                logging.error(f"        EXCEPCION: {e}")
-                        else:
-                            logging.info(f"      Relay inactivo, no enviando configuración")
-                    
-                    logging.info(f"Resumen panel {panel_id}: {relay_count} relays totales, {active_relay_count} activos")
-            
-            logging.info("Fin de prueba manual")
-            return True
-            
-        except Exception as e:
-            logging.error(f"Error en prueba manual: {e}", exc_info=True)
             return False
 
     def cleanup(self):
