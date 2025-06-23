@@ -376,7 +376,7 @@ class FirestoreHandler:
                                 
                                 if config_key in self._last_config_sent:
                                     time_diff = current_time - self._last_config_sent[config_key]
-                                    if time_diff < 5:
+                                    if time_diff < 10:
                                         logging.debug(f"Configuración enviada recientemente para {relay_id}, saltando")
                                         self._relay_configs[doc_path] = new_data
                                         continue
@@ -393,6 +393,8 @@ class FirestoreHandler:
                                     config_changed = True
                                 
                                 if config_changed:
+                                    self._last_config_sent[config_key] = current_time
+                                    
                                     panel_ref = self.db.document(f'hdd-monitor/accounts/clients/{client_id}/panels/{panel_id}')
                                     panel_doc = panel_ref.get()
                                     
@@ -423,7 +425,6 @@ class FirestoreHandler:
                                                         qos=2
                                                     )
                                                     if result.rc == mqtt.MQTT_ERR_SUCCESS:
-                                                        self._last_config_sent[config_key] = current_time
                                                         logging.info(f"Configuración enviada para {relay_id}")
                                             except Exception as e:
                                                 logging.error(f"Error publicando MQTT: {e}")
