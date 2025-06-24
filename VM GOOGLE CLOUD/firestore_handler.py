@@ -541,20 +541,20 @@ class FirestoreHandler:
         try:
             current_time = time.time() * 1000
             
+            complete_relay_data = {}
+            if relay_data:
+                complete_relay_data = relay_data.copy()
+            
             try:
                 relay_ref = self.db.document(f'hdd-monitor/accounts/clients/{client_id}/panels/{panel_id}/relays/{relay_name}')
                 relay_doc = relay_ref.get()
                 if relay_doc.exists:
-                    complete_relay_data = relay_doc.to_dict()
-                else:
-                    complete_relay_data = relay_data if relay_data else {}
+                    firestore_data = relay_doc.to_dict()
+                    complete_relay_data.update(firestore_data)
             except Exception as e:
-                logging.error(f"Error obteniendo datos del relay: {e}")
-                complete_relay_data = relay_data if relay_data else {}
+                logging.error(f"Error obteniendo datos del relay desde Firestore: {e}")
 
             cache_key = f"{client_id}_{panel_id}_{relay_name}_{old_status}_{new_status}_{int(current_time / 1000)}"
-            
-            current_time = time.time() * 1000
             
             if not hasattr(self, '_notification_cache'):
                 self._notification_cache = {}
@@ -605,9 +605,11 @@ class FirestoreHandler:
             notifications_ref = self.db.collection(f'hdd-monitor/accounts/clients/{client_id}/notifications')
             notifications_ref.document(notification_id).set(notification_doc)
             
+            # ✅ CAMBIO CRÍTICO: Pasar el relay_display_name en lugar del relay_name raw
             self.notification_handler.send_fcm_notifications(client_id, {
                 'type': 'relay',
-                'relay': relay_name,
+                'relay': relay_display_name,  # ✅ USAR EL DISPLAY NAME
+                'relay_id': relay_name,       # ✅ AGREGAR EL ID RAW POR SI LO NECESITA LA APP
                 'panel_id': panel_id,
                 'panel_name': panel_name,
                 'state': new_status,

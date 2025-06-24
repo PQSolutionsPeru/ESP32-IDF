@@ -210,9 +210,10 @@ class NotificationHandler:
                     if relay_doc.exists:
                         complete_relay_data = relay_doc.to_dict()
                     else:
-                        complete_relay_data = new_data if new_data else {}
-                except:
-                    complete_relay_data = new_data if new_data else {}
+                        complete_relay_data = new_data.copy() if new_data else {}
+                except Exception as e:
+                    logging.error(f"Error obteniendo datos completos del relay: {e}")
+                    complete_relay_data = new_data.copy() if new_data else {}
 
                 relay_display_name = self._get_relay_display_name(relay_id, complete_relay_data)
 
@@ -267,9 +268,11 @@ class NotificationHandler:
                 notifications_ref = self.db.collection(f'hdd-monitor/accounts/clients/{client_id}/notifications')
                 notifications_ref.document(notification_id).set(notification_doc)
                 
+                # ✅ CAMBIO CRÍTICO: Pasar el relay_display_name en lugar del relay_id raw
                 self.send_fcm_notifications(client_id, {
                     'type': 'relay',
-                    'relay': relay_id,
+                    'relay': relay_display_name,  # ✅ USAR EL DISPLAY NAME
+                    'relay_id': relay_id,         # ✅ AGREGAR EL ID RAW POR SI LO NECESITA LA APP
                     'panel_id': panel_id,
                     'panel_name': panel_name,
                     'state': new_data.get('status'),
@@ -531,7 +534,7 @@ class NotificationHandler:
             client_name = client_data.get('name', '')
 
             if notification_type == 'relay':
-                notification = messaging.Notification(
+                notification = messaging.Notification(  # ← AQUÍ DEBE ESTAR DEFINIDA
                     title=f"{client_name} - Cambio de Estado",
                     body=notification_data.get('message', '')
                 )
@@ -540,13 +543,14 @@ class NotificationHandler:
                     'relayName': str(notification_data.get('relay', '')),
                     'oldStatus': str(notification_data.get('old_status', '')),
                     'newStatus': str(notification_data.get('state', '')),
+                    'message': str(notification_data.get('message', '')),
                     'type': 'relay',
                     'panelDocName': str(notification_data.get('panel_id', '')),
                     'timestamp': str(int(time.time() * 1000))
                 }
             else:
                 event_type = notification_data.get('event_type', '') 
-                notification = messaging.Notification(
+                notification = messaging.Notification(  # ← Y AQUÍ TAMBIÉN
                     title=f"Evento {event_type}",
                     body=notification_data.get('message', '')
                 )
