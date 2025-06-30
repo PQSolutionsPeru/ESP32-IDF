@@ -21,8 +21,8 @@ static const char *TAG = "TIME_MGR";
 #define NTP_SERVER_PRIMARY "pool.ntp.org"
 #define NTP_SERVER_SECONDARY "time.nist.gov"
 #define NTP_SERVER_FALLBACK "time.google.com"
-#define TIME_SYNC_INTERVAL_MS (1000 * 60 * 60)
-#define TIME_SYNC_RETRY_DELAY_MS (1000 * 60)
+#define TIME_SYNC_INTERVAL_MS (1000 * 60 * 15)
+#define TIME_SYNC_RETRY_DELAY_MS (1000 * 30)
 
 #define LIMA_TIMEZONE_OFFSET -5 * 3600
 #define LIMA_TIMEZONE_STR "PET"
@@ -35,9 +35,50 @@ typedef struct {
     int sync_retry_count;
     bool sntp_initialized;
     bool network_info_pending;
+    uint32_t event_group_operations;
 } time_manager_context_t;
 
 static time_manager_context_t s_time_manager_ctx = {0};
+
+static esp_err_t recreate_time_event_group(time_manager_context_t *ctx) {
+    EventBits_t current_bits = xEventGroupGetBits(ctx->event_group);
+    
+    vEventGroupDelete(ctx->event_group);
+    ctx->event_group = xEventGroupCreate();
+    
+    if (ctx->event_group == NULL) {
+        ESP_LOGE(TAG, "Failed to recreate time event group");
+        return ESP_ERR_NO_MEM;
+    }
+    
+    if (current_bits != 0) {
+        xEventGroupSetBits(ctx->event_group, current_bits);
+    }
+    
+    ctx->event_group_operations = 0;
+    ESP_LOGI(TAG, "Time event group recreated");
+    return ESP_OK;
+}
+
+static void safe_time_set_bits(time_manager_context_t *ctx, EventBits_t bits) {
+    ctx->event_group_operations++;
+    
+    if (ctx->event_group_operations >= 1000000) {
+        recreate_time_event_group(ctx);
+    }
+    
+    xEventGroupSetBits(ctx->event_group, bits);
+}
+
+static void safe_time_clear_bits(time_manager_context_t *ctx, EventBits_t bits) {
+    ctx->event_group_operations++;
+    
+    if (ctx->event_group_operations >= 1000000) {
+        recreate_time_event_group(ctx);
+    }
+    
+    xEventGroupClearBits(ctx->event_group, bits);
+}
 
 static void sntp_sync_callback(struct timeval *tv)
 {
@@ -51,8 +92,8 @@ static void sntp_sync_callback(struct timeval *tv)
         ctx->sync_retry_count = 0;
         ctx->network_info_pending = true;
         
-        xEventGroupClearBits(ctx->event_group, TIME_UNSYNC_BIT);
-        xEventGroupSetBits(ctx->event_group, TIME_SYNC_BIT | TIME_SEND_NETWORK_INFO_BIT);
+        safe_time_clear_bits(ctx, TIME_UNSYNC_BIT);
+        safe_time_set_bits(ctx, TIME_SYNC_BIT | TIME_SEND_NETWORK_INFO_BIT);
         xSemaphoreGive(ctx->mutex);
     }
     
@@ -79,7 +120,7 @@ void time_manager_mark_network_info_sent(void) {
     if (ctx->event_group != NULL) {
         if (xSemaphoreTake(ctx->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
             ctx->network_info_pending = false;
-            xEventGroupClearBits(ctx->event_group, TIME_SEND_NETWORK_INFO_BIT);
+            safe_time_clear_bits(ctx, TIME_SEND_NETWORK_INFO_BIT);
             xSemaphoreGive(ctx->mutex);
         }
     }
@@ -115,12 +156,13 @@ esp_err_t time_manager_init(void)
     ctx->sync_retry_count = 0;
     ctx->sntp_initialized = false;
     ctx->network_info_pending = false;
+    ctx->event_group_operations = 0;
     
     setenv("TZ", "PET5", 1);
     tzset();
     ESP_LOGI(TAG, "Timezone set to Lima, Peru (UTC-5)");
     
-    xEventGroupSetBits(ctx->event_group, TIME_UNSYNC_BIT);
+    safe_time_set_bits(ctx, TIME_UNSYNC_BIT);
     ESP_LOGI(TAG, "Time Manager initialized");
     return ESP_OK;
 }
@@ -201,7 +243,7 @@ esp_err_t time_manager_check_sync(void)
         int64_t current_time = esp_timer_get_time() / 1000;
         
         if (current_time - ctx->last_sync_time >= TIME_SYNC_INTERVAL_MS) {
-            ESP_LOGI(TAG, "Resync interval reached");
+            ESP_LOGI(TAG, "Resync interval reached (15 minutes)");
             return time_manager_sync_time();
         }
         return ESP_OK;
@@ -215,7 +257,7 @@ esp_err_t time_manager_check_sync(void)
             ctx->last_sync_time = current_time;
             xSemaphoreGive(ctx->mutex);
             
-            ESP_LOGI(TAG, "Retry #%d for time sync", ctx->sync_retry_count);
+            ESP_LOGI(TAG, "Retry #%d for time sync (every 30 seconds)", ctx->sync_retry_count);
             return time_manager_sync_time();
         }
         xSemaphoreGive(ctx->mutex);
@@ -286,15 +328,17 @@ esp_err_t time_manager_get_timestamp(char *timestamp_out, size_t max_len)
         return ESP_ERR_INVALID_ARG;
     }
     
-    if (!time_manager_is_synchronized()) {
-        int64_t current_time = esp_timer_get_time() / 1000;
-        snprintf(timestamp_out, max_len, "%lld", (long long)current_time);
+    time_t now = time(NULL);
+    
+    if (time_manager_is_synchronized() && now > 1577836800) {
+        snprintf(timestamp_out, max_len, "%lld", (long long)(now * 1000));
+        return ESP_OK;
+    } else {
+        int64_t monotonic_time = esp_timer_get_time() / 1000;
+        snprintf(timestamp_out, max_len, "%lld", (long long)monotonic_time);
+        ESP_LOGW(TAG, "Using monotonic time as backup: %lld", (long long)monotonic_time);
         return ESP_OK;
     }
-    
-    time_t now = time(NULL);
-    snprintf(timestamp_out, max_len, "%lld", (long long)(now * 1000));
-    return ESP_OK;
 }
 
 bool time_manager_is_synchronized(void)
@@ -374,7 +418,7 @@ void time_manager_reset_network_info_sent(void) {
     if (ctx->event_group != NULL) {
         if (xSemaphoreTake(ctx->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
             ctx->network_info_pending = true;
-            xEventGroupSetBits(ctx->event_group, TIME_SEND_NETWORK_INFO_BIT);
+            safe_time_set_bits(ctx, TIME_SEND_NETWORK_INFO_BIT);
             xSemaphoreGive(ctx->mutex);
             ESP_LOGI(TAG, "Network info sent flag reset");
         }

@@ -16,16 +16,16 @@
 
 #define TAG "WATCHDOG_MGR"
 
-#define CONFIG_MODE_TIMEOUT_MS          30000
-#define CONFIG_MODE_FEED_INTERVAL_MS    10000
+#define CONFIG_MODE_TIMEOUT_MS          15000
+#define CONFIG_MODE_FEED_INTERVAL_MS    5000
 #define CONFIG_MODE_HEALTH_CHECK_MS     15000
 
-#define RUNNING_MODE_TIMEOUT_MS         15000
-#define RUNNING_MODE_FEED_INTERVAL_MS   5000
+#define RUNNING_MODE_TIMEOUT_MS         8000
+#define RUNNING_MODE_FEED_INTERVAL_MS   3000
 #define RUNNING_MODE_HEALTH_CHECK_MS    10000
 
-#define CRITICAL_MODE_TIMEOUT_MS        8000
-#define CRITICAL_MODE_FEED_INTERVAL_MS  3000
+#define CRITICAL_MODE_TIMEOUT_MS        5000
+#define CRITICAL_MODE_FEED_INTERVAL_MS  2000
 #define CRITICAL_MODE_HEALTH_CHECK_MS   5000
 
 #define DEFAULT_MEMORY_THRESHOLD        50000
@@ -80,10 +80,10 @@ static void init_default_configs(void) {
     watchdog_manager_context_t *ctx = &s_watchdog_ctx;
     
     ctx->configs[WATCHDOG_MODE_CONFIG] = (watchdog_config_t) {
-        .timeout_ms = 30000,
-        .feed_interval_ms = 10000,
-        .health_check_interval_ms = 15000,
-        .memory_threshold_bytes = 60000,
+        .timeout_ms = 60000,
+        .feed_interval_ms = 15000,
+        .health_check_interval_ms = 20000,
+        .memory_threshold_bytes = 40000,
         .enable_memory_check = true,
         .enable_wifi_check = false,
         .enable_mqtt_check = false,
@@ -91,10 +91,10 @@ static void init_default_configs(void) {
     };
     
     ctx->configs[WATCHDOG_MODE_RUNNING] = (watchdog_config_t) {
-        .timeout_ms = 25000,
-        .feed_interval_ms = 8000,
-        .health_check_interval_ms = 12000,
-        .memory_threshold_bytes = 50000,
+        .timeout_ms = 45000,
+        .feed_interval_ms = 12000,
+        .health_check_interval_ms = 18000,
+        .memory_threshold_bytes = 35000,
         .enable_memory_check = true,
         .enable_wifi_check = true,
         .enable_mqtt_check = true,
@@ -102,17 +102,17 @@ static void init_default_configs(void) {
     };
     
     ctx->configs[WATCHDOG_MODE_CRITICAL] = (watchdog_config_t) {
-        .timeout_ms = 15000,
-        .feed_interval_ms = 5000,
-        .health_check_interval_ms = 7000,
-        .memory_threshold_bytes = 80000,
+        .timeout_ms = 20000,
+        .feed_interval_ms = 7000,
+        .health_check_interval_ms = 10000,
+        .memory_threshold_bytes = 25000,
         .enable_memory_check = true,
         .enable_wifi_check = true,
         .enable_mqtt_check = true,
         .enable_task_monitoring = true
     };
     
-    ESP_LOGI(TAG, "Default watchdog configurations initialized");
+    ESP_LOGI(TAG, "Conservative watchdog configurations initialized");
 }
 
 static void health_check_timer_callback(TimerHandle_t xTimer) {
@@ -121,6 +121,15 @@ static void health_check_timer_callback(TimerHandle_t xTimer) {
     if (!ctx->initialized) {
         return;
     }
+    
+    size_t current_free = esp_get_free_heap_size();
+    static size_t last_free = 0;
+    
+    if (last_free > 0 && last_free > current_free && (last_free - current_free) > 5000) {
+        ESP_LOGW(TAG, "Significant memory decrease detected: %zu -> %zu", last_free, current_free);
+        mqtt_manager_emergency_memory_cleanup();
+    }
+    last_free = current_free;
     
     watchdog_health_status_t status = watchdog_manager_check_system_health();
     
@@ -142,7 +151,7 @@ static void health_check_timer_callback(TimerHandle_t xTimer) {
             }
             
             size_t free_heap = esp_get_free_heap_size();
-            if (free_heap < 15000) {
+            if (free_heap < 20000) {
                 ESP_LOGE(TAG, "Critical memory situation, forcing system reset");
                 watchdog_manager_force_reset("critical_memory_shortage");
             }
@@ -219,18 +228,35 @@ static watchdog_health_status_t check_memory_health(void) {
     size_t free_heap = esp_get_free_heap_size();
     size_t min_free = esp_get_minimum_free_heap_size();
     
-    uint32_t critical_threshold = config->memory_threshold_bytes / 3;
-    uint32_t warning_threshold = config->memory_threshold_bytes / 2;
+    uint32_t critical_threshold = 35000;
+    uint32_t warning_threshold = 55000;
+    
+    static int critical_count = 0;
+    static int warning_count = 0;
     
     if (free_heap < critical_threshold || min_free < critical_threshold) {
-        ESP_LOGE(TAG, "CRITICAL memory: free=%zu min=%zu threshold=%" PRIu32, 
-                free_heap, min_free, critical_threshold);
-        return WATCHDOG_HEALTH_CRITICAL;
-        
-    } else if (free_heap < warning_threshold || min_free < warning_threshold) {
-        ESP_LOGW(TAG, "Low memory: free=%zu min=%zu threshold=%" PRIu32, 
-                free_heap, min_free, warning_threshold);
-        return WATCHDOG_HEALTH_WARNING;
+        critical_count++;
+        if (critical_count >= 3) {
+            ESP_LOGE(TAG, "CRITICAL memory confirmed: free=%zu min=%zu threshold=%" PRIu32 " (count=%d)", 
+                    free_heap, min_free, critical_threshold, critical_count);
+            return WATCHDOG_HEALTH_CRITICAL;
+        } else {
+            ESP_LOGW(TAG, "Critical memory detected but not confirmed: count=%d/3", critical_count);
+            return WATCHDOG_HEALTH_WARNING;
+        }
+    } else {
+        critical_count = 0;
+    }
+    
+    if (free_heap < warning_threshold || min_free < warning_threshold) {
+        warning_count++;
+        if (warning_count >= 5) {
+            ESP_LOGW(TAG, "Low memory confirmed: free=%zu min=%zu threshold=%" PRIu32,
+                    free_heap, min_free, warning_threshold);
+            return WATCHDOG_HEALTH_WARNING;
+        }
+    } else {
+        warning_count = 0;
     }
     
     return WATCHDOG_HEALTH_GOOD;

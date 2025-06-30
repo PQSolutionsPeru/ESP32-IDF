@@ -15,11 +15,11 @@ extern "C" {
 #define RELAY_MANAGER_NAME_MAX_LENGTH 32
 #define RELAY_MANAGER_ID_MAX_LENGTH 16
 
-#define RELAY_MANAGER_DEBOUNCE_TIME_MS 50
+#define RELAY_MANAGER_DEBOUNCE_TIME_MS 500
 #define RELAY_MANAGER_MIN_REPORT_INTERVAL_MS 750
-#define RELAY_MANAGER_STABLE_READINGS 10
-#define RELAY_MANAGER_READING_DELAY_MS 5
-#define RELAY_MANAGER_FAST_READINGS 4
+#define RELAY_MANAGER_STABLE_READINGS 20
+#define RELAY_MANAGER_READING_DELAY_MS 8
+#define RELAY_MANAGER_FAST_READINGS 6
 #define RELAY_MANAGER_AUTO_CHECK_INTERVAL_MS 2000
 
 typedef enum {
@@ -66,35 +66,20 @@ typedef enum {
 } relay_mgr_state_t;
 
 relay_mgr_state_t relay_manager_get_mgr_state(void);
-
 esp_err_t relay_manager_init(void);
-
 esp_err_t relay_manager_report_initial_states(void);
-
 esp_err_t relay_manager_set_state_callback(relay_state_change_callback_t callback, void *user_data);
-
 esp_err_t relay_manager_set_mqtt_callback(relay_mqtt_command_callback_t callback, void *user_data);
-
 esp_err_t relay_manager_get_state(const char *relay_id, relay_state_t *state);
-
 esp_err_t relay_manager_get_all_states_json(char *json_buffer, size_t buffer_size);
-
 esp_err_t relay_manager_set_name(const char *relay_id, const char *name);
-
 esp_err_t relay_manager_set_active(const char *relay_id, bool active);
-
 esp_err_t relay_manager_set_contact_type(const char *relay_id, relay_contact_type_t contact_type);
-
 esp_err_t relay_manager_process_mqtt_command(const char *command_json);
-
 esp_err_t relay_manager_get_config_json(char *json_buffer, size_t buffer_size);
-
 esp_err_t relay_manager_check_all_states(bool force_report);
-
 esp_err_t relay_manager_get_diagnostics_json(char *json_buffer, size_t buffer_size);
-
 esp_err_t relay_manager_deinit(void);
-
 int relay_manager_read_stable_gpio(gpio_num_t gpio_pin);
 
 #ifdef __cplusplus

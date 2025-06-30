@@ -1,5 +1,6 @@
 {
     "files.associations": {
-        "esp32_id_manager.h": "c"
+        "esp32_id_manager.h": "c",
+        "mqtt_manager.h": "c"
     }
 }

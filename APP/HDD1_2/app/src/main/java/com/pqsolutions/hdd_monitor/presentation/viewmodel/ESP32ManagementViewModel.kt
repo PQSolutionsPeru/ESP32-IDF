@@ -37,7 +37,6 @@ class ESP32ManagementViewModel @Inject constructor(
     private var assignedESP32Job: Job? = null
     private var unassignedESP32Job: Job? = null
 
-    // Estados para tracking de carga inicial
     private var panelsLoaded = false
     private var assignedESP32sLoaded = false
     private var unassignedESP32sLoaded = false
@@ -47,10 +46,18 @@ class ESP32ManagementViewModel @Inject constructor(
         loadData()
     }
 
+    fun onResume() {
+        Log.d(TAG, "ESP32ManagementViewModel resumed - verificando estado de listeners")
+
+        if (panelsJob?.isActive != true && assignedESP32Job?.isActive != true && unassignedESP32Job?.isActive != true) {
+            Log.d(TAG, "Listeners no activos, recargando datos")
+            loadData()
+        }
+    }
+
     private fun loadData() {
         Log.d(TAG, "Iniciando carga de datos")
 
-        // Reset estados de carga
         panelsLoaded = false
         assignedESP32sLoaded = false
         unassignedESP32sLoaded = false
@@ -75,6 +82,7 @@ class ESP32ManagementViewModel @Inject constructor(
                     UserRole.ADMIN -> null
                 }
 
+                cancelJobs()
                 startDataListeners(clientDocName)
 
             } catch (e: Exception) {
@@ -88,13 +96,11 @@ class ESP32ManagementViewModel @Inject constructor(
     }
 
     private fun startDataListeners(clientDocName: String?) {
-        cancelJobs()
-
         panelsJob = viewModelScope.launch {
             panelRepository.getPanels(clientDocName)
                 .catch { error ->
                     Log.e(TAG, "Error en listener de paneles", error)
-                    panelsLoaded = true // Marcar como cargado incluso con error
+                    panelsLoaded = true
                     checkAndUpdateLoadingState()
                     _uiState.value = _uiState.value.copy(
                         error = "Error cargando paneles: ${error.message}"
@@ -120,7 +126,7 @@ class ESP32ManagementViewModel @Inject constructor(
             esp32Repository.observeAssignedESP32s(clientDocName)
                 .catch { error ->
                     Log.e(TAG, "Error en listener de ESP32s asignados", error)
-                    assignedESP32sLoaded = true // Marcar como cargado incluso con error
+                    assignedESP32sLoaded = true
                     checkAndUpdateLoadingState()
                 }
                 .collect { assignedESP32s ->
@@ -135,7 +141,7 @@ class ESP32ManagementViewModel @Inject constructor(
             esp32Repository.observeUnassignedESP32s()
                 .catch { error ->
                     Log.e(TAG, "Error en listener de ESP32s no asignados", error)
-                    unassignedESP32sLoaded = true // Marcar como cargado incluso con error
+                    unassignedESP32sLoaded = true
                     checkAndUpdateLoadingState()
                 }
                 .collect { unassignedESP32s ->
@@ -147,12 +153,7 @@ class ESP32ManagementViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Verifica si todos los listeners han emitido al menos una vez
-     * y actualiza el estado de loading en consecuencia
-     */
     private fun checkAndUpdateLoadingState() {
-        // Solo ocultar loading cuando todos los listeners principales hayan cargado
         if (panelsLoaded && assignedESP32sLoaded && unassignedESP32sLoaded) {
             if (_uiState.value.isLoading) {
                 _uiState.value = _uiState.value.copy(isLoading = false)
@@ -326,8 +327,6 @@ class ESP32ManagementViewModel @Inject constructor(
             Log.d(TAG, "ESP32ManagementViewModel limpiado - cancelando jobs")
 
             cancelJobs()
-            esp32Repository.clearListeners()
-            panelRepository.clearListeners()
 
             Log.d(TAG, "ESP32ManagementViewModel limpiado exitosamente")
         } catch (e: Exception) {

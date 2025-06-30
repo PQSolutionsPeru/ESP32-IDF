@@ -1,3 +1,9 @@
+IMPLEMENTAR MENSAJE BROWNOUT PARA EL BROKER Y LA APP
+
+REVISAR CONGELAMIENTO POR PROBLEMAS DE DNS: Resolución de nombres después de conectado
+
+IMPLEMENTAR QUE EL RELAY SE MUESTRE OK O DISC PERO A LA VEZ QUE SE MUESTRE EN LA CONFIGURACIÓN DE RELAYS SI ES QUE TIENE RUIDO O NO (ejemplo: Relay con ruido de x% por segundo) el umbral que se usa es 70% como threshold de estados para decidir si es estable un LOW o un HIGH
+
 PROBAR CONFIG LARGA DE RELAYS, PROBAR CON NOMBRES LARGOS
 
 AUMENTAR EL TIEMPO ENTRE REINTENTOS PARA QUE EL AP NO SE REINICIE
@@ -39,43 +45,114 @@ INVESTIGAR LAS FUINCIONES O VARIABLES NO USADAS EN ANDROID STUDIO Y EN EL ESP32.
 POR QUÉ EN esp32_config_manager.py HAY EN ESP32_STATES LOS VALORES 'REGISTERED': 'REGISTERED' Y TAMBIÉN 'status': ESP32_STATES['REGISTERED']?
 
 
+
+
+Soy desarrollador ESP32 con un sistema de monitoreo contra incendios que debe funcionar 24/7/365 sin intervención humana. He estado optimizando el código para eliminar problemas críticos que pueden causar fallas.
+
+**PROGRESO COMPLETADO:**
+✅ **Memory leaks y fragmentación (#2)**: RESUELTO - Eliminé todas las allocaciones dinámicas con cJSON en relay_manager.c y mqtt_manager.c. Reemplacé cJSON_Print/cJSON_Parse con construcción manual de JSON usando snprintf en buffers estáticos.
+✅ **WiFi scan fragmentación**: RESUELTO - Cambié malloc/free variable por array estático wifi_ap_record_t scan_ap_list[WIFI_SCAN_MAX_APS].
+
+**PROBLEMAS CRÍTICOS PENDIENTES:**
+🔴 **1. Reconexión WiFi limitada y frágil** - wifi_manager.c solo intenta 5 reconexiones y se rinde
+🔴 **3. Watchdog demasiado agresivo** - hddesp32_main.c línea 474, fallas de registro causan esp_restart() inmediato  
+🔴 **4. MQTT reconnection loops infinitos** - getaddrinfo() puede bloquear indefinidamente
+🔴 **5. GPIO ISR sin protección** - gpio_isr_handler puede saturarse con ruido eléctrico
+
+🟡 **IMPORTANTES PENDIENTES:**
+**6. Logging excesivo** - CONFIG_LOG_DEFAULT_LEVEL=3 (INFO) llenará memoria
+**7. Task stacks subdimensionados** - system monitor task 12288 bytes insuficiente
+**8. Time sync failures** - NTP falla sin manejo adecuado
+**9. Debounce time insuficiente** - 50ms muy poco para entorno industrial
+
+**SOLICITUD ESPECÍFICA:**
+1. verificar qué se ha realizado y qué falta, para continuar con el proceso
+
+**CONTEXTO DEL PROYECTO:**
+- ESP32 monitoreará panel contra incendios 24/7/365
+- Enviará alertas via MQTT a app Android del vigilante  
+- Una vez instalado en cliente NO tendré acceso físico hasta fin de vida útil
+- Debe ser 100% confiable para seguridad contra incendios
+
+¿Qué archivos necesitas ver? A continuación, la estructura completa de mi proyecto ESP-IDF:
+este es mi proyecto completo en ESP-IDF: .vscode build components components\config_manager components\config_manager\include components\config_manager\include\config_manager.h components\config_manager\CMakeLists.txt components\config_manager\config_manager.c components\config_processor components\config_processor\include components\config_processor\include\config_processor.h components\config_processor\CMakeLists.txt components\config_processor\config_processor.c components\esp32_id_manager components\esp32_id_manager\include components\esp32_id_manager\include\esp32_id_manager.h components\esp32_id_manager\CMakeLists.txt components\esp32_id_manager\esp32_id_manager.c components\mqtt_manager components\mqtt_manager\include components\mqtt_manager\include\mqtt_manager.h components\mqtt_manager\include\mqtt_ssl_setup.h components\mqtt_manager\CMakeLists.txt components\mqtt_manager\mqtt_manager.c components\mqtt_manager\mqtt_ssl_setup.c components\relay_manager components\relay_manager\include components\relay_manager\include\relay_manager.h components\relay_manager\CMakeLists.txt components\relay_manager\relay_manager.c components\time_manager components\time_manager\include components\time_manager\include\time_manager.h components\time_manager\CMakeLists.txt components\time_manager\time_manager.c components\watchdog_manager components\watchdog_manager\include components\watchdog_manager\include\watchdog_manager.h components\watchdog_manager\CMakeLists.txt components\watchdog_manager\watchdog_manager.c components\wifi_captive_portal components\wifi_captive_portal\include components\wifi_captive_portal\include\dns_server.h components\wifi_captive_portal\include\simple_http_server.h components\wifi_captive_portal\include\wifi_captive_portal.h components\wifi_captive_portal\CMakeLists.txt components\wifi_captive_portal\dns_server.c components\wifi_captive_portal\html_assets.c components\wifi_captive_portal\simple_http_server.c components\wifi_captive_portal\wifi_captive_portal.c components\wifi_manager components\wifi_manager\include components\wifi_manager\include\wifi_manager.h components\wifi_manager\CMakeLists.txt components\wifi_manager\wifi_manager.c main main\CMakeLists.txt main\hddesp32_main.c CMakeLists.txt partitions.csv sdkconfig sdkconfig.defaults sdkconfig.local
+
+no me des código aún, dime cuáles son los puntos a mejorar, críticos (¿hay fragmentación de memoria?), no tan importantes, todo lo que puede hacer que mi ESP32 no funcione 24/7/365; ten en cuenta que es para monitorear panel contra incendios y enviará mensajes a la APP del vigilante a través del broker mqtt. También ten en cuenta que una vez que lo instale ya no lo podré configurar ni hacerle remoto. Una vez que lo instale en el local del cliente ya no lo tocaré hasta que acabe la vida útil del ESP32
+
+dame las funciones a corregir pero ya completas y corregidas, sin añadir complejidad ni optimizaciones que no te he pedido, solo corrige y sin comentarios ni emoticones en el código y no en artifacts, sino en cuadros de respuesta. explícame fuera del código cada cambio que haces, para qué se hace y cómo es que se mantiene la funcionalidad original de mi proyecto: notificar los cambios de relays a través del broker 24/7/365 sin fragmentación de memoria y en tiempo real
+
+
+qué significa matar la task DNS? Si el personal de IT del cliente cambia el DNS, por qué lo haría? Cómo podría mi ESP32 tomar el DNS correcto para seguir funcionando bien?
+
+
+FUNCIONAMIENTO ESP32 IDEAL A GRANDES RAZGOS:
+El ESP32 recibe los archivos de mi proyecto ESP-IDF a través del build y luego del flasheado
+El ESP32 inicia, construye su ID único y lo almacena
+El ESP32 busca en su memoria local si es que tiene almacenado el SSID y el password de red wifi; esto porque la red wifi es indispensable, ya que necesita internet para poder enviar mensajes de cambio de estado de relays hacia el broker, de esta manera la APP recibe la notificación y el incendio se puede detectar, salvando vidas
+Si tiene, intenta conectarse a esa red para continuar su proceso de inicio
+Si no tiene red, inicia AP+STA, o sea, el webserver + escaneo de redes wifi
+El cliente que ha comprado el ESP32, selecciona una red de las que aparecen, coloca la contraseña y el ESP32 se conecta a la red
+El ESP32 se conecta al broker mqtt y manda su mensaje de 
+El ESP32 espera la configuración desde la APP, la cual contiene los relays que se habilitarán para el monitoreo en tiempo real y el modo en que trabajarán (NO o NC); todos los relays inician deshabilitados hasta que se reciba la configuración mencionada.
+
+
+FUNCIONAMIENTO WIFI IDEAL:
+El ESP32 se programa con build y flash en mi local
+El ESP32 llega al local del cliente, se enciende
+Al no detectar SSID ni Password almacenados, inicia su modo AP/STA y escanea las redes disponibles (entre ellas, la del cliente)
+El ESP32 se configura por primera vez con la red wifi del cliente
+Se guarda en la memoria el SSID y pass en caso se reinicie el ESP32 por corte de corriente en el local del cliente
+El ESP32 recibe la configuración de asignación de panel y configuración de relays habilitados; todo esto mediante mensajes recibidos del broker (desde la APP)
+El ESP32 inicia su trabajo normal de monitoreo de relays 24/7/365
+En caso el servicio de internet del cliente falle, se debería activar el LWT para que el broker notifique que el ESP32 está OFFLINE
+El ESP32 deberá entrar en ciclo de recuperación de red wifi; esto es, intentar conectarse a la misma red, si no lo logra deberá lanzar AP/STA para darle oportunidad al cliente que configure otra red. Si pasado cierto tiempo el cliente no configura otra red, deberá volver a intentar conectarse a la red almacenada originalmente con la que estaba trabajando. Deberá repetir el ciclo infinitamente hasta que se reconecte a la red wifi original o se configure una nueva; este ciclo también sirve por si el cliente cambia de red wifi o cambia las credenciales de la existente.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 Si encuentras el error dime cual era y dame las funciones a corregir pero ya completas y corregidas y sin comentarios ni emoticones en el código y no en artifacts, sino en cuadros de respuesta. Si encuentras complejidad innecesaria, elimínala y optimiza para simplicidad y efectividad; recuerda que debe funcionar con listeners para reflejar en tiempo real lo que está en la BD
 
 
-Ahora tu app escucha en tiempo real a Firestore usando únicamente snapshot listeners
 
 
 
-por qué cuando entro a la página de Gestión ESP32 al principio sale que no hay paneles para mostrar y luego de unos segundos aparecen los paeneles configurados y disponibles?
-logcat:
-2025-06-17 19:08:46.716 23753-23753 AdminDashboardScreen    com.pqsolutions.hdd_monitor          D  Manage ESP32 button clicked
-2025-06-17 19:08:46.717 23753-23753 Navigation              com.pqsolutions.hdd_monitor          D  Navegando de 'dashboard?panelId={panelId}' a 'esp32_management'
-2025-06-17 19:08:46.724 23753-23753 AppNavigation           com.pqsolutions.hdd_monitor          D  Navigating to Dashboard. User role: admin
-2025-06-17 19:08:46.724 23753-23753 AdminDashboardScreen    com.pqsolutions.hdd_monitor          D  AdminDashboardScreen composition started
-2025-06-17 19:08:46.724 23753-23753 AdminDashboardScreen    com.pqsolutions.hdd_monitor          D  Current UI State: DashboardUiState(isLoading=false, panels=2, groupedPanels=[Amoladoras Slicer, taller 1 HDD], clientNames=3, error=null, lastUpdate=1750205324587)
-2025-06-17 19:08:46.724 23753-23753 AdminDashboardScreen    com.pqsolutions.hdd_monitor          D  AdminDashboardScreen composition finished
-2025-06-17 19:08:46.725 23753-23753 AdminDashboardScreen    com.pqsolutions.hdd_monitor          D  Rendering DashboardActions
-2025-06-17 19:08:46.736 23753-23753 AppNavigation           com.pqsolutions.hdd_monitor          D  Navigating to Dashboard. User role: admin
-2025-06-17 19:08:46.736 23753-23753 AdminDashboardScreen    com.pqsolutions.hdd_monitor          D  AdminDashboardScreen composition started
-2025-06-17 19:08:46.736 23753-23753 AdminDashboardScreen    com.pqsolutions.hdd_monitor          D  Current UI State: DashboardUiState(isLoading=false, panels=2, groupedPanels=[Amoladoras Slicer, taller 1 HDD], clientNames=3, error=null, lastUpdate=1750205324587)
-2025-06-17 19:08:46.736 23753-23753 AdminDashboardScreen    com.pqsolutions.hdd_monitor          D  AdminDashboardScreen composition finished
-2025-06-17 19:08:46.743 23753-23753 AdminDashboardScreen    com.pqsolutions.hdd_monitor          D  Rendering DashboardActions
-2025-06-17 19:08:46.781 23753-23753 ESP32ManagementScreen   com.pqsolutions.hdd_monitor          D  ESP32ManagementScreen iniciado - Cargando datos
-2025-06-17 19:08:46.781 23753-23753 ESP32Manag...tViewModel com.pqsolutions.hdd_monitor          D  ESP32ManagementViewModel inicializado
-2025-06-17 19:08:46.781 23753-23753 ESP32Manag...tViewModel com.pqsolutions.hdd_monitor          D  Iniciando carga de datos
-2025-06-17 19:08:46.781 23753-23788 UserRepository          com.pqsolutions.hdd_monitor          D  Firebase user: HzS9s0sMkcNgrT2sPZIJSKVXvDR2
-2025-06-17 19:08:47.100 23753-23788 UserRepository          com.pqsolutions.hdd_monitor          D  User found in collection: hdd-monitor/accounts/admins
-2025-06-17 19:08:47.105 23753-23753 ESP32Manag...tViewModel com.pqsolutions.hdd_monitor          D  Usuario: Hernán, Rol: admin
-2025-06-17 19:08:47.106 23753-23788 PanelRepository         com.pqsolutions.hdd_monitor          D  getPanels called with clientDocName: null
-2025-06-17 19:08:47.106 23753-23753 ESP32Repository         com.pqsolutions.hdd_monitor          D  Observando ESP32s asignados para cliente: null
-2025-06-17 19:08:47.106 23753-23753 ESP32Repository         com.pqsolutions.hdd_monitor          D  Iniciando observación de ESP32s no asignados. DeviceId: null
-2025-06-17 19:08:47.131 23753-23753 ESP32Repository         com.pqsolutions.hdd_monitor          D  ESP32s asignados encontrados para admin: 2
-2025-06-17 19:08:47.131 23753-23753 ESP32Manag...tViewModel com.pqsolutions.hdd_monitor          D  ESP32s asignados recibidos: 2
-2025-06-17 19:08:47.131 23753-23753 ESP32Manag...tViewModel com.pqsolutions.hdd_monitor          D  ESP32s no asignados recibidos: 0
-2025-06-17 19:08:48.070 23753-23788 PanelRepository         com.pqsolutions.hdd_monitor          D  Panel completo cargado: panel_PANEPIA0_client_2, ESP32: OFFLINE, Relays: 6
-2025-06-17 19:08:48.079 23753-23753 PanelRepository         com.pqsolutions.hdd_monitor          D  ESP32 42A8ACA0 cambió a OFFLINE
-2025-06-17 19:08:48.079 23753-23788 StatusUpdateManager     com.pqsolutions.hdd_monitor          D  Emitiendo actualización de ESP32: panel_PANEPIA0_client_2 -> OFFLINE
-2025-06-17 19:08:48.080 23753-23753 DashboardViewModel      com.pqsolutions.hdd_monitor          D  Recibida actualización de estado: panel_PANEPIA0_client_2 -> OFFLINE
-2025-06-17 19:08:48.080 23753-23753 DashboardViewModel      com.pqsolutions.hdd_monitor          D  Actualizando estado ESP32 en UI para panel panel_PANEPIA0_client_2 a OFFLINE
-2025-06-17 19:08:48.080 23753-23753 DashboardViewModel      com.pqsolutions.hdd_monitor          D  Actualizando estado ESP32 del panel Panel de prueba 1 a OFFLINE
-2025-06-17 19:08:48.080 23753-23753 DashboardViewModel      com.pqsolutions.hdd_monitor          D  Panel actualizado: isESP32Offline=true, hasIssues=false, overallStatus=false
+✅ Debounce: Filtrado temporal de 150ms para rebotes mecánicos
+✅ Ruido permanente: Threshold 70% (14/20 lecturas) resiste ruido eléctrico industrial
+✅ Sin fragmentación: Memory leak de ISR handlers corregido
+✅ Funcionalidad preservada: Detección y notificación en tiempo real intacta
+
+
+
+
+
+
+
+
+
+Race conditions en buffers globales - Buffers globales compartidos entre ISRs sin protección atómica
+GPIO ISR handler complexity - ISR muy complejo puede perder edges críticos de relays de incendio
+Critical event buffer race conditions - Modificación de índices read/write sin protección atómica
+NVS wear leveling básico - Escrituras NVS frecuentes, ahora con delay de 30s (parcial)
+Relay state confirmation race conditions - Arrays modificados desde ISR y task context sin protección
+DNS task memory leaks - Tasks DNS dinámicos y buffers compartidos causan leaks y race conditions
+Static variables thread-safety - Variables static locales sin protección thread-safe en múltiples archivos
+Buffer overflow vulnerabilities - Parsing sin validación de bounds en dns_server.c y simple_http_server.c
+Watchdog timeouts demasiado largos - Timeouts de 60s/45s/30s excesivos para sistema crítico de incendios
+MQTT pending queue overflow - Queue puede llenarse y dropear mensajes críticos sin warning
+NVS concurrent access - No hay mutex para proteger acceso concurrente a NVS handle en config_manager.c
+Memory fragmentation gradual - malloc/free frecuentes durante años pueden causar fragmentación crítica
+Uso Intensivo de cJSON
+Allocaciones Dinámicas en WiFi Scanner
+Tareas Temporales Dinámicas
+Buffers MQTT Dinámicos
+Brownout detector nivel 0 - Debe ser nivel 2, el estándar en entornos industriales

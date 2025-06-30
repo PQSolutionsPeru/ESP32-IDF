@@ -12,17 +12,17 @@
 
 #define TAG "SIMPLE_HTTP"
 
-// HTML assets
-extern const char index_html[];
-
-// Estructura del contexto del servidor HTTP
 typedef struct {
     int server_socket;
     TaskHandle_t task_handle;
     bool is_running;
 } simple_http_server_t;
 
-// Función para enviar respuestas HTTP
+static simple_http_server_t g_http_server_context = {0};
+static bool g_http_server_in_use = false;
+
+extern const char index_html[];
+
 static esp_err_t send_response(int sock, const char* status, const char* content_type, const char* body, int body_len) {
     char header[256];
     int header_len = snprintf(header, sizeof(header),
@@ -33,14 +33,12 @@ static esp_err_t send_response(int sock, const char* status, const char* content
                              "\r\n",
                              status, content_type, body_len);
     
-    // Enviar encabezado
     int res = send(sock, header, header_len, 0);
     if (res < 0) {
         ESP_LOGE(TAG, "Error sending HTTP header: %d", res);
         return ESP_FAIL;
     }
     
-    // Enviar cuerpo si existe
     if (body_len > 0) {
         res = send(sock, body, body_len, 0);
         if (res < 0) {
@@ -52,7 +50,6 @@ static esp_err_t send_response(int sock, const char* status, const char* content
     return ESP_OK;
 }
 
-// Función para enviar redirección
 static esp_err_t send_redirect(int sock, const char* location) {
     char header[256];
     int header_len = snprintf(header, sizeof(header),
@@ -72,12 +69,10 @@ static esp_err_t send_redirect(int sock, const char* location) {
     return ESP_OK;
 }
 
-// Función para manejar peticiones a la página principal
 static esp_err_t handle_index(int sock) {
     return send_response(sock, "200 OK", "text/html", index_html, strlen(index_html));
 }
 
-// Función para manejar peticiones a la API de estado WiFi
 static esp_err_t handle_status_api(int sock) {
     char resp_str[256];
     char ssid[33] = {0};
@@ -94,18 +89,13 @@ static esp_err_t handle_status_api(int sock) {
     return send_response(sock, "200 OK", "application/json", resp_str, strlen(resp_str));
 }
 
-// Reemplazar la función handle_scan_api() en simple_http_server.c (alrededor de línea 60):
-
-// Función para manejar peticiones a la API de escaneo WiFi
 static esp_err_t handle_scan_api(int sock) {
     ESP_LOGI(TAG, "Starting WiFi scan request");
     
-    // Iniciar escaneo
     esp_err_t scan_ret = wifi_manager_start_scan();
     if (scan_ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to start WiFi scan: %s", esp_err_to_name(scan_ret));
         
-        // Enviar respuesta de error
         cJSON *error_root = cJSON_CreateObject();
         cJSON_AddBoolToObject(error_root, "success", false);
         cJSON_AddStringToObject(error_root, "error", "Failed to start WiFi scan");
@@ -119,43 +109,35 @@ static esp_err_t handle_scan_api(int sock) {
         return ret;
     }
     
-    // Esperar a que termine - aumentar tiempo de espera para modo switching
     ESP_LOGI(TAG, "Waiting for scan completion...");
     
-    // Esperar hasta 8 segundos para que termine el scan (incluye tiempo de cambio de modo)
-    int max_wait_cycles = 40; // 40 * 200ms = 8 segundos
+    int max_wait_cycles = 40;
     int wait_cycles = 0;
     
     while (wait_cycles < max_wait_cycles) {
         vTaskDelay(pdMS_TO_TICKS(200));
         wait_cycles++;
         
-        // Verificar si el scan terminó
         wifi_scan_result_t test_networks[1];
         size_t test_num = 0;
         esp_err_t test_ret = wifi_manager_get_scan_results(test_networks, 1, &test_num);
         
         if (test_ret == ESP_OK || test_ret == ESP_ERR_NOT_FOUND) {
-            // El scan terminó (con o sin resultados)
             break;
         } else if (test_ret != ESP_ERR_TIMEOUT) {
-            // Error real, no timeout
             ESP_LOGE(TAG, "Error getting scan results: %s", esp_err_to_name(test_ret));
             break;
         }
-        // Si es timeout, continuar esperando
     }
     
     if (wait_cycles >= max_wait_cycles) {
         ESP_LOGW(TAG, "Scan timeout after %d seconds", max_wait_cycles * 200 / 1000);
     }
     
-    // Obtener resultados del escaneo
     wifi_scan_result_t networks[20];
     size_t num_networks = 0;
     esp_err_t ret = wifi_manager_get_scan_results(networks, 20, &num_networks);
     
-    // Crear respuesta JSON
     cJSON *root = cJSON_CreateObject();
     cJSON *nets_array = cJSON_CreateArray();
     
@@ -163,14 +145,12 @@ static esp_err_t handle_scan_api(int sock) {
         ESP_LOGI(TAG, "Scan completed successfully, found %zu networks", num_networks);
         
         for (size_t i = 0; i < num_networks; i++) {
-            // Filtrar SSIDs vacíos o muy cortos
             if (strlen(networks[i].ssid) > 0) {
                 cJSON *network = cJSON_CreateObject();
                 cJSON_AddStringToObject(network, "ssid", networks[i].ssid);
                 cJSON_AddNumberToObject(network, "rssi", networks[i].rssi);
                 cJSON_AddNumberToObject(network, "auth", networks[i].auth_mode);
                 
-                // Agregar información de seguridad legible
                 const char* security = "Open";
                 switch (networks[i].auth_mode) {
                     case WIFI_AUTH_WEP:
@@ -220,63 +200,85 @@ static esp_err_t handle_scan_api(int sock) {
     return ret;
 }
 
-// Función para manejar peticiones a la API de conexión WiFi
 static esp_err_t handle_connect_api(int sock, char* body, int body_len) {
-    esp_err_t ret = ESP_FAIL;
+    static char response_buffer[256];
+    int response_pos = 0;
     
-    // Asegurarnos de que el cuerpo tenga un 0 al final para tratarlo como string
-    if (body_len < 256) {
-        body[body_len] = '\0';
-        
-        // Parsear JSON
-        cJSON *root = cJSON_Parse(body);
-        if (root) {
-            cJSON *ssid_json = cJSON_GetObjectItem(root, "ssid");
-            cJSON *password_json = cJSON_GetObjectItem(root, "password");
-            
-            if (ssid_json && cJSON_IsString(ssid_json)) {
-                char *ssid = ssid_json->valuestring;
-                char *password = password_json && cJSON_IsString(password_json) ? password_json->valuestring : "";
-                
-                ESP_LOGI(TAG, "Connecting to WiFi: %s", ssid);
-                
-                // Intentar conectar a la red WiFi
-                esp_err_t connect_ret = wifi_manager_connect(ssid, password, true);
-                
-                cJSON *resp_json = cJSON_CreateObject();
-                
-                if (connect_ret == ESP_OK) {
-                    ESP_LOGI(TAG, "Successfully connected to WiFi");
-                    cJSON_AddBoolToObject(resp_json, "success", true);
-                } else {
-                    ESP_LOGE(TAG, "Failed to connect to WiFi: %s", esp_err_to_name(connect_ret));
-                    cJSON_AddBoolToObject(resp_json, "success", false);
-                    cJSON_AddStringToObject(resp_json, "message", "Failed to connect to WiFi");
-                }
-                
-                char *json_str = cJSON_Print(resp_json);
-                ret = send_response(sock, "200 OK", "application/json", json_str, strlen(json_str));
-                
-                cJSON_Delete(resp_json);
-                free(json_str);
-            } else {
-                ret = send_response(sock, "400 Bad Request", "application/json", "{\"error\":\"Missing or invalid SSID\"}", 33);
-            }
-            
-            cJSON_Delete(root);
-        } else {
-            ret = send_response(sock, "400 Bad Request", "application/json", "{\"error\":\"Invalid JSON format\"}", 30);
-        }
-    } else {
-        ret = send_response(sock, "400 Bad Request", "application/json", "{\"error\":\"Content too long\"}", 28);
+    if (body_len >= 256) {
+        response_pos = snprintf(response_buffer, sizeof(response_buffer),
+            "{\"error\":\"Content too long\"}");
+        return send_response(sock, "400 Bad Request", "application/json", response_buffer, response_pos);
     }
     
-    return ret;
+    body[body_len] = '\0';
+    
+    char ssid_value[64] = {0};
+    char password_value[64] = {0};
+    bool ssid_found = false;
+    bool password_found = false;
+    
+    char *ssid_start = strstr(body, "\"ssid\":");
+    if (ssid_start) {
+        ssid_start += 7;
+        while (*ssid_start == ' ' || *ssid_start == '\t') ssid_start++;
+        
+        if (*ssid_start == '"') {
+            ssid_start++;
+            char *ssid_end = strchr(ssid_start, '"');
+            if (ssid_end) {
+                size_t len = ssid_end - ssid_start;
+                if (len < sizeof(ssid_value)) {
+                    memcpy(ssid_value, ssid_start, len);
+                    ssid_value[len] = '\0';
+                    ssid_found = true;
+                }
+            }
+        }
+    }
+    
+    char *password_start = strstr(body, "\"password\":");
+    if (password_start) {
+        password_start += 11;
+        while (*password_start == ' ' || *password_start == '\t') password_start++;
+        
+        if (*password_start == '"') {
+            password_start++;
+            char *password_end = strchr(password_start, '"');
+            if (password_end) {
+                size_t len = password_end - password_start;
+                if (len < sizeof(password_value)) {
+                    memcpy(password_value, password_start, len);
+                    password_value[len] = '\0';
+                    password_found = true;
+                }
+            }
+        }
+    }
+    
+    if (!ssid_found) {
+        response_pos = snprintf(response_buffer, sizeof(response_buffer),
+            "{\"error\":\"Missing or invalid SSID\"}");
+        return send_response(sock, "400 Bad Request", "application/json", response_buffer, response_pos);
+    }
+    
+    ESP_LOGI(TAG, "Connecting to WiFi: %s", ssid_value);
+    
+    esp_err_t connect_ret = wifi_manager_connect(ssid_value, password_found ? password_value : "", true);
+    
+    if (connect_ret == ESP_OK) {
+        ESP_LOGI(TAG, "Successfully connected to WiFi");
+        response_pos = snprintf(response_buffer, sizeof(response_buffer),
+            "{\"success\":true}");
+    } else {
+        ESP_LOGE(TAG, "Failed to connect to WiFi: %s", esp_err_to_name(connect_ret));
+        response_pos = snprintf(response_buffer, sizeof(response_buffer),
+            "{\"success\":false,\"message\":\"Failed to connect to WiFi\"}");
+    }
+    
+    return send_response(sock, "200 OK", "application/json", response_buffer, response_pos);
 }
 
-// Extrae el método y la URI de la primera línea de la petición HTTP
 static esp_err_t parse_request_line(char* line, char* method, size_t method_len, char* uri, size_t uri_len) {
-    // Formato esperado: "METHOD URI HTTP/1.x"
     char *method_end = strchr(line, ' ');
     if (!method_end) {
         return ESP_FAIL;
@@ -307,22 +309,20 @@ static esp_err_t parse_request_line(char* line, char* method, size_t method_len,
     return ESP_OK;
 }
 
-// Encuentra la longitud del contenido en los encabezados HTTP
 static int find_content_length(char* headers) {
     char *content_len_str = strstr(headers, "Content-Length:");
     if (!content_len_str) {
         return 0;
     }
     
-    content_len_str += 15; // Saltar "Content-Length:"
+    content_len_str += 15;
     while (*content_len_str == ' ') {
-        content_len_str++; // Saltar espacios
+        content_len_str++;
     }
     
     return atoi(content_len_str);
 }
 
-// Tarea principal del servidor HTTP
 static void http_server_task(void *pvParameters) {
     simple_http_server_t *server = (simple_http_server_t *)pvParameters;
     
@@ -330,20 +330,17 @@ static void http_server_task(void *pvParameters) {
         struct sockaddr_in client_addr;
         socklen_t client_addr_len = sizeof(client_addr);
         
-        // Aceptar conexión
         int client_sock = accept(server->server_socket, (struct sockaddr *)&client_addr, &client_addr_len);
         if (client_sock < 0) {
             ESP_LOGE(TAG, "Unable to accept connection: %d", client_sock);
             continue;
         }
         
-        // Establecer timeout para recepción
         struct timeval tv;
         tv.tv_sec = 5;
         tv.tv_usec = 0;
         setsockopt(client_sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
         
-        // Buffer para leer la petición
         char rx_buffer[1024];
         int rx_len = recv(client_sock, rx_buffer, sizeof(rx_buffer) - 1, 0);
         if (rx_len <= 0) {
@@ -352,10 +349,8 @@ static void http_server_task(void *pvParameters) {
             continue;
         }
         
-        // Asegurar que el buffer esté terminado con un 0
         rx_buffer[rx_len] = '\0';
         
-        // Extraer método y URI
         char method[10];
         char uri[256];
         if (parse_request_line(rx_buffer, method, sizeof(method), uri, sizeof(uri)) != ESP_OK) {
@@ -366,7 +361,6 @@ static void http_server_task(void *pvParameters) {
         
         ESP_LOGI(TAG, "Request: %s %s", method, uri);
         
-        // Manejar diferentes URIs
         if (strcmp(uri, "/") == 0) {
             handle_index(client_sock);
         } else if (strcmp(uri, "/api/status") == 0) {
@@ -374,21 +368,17 @@ static void http_server_task(void *pvParameters) {
         } else if (strcmp(uri, "/api/scan") == 0) {
             handle_scan_api(client_sock);
         } else if (strcmp(uri, "/api/connect") == 0 && strcmp(method, "POST") == 0) {
-            // Para POST, necesitamos extraer el cuerpo
             int content_length = find_content_length(rx_buffer);
             if (content_length > 0 && content_length < 256) {
-                // Encontrar inicio del cuerpo (después de doble CRLF)
                 char *body_start = strstr(rx_buffer, "\r\n\r\n");
                 if (body_start) {
-                    body_start += 4; // Saltar CRLF
+                    body_start += 4;
                     int body_offset = body_start - rx_buffer;
                     int body_received = rx_len - body_offset;
                     
-                    // Si ya tenemos todo el cuerpo en el buffer
                     if (body_received >= content_length) {
                         handle_connect_api(client_sock, body_start, content_length);
                     } else {
-                        // Si necesitamos recibir más datos para el cuerpo
                         char body_buffer[256];
                         memcpy(body_buffer, body_start, body_received);
                         
@@ -411,7 +401,6 @@ static void http_server_task(void *pvParameters) {
                 send_response(client_sock, "400 Bad Request", "application/json", "{\"error\":\"Invalid content length\"}", 34);
             }
         } else {
-            // Cualquier otra URI redirige a la página principal (portal cautivo)
             send_redirect(client_sock, "http://192.168.4.1/");
         }
         
@@ -426,79 +415,70 @@ esp_err_t simple_http_server_start(const simple_http_server_config_t* config, si
         return ESP_ERR_INVALID_ARG;
     }
     
-    // Crear contexto del servidor
-    simple_http_server_t *server = calloc(1, sizeof(simple_http_server_t));
-    if (!server) {
-        return ESP_ERR_NO_MEM;
+    if (g_http_server_in_use) {
+        ESP_LOGE(TAG, "HTTP server already in use");
+        return ESP_ERR_INVALID_STATE;
     }
     
-    // Crear socket del servidor
+    simple_http_server_t *server = &g_http_server_context;
+    memset(server, 0, sizeof(simple_http_server_t));
+    
     server->server_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
     if (server->server_socket < 0) {
         ESP_LOGE(TAG, "Unable to create socket: %d", server->server_socket);
-        free(server);
         return ESP_FAIL;
     }
     
-    // Configurar socket para reutilizar dirección
     int opt = 1;
     setsockopt(server->server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
     
-    // Configurar dirección del servidor
     struct sockaddr_in server_addr;
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     server_addr.sin_port = htons(config->port);
     
-    // Hacer bind
     int res = bind(server->server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr));
     if (res != 0) {
         ESP_LOGE(TAG, "Socket bind failed: %d", res);
         close(server->server_socket);
-        free(server);
         return ESP_FAIL;
     }
     
-    // Escuchar
     res = listen(server->server_socket, config->max_connections);
     if (res != 0) {
         ESP_LOGE(TAG, "Socket listen failed: %d", res);
         close(server->server_socket);
-        free(server);
         return ESP_FAIL;
     }
     
     ESP_LOGI(TAG, "Socket listening on port %d", config->port);
     
-    // Iniciar tarea
     server->is_running = true;
     if (xTaskCreate(http_server_task, "http_server", config->stack_size, server, 5, &server->task_handle) != pdPASS) {
         ESP_LOGE(TAG, "Failed to create HTTP server task");
         close(server->server_socket);
-        free(server);
         return ESP_FAIL;
     }
     
+    g_http_server_in_use = true;
     *handle = server;
     return ESP_OK;
 }
 
 esp_err_t simple_http_server_stop(simple_http_server_handle_t handle) {
     simple_http_server_t *server = (simple_http_server_t *)handle;
-    if (!server) {
+    if (!server || server != &g_http_server_context) {
         return ESP_ERR_INVALID_ARG;
     }
     
-    // Detener tarea
     server->is_running = false;
-    vTaskDelay(pdMS_TO_TICKS(100)); // Dar tiempo para que termine
+    vTaskDelay(pdMS_TO_TICKS(100));
     
-    // Cerrar socket
     close(server->server_socket);
     
-    // Liberar memoria
-    free(server);
+    g_http_server_in_use = false;
+    memset(&g_http_server_context, 0, sizeof(g_http_server_context));
     
     return ESP_OK;
 }

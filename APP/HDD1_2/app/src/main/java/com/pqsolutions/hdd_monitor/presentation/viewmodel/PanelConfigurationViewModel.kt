@@ -1,6 +1,5 @@
 package com.pqsolutions.hdd_monitor.presentation.viewmodel
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pqsolutions.hdd_monitor.data.Client
@@ -103,7 +102,6 @@ class PanelConfigurationViewModel @Inject constructor(
                 }
 
             } catch (e: Exception) {
-                Log.e(TAG, "Error inicializando", e)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = "Error inicializando: ${e.message}"
@@ -117,14 +115,11 @@ class PanelConfigurationViewModel @Inject constructor(
             userRepository.getClients().fold(
                 onSuccess = { clients ->
                     _uiState.value = _uiState.value.copy(availableClients = clients)
-                    Log.d(TAG, "Clientes cargados: ${clients.size}")
                 },
                 onFailure = { error ->
-                    Log.e(TAG, "Error cargando clientes", error)
                 }
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Error cargando clientes", e)
         }
     }
 
@@ -136,7 +131,6 @@ class PanelConfigurationViewModel @Inject constructor(
                 ?.find { it.documentName == clientDocName }
                 ?.name ?: ""
         } catch (e: Exception) {
-            Log.e(TAG, "Error obteniendo nombre de cliente", e)
             ""
         }
     }
@@ -159,7 +153,6 @@ class PanelConfigurationViewModel @Inject constructor(
 
             Pair("", "")
         } catch (e: Exception) {
-            Log.e(TAG, "Error buscando cliente del panel", e)
             Pair("", "")
         }
     }
@@ -186,7 +179,6 @@ class PanelConfigurationViewModel @Inject constructor(
             startPanelListener(clientDocName, panelId)
 
         } catch (e: Exception) {
-            Log.e(TAG, "Error cargando datos de edición", e)
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
                 error = "Error cargando datos: ${e.message}"
@@ -199,7 +191,6 @@ class PanelConfigurationViewModel @Inject constructor(
             val timeoutJob = launch {
                 delay(PANEL_LOAD_TIMEOUT)
                 if (!panelReceived) {
-                    Log.w(TAG, "Timeout esperando datos del panel")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = "Panel no encontrado o timeout cargando datos"
@@ -209,7 +200,6 @@ class PanelConfigurationViewModel @Inject constructor(
 
             panelRepository.observePanelUpdates(clientDocName, panelId)
                 .catch { error ->
-                    Log.e(TAG, "Error en listener de panel", error)
                     panelReceived = true
                     timeoutJob.cancel()
                     _uiState.value = _uiState.value.copy(
@@ -256,10 +246,7 @@ class PanelConfigurationViewModel @Inject constructor(
                 error = null
             )
 
-            Log.d(TAG, "Datos de creación cargados - ESP32s disponibles: ${availableESP32s.size}")
-
         } catch (e: Exception) {
-            Log.e(TAG, "Error cargando datos de creación", e)
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
                 error = "Error cargando ESP32s: ${e.message}"
@@ -278,8 +265,6 @@ class PanelConfigurationViewModel @Inject constructor(
 
         saveJob = viewModelScope.launch {
             try {
-                Log.d(TAG, "Guardando panel - Modo: ${if (panelId != null) "Editar" else "Crear"}")
-
                 if (name.isBlank()) {
                     _uiState.value = _uiState.value.copy(error = "El nombre del panel es requerido")
                     return@launch
@@ -322,7 +307,6 @@ class PanelConfigurationViewModel @Inject constructor(
                 }
 
             } catch (e: Exception) {
-                Log.e(TAG, "Error guardando panel", e)
                 _uiState.value = _uiState.value.copy(
                     isSaving = false,
                     error = "Error guardando panel: ${e.message}"
@@ -338,8 +322,6 @@ class PanelConfigurationViewModel @Inject constructor(
         esp32Device: ESP32Device
     ) {
         try {
-            Log.d(TAG, "Creando nuevo panel: $name")
-
             val panel = Panel.createNew(
                 name = name,
                 location = location,
@@ -352,14 +334,12 @@ class PanelConfigurationViewModel @Inject constructor(
                 panel = panel,
                 esp32Id = esp32Device.documentName
             ).onSuccess { panelDocName ->
-                Log.d(TAG, "Panel creado exitosamente: $panelDocName")
                 _uiState.value = _uiState.value.copy(
                     isSaving = false,
                     saveSuccess = true,
                     error = null
                 )
             }.onFailure { error ->
-                Log.e(TAG, "Error creando panel", error)
                 _uiState.value = _uiState.value.copy(
                     isSaving = false,
                     error = "Error creando panel: ${error.message}"
@@ -367,7 +347,6 @@ class PanelConfigurationViewModel @Inject constructor(
             }
 
         } catch (e: Exception) {
-            Log.e(TAG, "Error en createNewPanel", e)
             _uiState.value = _uiState.value.copy(
                 isSaving = false,
                 error = "Error creando panel: ${e.message}"
@@ -383,8 +362,6 @@ class PanelConfigurationViewModel @Inject constructor(
         esp32Device: ESP32Device?
     ) {
         try {
-            Log.d(TAG, "Editando panel existente: $panelId")
-
             val currentPanel = _uiState.value.currentPanel
             if (currentPanel == null) {
                 _uiState.value = _uiState.value.copy(
@@ -407,14 +384,12 @@ class PanelConfigurationViewModel @Inject constructor(
                 panel = updatedPanel,
                 newEsp32Id = if (newEsp32Id != currentPanel.esp32_id) newEsp32Id else null
             ).onSuccess {
-                Log.d(TAG, "Panel editado exitosamente")
                 _uiState.value = _uiState.value.copy(
                     isSaving = false,
                     saveSuccess = true,
                     error = null
                 )
             }.onFailure { error ->
-                Log.e(TAG, "Error editando panel", error)
                 _uiState.value = _uiState.value.copy(
                     isSaving = false,
                     error = "Error editando panel: ${error.message}"
@@ -422,7 +397,6 @@ class PanelConfigurationViewModel @Inject constructor(
             }
 
         } catch (e: Exception) {
-            Log.e(TAG, "Error en editExistingPanel", e)
             _uiState.value = _uiState.value.copy(
                 isSaving = false,
                 error = "Error editando panel: ${e.message}"
@@ -431,16 +405,18 @@ class PanelConfigurationViewModel @Inject constructor(
     }
 
     fun validatePanelName(name: String): Boolean {
-        if (name.isBlank()) return false
+        if (name.isBlank()) {
+            return false
+        }
         val currentPanel = _uiState.value.currentPanel
         if (currentPanel != null && currentPanel.name == name) {
             return true
         }
-        return name.length >= 3 && name.length <= 50
+        return name.length >= 1 && name.length <= 50
     }
 
     fun validateLocation(location: String): Boolean {
-        return location.isNotBlank() && location.length >= 3 && location.length <= 100
+        return location.isNotBlank() && location.length >= 1 && location.length <= 100
     }
 
     fun isESP32Available(esp32Id: String): Boolean {
@@ -466,7 +442,9 @@ class PanelConfigurationViewModel @Inject constructor(
             true
         }
 
-        return nameValid && locationValid && esp32Valid && clientValid && !_uiState.value.isSaving
+        val isSaving = _uiState.value.isSaving
+
+        return nameValid && locationValid && esp32Valid && clientValid && !isSaving
     }
 
     fun clearError() {
@@ -485,12 +463,6 @@ class PanelConfigurationViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        Log.d(TAG, "ViewModel limpiado - cancelando operaciones")
-
         cancelJobs()
-        esp32Repository.clearListeners()
-        panelRepository.clearListeners()
-
-        Log.d(TAG, "ViewModel limpiado exitosamente")
     }
 }

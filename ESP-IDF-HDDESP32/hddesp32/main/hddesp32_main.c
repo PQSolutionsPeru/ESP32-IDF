@@ -18,7 +18,6 @@
 #include "esp_task_wdt.h"
 #include "config_processor.h"
 #include "esp_timer.h"
-#include "cJSON.h"
 
 static const char *TAG = "HDDESP32";
 
@@ -35,6 +34,55 @@ static char g_mqtt_temp_data[400];
 static char g_esp32_id_buffer[ESP32_ID_LENGTH + 1];
 
 static SemaphoreHandle_t g_callback_mutex = NULL;
+static SemaphoreHandle_t g_global_state_mutex = NULL;
+
+static bool get_wifi_connected(void) {
+    bool result = false;
+    if (xSemaphoreTake(g_global_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        result = g_wifi_connected;
+        xSemaphoreGive(g_global_state_mutex);
+    }
+    return result;
+}
+
+static void set_wifi_connected(bool connected) {
+    if (xSemaphoreTake(g_global_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        g_wifi_connected = connected;
+        xSemaphoreGive(g_global_state_mutex);
+    }
+}
+
+static bool get_mqtt_connected(void) {
+    bool result = false;
+    if (xSemaphoreTake(g_global_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        result = g_mqtt_connected;
+        xSemaphoreGive(g_global_state_mutex);
+    }
+    return result;
+}
+
+static void set_mqtt_connected(bool connected) {
+    if (xSemaphoreTake(g_global_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        g_mqtt_connected = connected;
+        xSemaphoreGive(g_global_state_mutex);
+    }
+}
+
+static bool get_relay_manager_initialized(void) {
+    bool result = false;
+    if (xSemaphoreTake(g_global_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        result = g_relay_manager_initialized;
+        xSemaphoreGive(g_global_state_mutex);
+    }
+    return result;
+}
+
+static void set_relay_manager_initialized(bool initialized) {
+    if (xSemaphoreTake(g_global_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        g_relay_manager_initialized = initialized;
+        xSemaphoreGive(g_global_state_mutex);
+    }
+}
 
 static void print_memory_info_simple(void) {
     size_t free_heap = esp_get_free_heap_size();
@@ -45,6 +93,50 @@ static void print_memory_info_simple(void) {
     if (g_watchdog_available) {
         watchdog_manager_report_activity(WATCHDOG_CHECK_MEMORY);
     }
+}
+
+static char* find_json_value(const char *json, const char *key, char *value_buf, size_t buf_size) {
+    char search_key[64];
+    snprintf(search_key, sizeof(search_key), "\"%s\":", key);
+    
+    char *start = strstr(json, search_key);
+    if (!start) {
+        return NULL;
+    }
+    
+    start += strlen(search_key);
+    while (*start == ' ' || *start == '\t') start++;
+    
+    if (*start == '"') {
+        start++;
+        char *end = strchr(start, '"');
+        if (!end) return NULL;
+        
+        size_t len = end - start;
+        if (len >= buf_size) len = buf_size - 1;
+        
+        memcpy(value_buf, start, len);
+        value_buf[len] = '\0';
+        return value_buf;
+    } else {
+        char *end = start;
+        while (*end && *end != ',' && *end != '}' && *end != ' ') end++;
+        
+        size_t len = end - start;
+        if (len >= buf_size) len = buf_size - 1;
+        
+        memcpy(value_buf, start, len);
+        value_buf[len] = '\0';
+        return value_buf;
+    }
+}
+
+static bool parse_json_bool(const char *json, const char *key) {
+    char value_buf[16];
+    char *value = find_json_value(json, key, value_buf, sizeof(value_buf));
+    if (!value) return false;
+    
+    return (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
 }
 
 static void watchdog_event_callback(watchdog_health_status_t status, watchdog_check_type_t check_type, void *user_data) {
@@ -103,7 +195,7 @@ static void watchdog_event_callback(watchdog_health_status_t status, watchdog_ch
 }
 
 static void relay_state_change_callback(const relay_event_t *event, void *user_data) {
-    if (!g_mqtt_connected || !event || !g_callback_mutex) {
+    if (!get_mqtt_connected() || !event || !g_callback_mutex) {
         return;
     }
 
@@ -118,31 +210,74 @@ static void relay_state_change_callback(const relay_event_t *event, void *user_d
     
     if (esp32_id_manager_get_id(g_esp32_id_buffer, sizeof(g_esp32_id_buffer)) != ESP_OK) {
         ESP_LOGE(TAG, "Could not get ESP32 ID for relay event");
+        xSemaphoreGive(g_callback_mutex);
         return;
     }
     
-    memset(g_relay_json_buffer, 0, sizeof(g_relay_json_buffer));
+    size_t json_size = 300 + strlen(event->relay_id) + strlen(event->name);
     
-    int len = snprintf(g_relay_json_buffer, sizeof(g_relay_json_buffer),
+    if (esp_get_free_heap_size() < json_size + 8000) {
+        ESP_LOGW(TAG, "Insufficient memory for relay event, using static fallback");
+        
+        int len = snprintf(g_relay_json_buffer, sizeof(g_relay_json_buffer),
+                          "{"
+                          "\"relay\":\"%.16s\","
+                          "\"status\":\"%s\","
+                          "\"timestamp\":%lld,"
+                          "\"contact_type\":\"%s\","
+                          "\"old_status\":\"%s\""
+                          "}",
+                          event->relay_id,
+                          (event->new_state == RELAY_STATE_OK) ? "OK" : "DISC",
+                          (long long)event->timestamp,
+                          (event->contact_type == RELAY_CONTACT_NC) ? "NC" : "NO",
+                          (event->old_state == RELAY_STATE_OK) ? "OK" : "DISC");
+        
+        if (len > 0 && len < sizeof(g_relay_json_buffer)) {
+            char relay_topic[MQTT_TOPIC_MAX_LENGTH];
+            esp_err_t topic_ret = mqtt_manager_get_panel_topic(relay_topic, sizeof(relay_topic), "relays");
+            
+            if (topic_ret == ESP_OK) {
+                mqtt_manager_publish_json(relay_topic, g_relay_json_buffer, 1, false);
+            } else {
+                snprintf(relay_topic, sizeof(relay_topic), "esp32/%.8s/relays", g_esp32_id_buffer);
+                mqtt_manager_publish_json(relay_topic, g_relay_json_buffer, 1, false);
+            }
+        }
+        
+        xSemaphoreGive(g_callback_mutex);
+        return;
+    }
+    
+    char *relay_json_buffer = malloc(json_size);
+    if (!relay_json_buffer) {
+        ESP_LOGE(TAG, "Failed to allocate relay JSON buffer");
+        xSemaphoreGive(g_callback_mutex);
+        return;
+    }
+    
+    int len = snprintf(relay_json_buffer, json_size,
                       "{"
-                      "\"relay\":\"%.16s\","
+                      "\"relay\":\"%s\","
                       "\"status\":\"%s\","
                       "\"timestamp\":%lld,"
                       "\"contact_type\":\"%s\","
-                      "\"old_status\":\"%s\""
+                      "\"old_status\":\"%s\","
+                      "\"name\":\"%s\""
                       "}",
                       event->relay_id,
                       (event->new_state == RELAY_STATE_OK) ? "OK" : "DISC",
                       (long long)event->timestamp,
                       (event->contact_type == RELAY_CONTACT_NC) ? "NC" : "NO",
-                      (event->old_state == RELAY_STATE_OK) ? "OK" : "DISC");
+                      (event->old_state == RELAY_STATE_OK) ? "OK" : "DISC",
+                      event->name);
     
-    if (len > 0 && len < sizeof(g_relay_json_buffer)) {
+    if (len > 0 && len < json_size) {
         char relay_topic[MQTT_TOPIC_MAX_LENGTH];
         esp_err_t topic_ret = mqtt_manager_get_panel_topic(relay_topic, sizeof(relay_topic), "relays");
         
         if (topic_ret == ESP_OK) {
-            esp_err_t ret = mqtt_manager_publish_json(relay_topic, g_relay_json_buffer, 1, false);
+            esp_err_t ret = mqtt_manager_publish_json(relay_topic, relay_json_buffer, 1, false);
             if (ret == ESP_OK) {
                 ESP_LOGI(TAG, "Relay %s state change published: %s -> %s", 
                         event->relay_id,
@@ -151,10 +286,11 @@ static void relay_state_change_callback(const relay_event_t *event, void *user_d
             }
         } else {
             snprintf(relay_topic, sizeof(relay_topic), "esp32/%.8s/relays", g_esp32_id_buffer);
-            mqtt_manager_publish_json(relay_topic, g_relay_json_buffer, 1, false);
+            mqtt_manager_publish_json(relay_topic, relay_json_buffer, 1, false);
         }
     }
-
+    
+    free(relay_json_buffer);
     xSemaphoreGive(g_callback_mutex);
 }
 
@@ -172,16 +308,16 @@ static void mqtt_state_callback(mqtt_manager_state_t state, void *user_data) {
     switch (state) {
         case MQTT_MANAGER_STATE_CONNECTED:
             ESP_LOGI(TAG, "MQTT connected");
-            g_mqtt_connected = true;
+            set_mqtt_connected(true);
             
-            if (!g_relay_manager_initialized) {
+            if (!get_relay_manager_initialized()) {
                 ESP_LOGI(TAG, "Initializing Relay Manager after MQTT connection");
                 esp_err_t ret = relay_manager_init();
                 if (ret == ESP_OK) {
                     relay_manager_set_state_callback(relay_state_change_callback, NULL);
                     relay_manager_set_mqtt_callback(relay_mqtt_command_callback, NULL);
                     relay_manager_check_all_states(true);
-                    g_relay_manager_initialized = true;
+                    set_relay_manager_initialized(true);
                     ESP_LOGI(TAG, "Relay Manager initialized successfully");
                 } else {
                     ESP_LOGE(TAG, "Failed to initialize Relay Manager: %s", esp_err_to_name(ret));
@@ -191,7 +327,7 @@ static void mqtt_state_callback(mqtt_manager_state_t state, void *user_data) {
             if (g_watchdog_available) {
                 watchdog_manager_report_activity(WATCHDOG_CHECK_MQTT);
                 
-                if (g_wifi_connected && g_mqtt_connected) {
+                if (get_wifi_connected() && get_mqtt_connected()) {
                     watchdog_manager_set_mode(WATCHDOG_MODE_RUNNING);
                 }
             }
@@ -199,7 +335,7 @@ static void mqtt_state_callback(mqtt_manager_state_t state, void *user_data) {
             
         case MQTT_MANAGER_STATE_DISCONNECTED:
             ESP_LOGI(TAG, "MQTT disconnected");
-            g_mqtt_connected = false;
+            set_mqtt_connected(false);
             
             if (g_watchdog_available) {
                 esp_err_t ret = watchdog_manager_set_mode(WATCHDOG_MODE_CONFIG);
@@ -211,7 +347,7 @@ static void mqtt_state_callback(mqtt_manager_state_t state, void *user_data) {
             
         case MQTT_MANAGER_STATE_ERROR:
             ESP_LOGW(TAG, "MQTT error");
-            g_mqtt_connected = false;
+            set_mqtt_connected(false);
             break;
             
         default:
@@ -231,16 +367,31 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
         watchdog_manager_report_activity(WATCHDOG_CHECK_MQTT);
     }
     
+    char *mqtt_temp_data;
+    bool use_dynamic = false;
+    
     if (data_len > sizeof(g_mqtt_temp_data) - 1) {
-        ESP_LOGW(TAG, "Message too large, truncating: %d -> %zu bytes", data_len, sizeof(g_mqtt_temp_data) - 1);
-        data_len = sizeof(g_mqtt_temp_data) - 1;
+        if (esp_get_free_heap_size() < data_len + 8000) {
+            ESP_LOGW(TAG, "Message too large and insufficient memory: %d bytes", data_len);
+            return;
+        }
+        
+        mqtt_temp_data = malloc(data_len + 1);
+        if (!mqtt_temp_data) {
+            ESP_LOGE(TAG, "Failed to allocate message buffer");
+            return;
+        }
+        use_dynamic = true;
+    } else {
+        mqtt_temp_data = g_mqtt_temp_data;
     }
     
-    memcpy(g_mqtt_temp_data, data, data_len);
-    g_mqtt_temp_data[data_len] = '\0';
+    memcpy(mqtt_temp_data, data, data_len);
+    mqtt_temp_data[data_len] = '\0';
     
     if (esp32_id_manager_get_id(g_esp32_id_buffer, sizeof(g_esp32_id_buffer)) != ESP_OK) {
         ESP_LOGE(TAG, "Could not get ESP32 ID");
+        if (use_dynamic) free(mqtt_temp_data);
         return;
     }
     
@@ -255,11 +406,11 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
         config_manager_erase_key("location");
         mqtt_manager_clear_panel_config();
         
-        if (g_relay_manager_initialized) {
+        if (get_relay_manager_initialized()) {
             relay_mgr_state_t state = relay_manager_get_mgr_state();
             if (state == RELAY_MGR_STATE_RUNNING) {
                 relay_manager_deinit();
-                g_relay_manager_initialized = false;
+                set_relay_manager_initialized(false);
                 vTaskDelay(pdMS_TO_TICKS(3000));
             }
         }
@@ -268,6 +419,8 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
         g_need_reregister = true;
         vTaskDelay(pdMS_TO_TICKS(1000));
         mqtt_manager_send_network_info();
+        
+        if (use_dynamic) free(mqtt_temp_data);
         return;
     }
     
@@ -276,74 +429,68 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
     if (strcmp(topic, g_mqtt_temp_topic) == 0) {
         ESP_LOGI(TAG, "Configuration message received");
         
-        esp_err_t ret = process_esp32_configuration(g_mqtt_temp_data);
+        esp_err_t ret = process_esp32_configuration(mqtt_temp_data);
         
         if (ret == ESP_OK) {
             ESP_LOGI(TAG, "Configuration accepted");
             
-            if (!g_relay_manager_initialized) {
+            if (!get_relay_manager_initialized()) {
                 vTaskDelay(pdMS_TO_TICKS(500));
                 ESP_LOGI(TAG, "Initializing Relay Manager");
                 ret = relay_manager_init();
                 if (ret == ESP_OK) {
                     relay_manager_set_state_callback(relay_state_change_callback, NULL);
                     relay_manager_set_mqtt_callback(relay_mqtt_command_callback, NULL);
-                    g_relay_manager_initialized = true;
+                    set_relay_manager_initialized(true);
                 }
             }
         }
+        
+        if (use_dynamic) free(mqtt_temp_data);
         return;
     }
     
-    if (strstr(topic, "/relay_config") && g_relay_manager_initialized) {
-        if (data_len > 300) {
+    if (strstr(topic, "/relay_config") && get_relay_manager_initialized()) {
+        if (data_len > 2000) {
             ESP_LOGW(TAG, "Relay config message too large, ignoring");
+            if (use_dynamic) free(mqtt_temp_data);
             return;
         }
         
-        cJSON *json = cJSON_ParseWithLength(g_mqtt_temp_data, data_len);
-        if (json) {
-            cJSON *command = cJSON_GetObjectItem(json, "command");
-            cJSON *relay_id = cJSON_GetObjectItem(json, "relay_id");
-            cJSON *is_active = cJSON_GetObjectItem(json, "is_active");
+        char command_val[32], relay_id_val[32], is_active_val[16];
+        char contact_type_val[16], custom_name_val[64];
+        
+        if (find_json_value(mqtt_temp_data, "command", command_val, sizeof(command_val)) &&
+            find_json_value(mqtt_temp_data, "relay_id", relay_id_val, sizeof(relay_id_val)) &&
+            strcmp(command_val, "update_config") == 0) {
             
-            if (command && relay_id && 
-                cJSON_IsString(command) && cJSON_IsString(relay_id) &&
-                strcmp(cJSON_GetStringValue(command), "update_config") == 0) {
+            if (find_json_value(mqtt_temp_data, "is_active", is_active_val, sizeof(is_active_val))) {
+                bool is_active = parse_json_bool(mqtt_temp_data, "is_active");
+                relay_manager_set_active(relay_id_val, is_active);
+                ESP_LOGI(TAG, "Relay %s %s", relay_id_val, is_active ? "ACTIVATED" : "DEACTIVATED");
                 
-                const char *relay_name = cJSON_GetStringValue(relay_id);
-                
-                if (relay_name && is_active) {
-                    relay_manager_set_active(relay_name, cJSON_IsTrue(is_active));
-                    ESP_LOGI(TAG, "Relay %s %s", relay_name,
-                            cJSON_IsTrue(is_active) ? "ACTIVATED" : "DEACTIVATED");
-                    
-                    cJSON *contact_type = cJSON_GetObjectItem(json, "contact_type");
-                    if (contact_type && cJSON_IsString(contact_type)) {
-                        const char *type_str = cJSON_GetStringValue(contact_type);
-                        if (type_str) {
-                            relay_contact_type_t type = strcmp(type_str, "NC") == 0 ? 
-                                                    RELAY_CONTACT_NC : RELAY_CONTACT_NO;
-                            relay_manager_set_contact_type(relay_name, type);
-                            ESP_LOGI(TAG, "Relay %s contact type set to %s", relay_name, type_str);
-                        }
-                    }
-                    
-                    cJSON *custom_name = cJSON_GetObjectItem(json, "custom_name");
-                    if (custom_name && cJSON_IsString(custom_name)) {
-                        const char *name_str = cJSON_GetStringValue(custom_name);
-                        if (name_str && strlen(name_str) > 0 && strlen(name_str) < 32) {
-                            relay_manager_set_name(relay_name, name_str);
-                            ESP_LOGI(TAG, "Relay %s custom name set to '%.30s'", relay_name, name_str);
-                        }
-                    }
-                    
-                    vTaskDelay(pdMS_TO_TICKS(500));
-                    relay_manager_report_initial_states();
+                if (find_json_value(mqtt_temp_data, "contact_type", contact_type_val, sizeof(contact_type_val))) {
+                    relay_contact_type_t type = (strcmp(contact_type_val, "NC") == 0) ? 
+                                              RELAY_CONTACT_NC : RELAY_CONTACT_NO;
+                    relay_manager_set_contact_type(relay_id_val, type);
+                    ESP_LOGI(TAG, "Relay %s contact type set to %s", relay_id_val, contact_type_val);
                 }
+                
+                if (find_json_value(mqtt_temp_data, "custom_name", custom_name_val, sizeof(custom_name_val))) {
+                    if (strlen(custom_name_val) > 0 && strlen(custom_name_val) < 32) {
+                        relay_manager_set_name(relay_id_val, custom_name_val);
+                        ESP_LOGI(TAG, "Relay %s custom name set to '%.30s'", relay_id_val, custom_name_val);
+                    }
+                }
+                
+                vTaskDelay(pdMS_TO_TICKS(500));
+                relay_manager_report_initial_states();
             }
-            cJSON_Delete(json);
         }
+    }
+    
+    if (use_dynamic) {
+        free(mqtt_temp_data);
     }
 }
 
@@ -351,7 +498,7 @@ static void wifi_state_callback(wifi_manager_state_t state, void *user_data) {
     switch (state) {
         case WIFI_MANAGER_STATE_CONNECTED:
             ESP_LOGI(TAG, "WiFi connected");
-            g_wifi_connected = true;
+            set_wifi_connected(true);
             
             if (g_watchdog_available) {
                 watchdog_manager_report_activity(WATCHDOG_CHECK_WIFI);
@@ -368,8 +515,8 @@ static void wifi_state_callback(wifi_manager_state_t state, void *user_data) {
             
         case WIFI_MANAGER_STATE_DISCONNECTED:
             ESP_LOGI(TAG, "WiFi disconnected");
-            g_wifi_connected = false;
-            g_mqtt_connected = false;
+            set_wifi_connected(false);
+            set_mqtt_connected(false);
             
             if (g_watchdog_available) {
                 esp_err_t ret = watchdog_manager_set_mode(WATCHDOG_MODE_CONFIG);
@@ -381,7 +528,7 @@ static void wifi_state_callback(wifi_manager_state_t state, void *user_data) {
             
         case WIFI_MANAGER_STATE_AP_MODE:
             ESP_LOGI(TAG, "WiFi AP mode active");
-            g_wifi_connected = false;
+            set_wifi_connected(false);
             
             if (g_watchdog_available) {
                 esp_err_t ret = watchdog_manager_set_mode(WATCHDOG_MODE_CONFIG);
@@ -398,11 +545,6 @@ static void wifi_state_callback(wifi_manager_state_t state, void *user_data) {
 
 static void on_wifi_connect_callback(void *user_data) {
     ESP_LOGI(TAG, "WiFi configured via captive portal");
-    
-    if (wifi_captive_portal_is_active()) {
-        wifi_captive_portal_stop();
-        esp_wifi_set_mode(WIFI_MODE_STA);
-    }
 }
 
 static void system_monitor_task(void *pvParameters) {
@@ -428,6 +570,9 @@ static void system_monitor_task(void *pvParameters) {
     }
     
     uint32_t cycle_count = 0;
+    bool portal_config_verified = false;
+    int64_t connection_stable_start = 0;
+    const int64_t VERIFICATION_DELAY_MS = 30000;
     
     while (1) {
         if (task_registered) {
@@ -439,7 +584,7 @@ static void system_monitor_task(void *pvParameters) {
         
         cycle_count++;
         
-        if (cycle_count % 60 == 0 && g_relay_manager_initialized) {
+        if (cycle_count % 60 == 0 && get_relay_manager_initialized()) {
             relay_manager_check_all_states(false);
         }
         
@@ -458,9 +603,10 @@ static void system_monitor_task(void *pvParameters) {
         
         bool wifi_connected = wifi_manager_is_connected();
         bool mqtt_connected = mqtt_manager_is_connected();
+        bool time_synced = time_manager_is_synchronized();
         
-        g_wifi_connected = wifi_connected;
-        g_mqtt_connected = mqtt_connected;
+        set_wifi_connected(wifi_connected);
+        set_mqtt_connected(mqtt_connected);
         
         if (wifi_connected) {
             if (g_watchdog_available) {
@@ -469,7 +615,26 @@ static void system_monitor_task(void *pvParameters) {
             
             wifi_mode_t mode;
             if (esp_wifi_get_mode(&mode) == ESP_OK && mode == WIFI_MODE_APSTA) {
-                esp_wifi_set_mode(WIFI_MODE_STA);
+                if (mqtt_connected && time_synced && !portal_config_verified) {
+                    if (connection_stable_start == 0) {
+                        connection_stable_start = esp_timer_get_time() / 1000;
+                        ESP_LOGI(TAG, "Full connectivity detected, starting verification timer");
+                    } else {
+                        int64_t elapsed = (esp_timer_get_time() / 1000) - connection_stable_start;
+                        if (elapsed >= VERIFICATION_DELAY_MS) {
+                            ESP_LOGI(TAG, "Configuration complete - restarting to STA mode");
+                            vTaskDelay(pdMS_TO_TICKS(2000));
+                            esp_restart();
+                        } else {
+                            int64_t remaining = (VERIFICATION_DELAY_MS - elapsed) / 1000;
+                            if (cycle_count % 12 == 0) {
+                                ESP_LOGI(TAG, "Restart in %lld seconds", remaining);
+                            }
+                        }
+                    }
+                } else if (!mqtt_connected || !time_synced) {
+                    connection_stable_start = 0;
+                }
             }
             
             if (!time_manager_is_synchronized()) {
@@ -496,9 +661,11 @@ static void system_monitor_task(void *pvParameters) {
                 }
             }
         } else {
-            if (cycle_count % 12 == 0) {
-                ESP_LOGI(TAG, "WiFi disconnected - attempting recovery");
-                wifi_manager_handle_disconnection("FirePanel", "firepanel", 3);
+            connection_stable_start = 0;
+            
+            if (cycle_count % 6 == 0) {
+                ESP_LOGI(TAG, "WiFi disconnected - running recovery cycle");
+                wifi_manager_handle_disconnection("FirePanel", "firepanel", 10);
             }
         }
         
@@ -520,6 +687,7 @@ void app_main(void)
     ESP_LOGI(TAG, "Phase 1: Basic initialization");
 
     g_callback_mutex = xSemaphoreCreateMutex();
+    g_global_state_mutex = xSemaphoreCreateMutex();
     
     esp_err_t watchdog_ret = watchdog_manager_init();
     if (watchdog_ret != ESP_OK) {
@@ -628,13 +796,13 @@ void app_main(void)
     }
     
     ESP_LOGI(TAG, "Phase 4: WiFi connection");
-    
+
     esp_err_t wifi_ret = wifi_manager_connect_saved();
     if (wifi_ret != ESP_OK) {
         char ap_ssid[33];
         ESP_ERROR_CHECK(wifi_manager_generate_ap_ssid(ap_ssid, sizeof(ap_ssid), "FirePanel"));
         
-        ESP_LOGI(TAG, "Starting captive portal: %s", ap_ssid);
+        ESP_LOGI(TAG, "No saved credentials - starting captive portal: %s", ap_ssid);
         ESP_ERROR_CHECK(wifi_captive_portal_start(ap_ssid, "firepanel"));
         ESP_ERROR_CHECK(wifi_captive_portal_set_on_connect_callback(on_wifi_connect_callback, NULL));
         
@@ -642,15 +810,7 @@ void app_main(void)
             watchdog_manager_set_mode(WATCHDOG_MODE_CONFIG);
         }
     } else {
-        if (wifi_manager_is_connected()) {
-            g_wifi_connected = true;
-            time_manager_sync_time();
-            mqtt_manager_connect();
-        }
-    }
-    
-    if (main_task_registered) {
-        watchdog_manager_feed();
+        ESP_LOGI(TAG, "WiFi connection initiated - will connect in background");
     }
     
     ESP_LOGI(TAG, "Phase 5: Creating system monitor task");
@@ -743,9 +903,9 @@ void app_main(void)
         vTaskDelay(pdMS_TO_TICKS(5000));
     }
     
-    if (g_relay_manager_initialized) {
+    if (get_relay_manager_initialized()) {
         ESP_LOGI(TAG, "Cleaning up Relay Manager");
         relay_manager_deinit();
-        g_relay_manager_initialized = false;
+        set_relay_manager_initialized(false);
     }
 }

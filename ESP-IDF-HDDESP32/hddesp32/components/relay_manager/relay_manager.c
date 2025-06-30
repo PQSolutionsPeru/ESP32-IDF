@@ -6,15 +6,18 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
+#include "freertos/timers.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_system.h"
 #include "config_manager.h"
 #include "time_manager.h"
-#include "cJSON.h"
 
 #define TAG "RELAY_MGR"
+#define RELAY_MANAGER_MIN_REPORT_INTERVAL_MS 750
+#define RELAY_MANAGER_AUTO_CHECK_INTERVAL_MS 2000
+#define RELAY_CONFIG_SAVE_DELAY_MS 5000
 
 static const gpio_num_t DEFAULT_RELAY_PINS[RELAY_MANAGER_MAX_RELAYS] = {
     GPIO_NUM_32,
@@ -45,8 +48,6 @@ static const bool DEFAULT_ACTIVE_STATES[RELAY_MANAGER_MAX_RELAYS] = {
 
 typedef struct {
     gpio_num_t gpio_pin;
-    int gpio_level;
-    int64_t timestamp;
 } gpio_event_t;
 
 typedef struct {
@@ -66,12 +67,57 @@ typedef struct {
     uint32_t total_events_processed;
     uint32_t debounce_filtered_events;
     uint32_t mqtt_commands_processed;
+    
+    char message_pool[3][256];
+    bool pool_in_use[3];
+    SemaphoreHandle_t pool_mutex;
+    
+    TimerHandle_t config_save_timer;
+    bool config_save_pending;
 } relay_manager_context_t;
 
 static relay_manager_context_t s_relay_ctx = {0};
 
+static char* get_message_buffer(void) {
+    relay_manager_context_t *ctx = &s_relay_ctx;
+    
+    if (xSemaphoreTake(ctx->pool_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        for (int i = 0; i < 3; i++) {
+            if (!ctx->pool_in_use[i]) {
+                ctx->pool_in_use[i] = true;
+                memset(ctx->message_pool[i], 0, 256);
+                xSemaphoreGive(ctx->pool_mutex);
+                return ctx->message_pool[i];
+            }
+        }
+        xSemaphoreGive(ctx->pool_mutex);
+        
+        size_t free_heap = esp_get_free_heap_size();
+        if (free_heap < 50000) {
+            ESP_LOGW(TAG, "Low memory during buffer allocation: %zu bytes", free_heap);
+        }
+    }
+    return NULL;
+}
+
+static void release_message_buffer(char *buffer) {
+    relay_manager_context_t *ctx = &s_relay_ctx;
+    
+    if (xSemaphoreTake(ctx->pool_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        for (int i = 0; i < 3; i++) {
+            if (ctx->message_pool[i] == buffer) {
+                ctx->pool_in_use[i] = false;
+                break;
+            }
+        }
+        xSemaphoreGive(ctx->pool_mutex);
+    }
+}
+
 static esp_err_t load_relay_config(void);
-static esp_err_t save_relay_config(void);
+static esp_err_t save_relay_config_immediate(void);
+static void config_save_timer_callback(TimerHandle_t xTimer);
+static void schedule_config_save(void);
 static void gpio_isr_handler(void *arg);
 static void relay_event_task(void *pvParameters);
 static relay_state_t gpio_to_logical_state(int gpio_level, relay_contact_type_t contact_type);
@@ -80,6 +126,40 @@ static const char* contact_type_to_string(relay_contact_type_t type);
 static relay_contact_type_t string_to_contact_type(const char* str);
 static int find_relay_index_by_id(const char *relay_id);
 static int find_relay_index_by_gpio(gpio_num_t gpio_pin);
+
+static void config_save_timer_callback(TimerHandle_t xTimer) {
+    relay_manager_context_t *ctx = &s_relay_ctx;
+    bool should_save = false;
+    
+    if (xSemaphoreTake(ctx->config_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        should_save = ctx->config_save_pending;
+        if (should_save) {
+            ctx->config_save_pending = false;
+        }
+        xSemaphoreGive(ctx->config_mutex);
+    }
+    
+    if (should_save) {
+        esp_err_t ret = save_relay_config_immediate();
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "Deferred relay configuration saved to NVS");
+        } else {
+            ESP_LOGE(TAG, "Failed to save deferred relay configuration: %s", esp_err_to_name(ret));
+        }
+    }
+}
+
+static void schedule_config_save(void) {
+    relay_manager_context_t *ctx = &s_relay_ctx;
+    
+    if (ctx->config_save_timer && ctx->initialized) {
+        if (xSemaphoreTake(ctx->config_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+            ctx->config_save_pending = true;
+            xTimerReset(ctx->config_save_timer, pdMS_TO_TICKS(100));
+            xSemaphoreGive(ctx->config_mutex);
+        }
+    }
+}
 
 relay_mgr_state_t relay_manager_get_mgr_state(void) {
     return s_relay_ctx.state;
@@ -107,7 +187,7 @@ int relay_manager_read_stable_gpio(gpio_num_t gpio_pin) {
         vTaskDelay(pdMS_TO_TICKS(RELAY_MANAGER_READING_DELAY_MS));
     }
     
-    int stable_level = (total_sum > (RELAY_MANAGER_STABLE_READINGS / 2)) ? 1 : 0;
+    int stable_level = (total_sum >= 14) ? 1 : 0;
     return stable_level;
 }
 
@@ -126,6 +206,7 @@ esp_err_t relay_manager_init(void) {
     ctx->total_events_processed = 0;
     ctx->debounce_filtered_events = 0;
     ctx->mqtt_commands_processed = 0;
+    ctx->config_save_pending = false;
     
     ctx->config_mutex = xSemaphoreCreateMutex();
     if (ctx->config_mutex == NULL) {
@@ -134,9 +215,44 @@ esp_err_t relay_manager_init(void) {
         return ESP_ERR_NO_MEM;
     }
     
+    ctx->pool_mutex = xSemaphoreCreateMutex();
+    if (ctx->pool_mutex == NULL) {
+        vSemaphoreDelete(ctx->config_mutex);
+        ctx->config_mutex = NULL;
+        ESP_LOGE(TAG, "Failed to create pool mutex");
+        ctx->state = RELAY_MGR_STATE_UNINITIALIZED;
+        return ESP_ERR_NO_MEM;
+    }
+    
+    ctx->config_save_timer = xTimerCreate(
+        "relay_cfg_save",
+        pdMS_TO_TICKS(RELAY_CONFIG_SAVE_DELAY_MS),
+        pdFALSE,
+        NULL,
+        config_save_timer_callback
+    );
+    
+    if (ctx->config_save_timer == NULL) {
+        vSemaphoreDelete(ctx->pool_mutex);
+        vSemaphoreDelete(ctx->config_mutex);
+        ctx->pool_mutex = NULL;
+        ctx->config_mutex = NULL;
+        ESP_LOGE(TAG, "Failed to create config save timer");
+        ctx->state = RELAY_MGR_STATE_UNINITIALIZED;
+        return ESP_ERR_NO_MEM;
+    }
+    
+    for (int i = 0; i < 3; i++) {
+        ctx->pool_in_use[i] = false;
+    }
+    
     ctx->gpio_event_queue = xQueueCreate(100, sizeof(gpio_event_t));
     if (ctx->gpio_event_queue == NULL) {
+        xTimerDelete(ctx->config_save_timer, portMAX_DELAY);
+        vSemaphoreDelete(ctx->pool_mutex);
         vSemaphoreDelete(ctx->config_mutex);
+        ctx->config_save_timer = NULL;
+        ctx->pool_mutex = NULL;
         ctx->config_mutex = NULL;
         ESP_LOGE(TAG, "Failed to create GPIO event queue");
         ctx->state = RELAY_MGR_STATE_UNINITIALIZED;
@@ -287,6 +403,16 @@ cleanup:
         ctx->gpio_event_queue = NULL;
     }
     
+    if (ctx->config_save_timer) {
+        xTimerDelete(ctx->config_save_timer, portMAX_DELAY);
+        ctx->config_save_timer = NULL;
+    }
+    
+    if (ctx->pool_mutex) {
+        vSemaphoreDelete(ctx->pool_mutex);
+        ctx->pool_mutex = NULL;
+    }
+    
     if (ctx->config_mutex) {
         vSemaphoreDelete(ctx->config_mutex);
         ctx->config_mutex = NULL;
@@ -298,27 +424,16 @@ cleanup:
 static void IRAM_ATTR gpio_isr_handler(void *arg) {
     gpio_num_t gpio_pin = (gpio_num_t)(uintptr_t)arg;
     
-    if (s_relay_ctx.state != RELAY_MGR_STATE_RUNNING || 
-        !s_relay_ctx.initialized || 
-        !s_relay_ctx.gpio_event_queue) {
+    if (!s_relay_ctx.gpio_event_queue) {
         return;
     }
     
-    int64_t timestamp = esp_timer_get_time();
-    int gpio_level = gpio_get_level(gpio_pin);
-    
     gpio_event_t event = {
-        .gpio_pin = gpio_pin,
-        .gpio_level = gpio_level,
-        .timestamp = timestamp
+        .gpio_pin = gpio_pin
     };
     
     BaseType_t higher_priority_task_woken = pdFALSE;
-    BaseType_t result = xQueueSendFromISR(s_relay_ctx.gpio_event_queue, &event, &higher_priority_task_woken);
-    
-    if (result != pdTRUE) {
-        s_relay_ctx.debounce_filtered_events++;
-    }
+    xQueueSendFromISR(s_relay_ctx.gpio_event_queue, &event, &higher_priority_task_woken);
     
     if (higher_priority_task_woken == pdTRUE) {
         portYIELD_FROM_ISR();
@@ -474,7 +589,8 @@ static void relay_event_task(void *pvParameters) {
                 continue;
             }
             
-            int64_t time_since_last = gpio_event.timestamp - relay->last_change_time;
+            int64_t current_time = esp_timer_get_time();
+            int64_t time_since_last = current_time - relay->last_change_time;
             if (time_since_last < (RELAY_MANAGER_DEBOUNCE_TIME_MS * 1000)) {
                 ctx->debounce_filtered_events++;
                 continue;
@@ -490,6 +606,34 @@ static void relay_event_task(void *pvParameters) {
             
             int stable_reading = relay_manager_read_stable_gpio(gpio_event.gpio_pin);
             if (stable_reading < 0) {
+                relay->current_state = RELAY_STATE_ERROR;
+                
+                gpio_intr_disable(gpio_event.gpio_pin);
+                gpio_isr_handler_remove(gpio_event.gpio_pin);
+                gpio_reset_pin(gpio_event.gpio_pin);
+                vTaskDelay(pdMS_TO_TICKS(100));
+                
+                gpio_config_t io_conf = {
+                    .pin_bit_mask = (1ULL << gpio_event.gpio_pin),
+                    .mode = GPIO_MODE_INPUT,
+                    .pull_up_en = GPIO_PULLUP_ENABLE,
+                    .pull_down_en = GPIO_PULLDOWN_DISABLE,
+                    .intr_type = GPIO_INTR_ANYEDGE
+                };
+                esp_err_t gpio_ret = gpio_config(&io_conf);
+                
+                if (gpio_ret == ESP_OK) {
+                    esp_err_t isr_ret = gpio_isr_handler_add(gpio_event.gpio_pin, gpio_isr_handler, 
+                                        (void*)(uintptr_t)gpio_event.gpio_pin);
+                    if (isr_ret == ESP_OK) {
+                        gpio_intr_enable(gpio_event.gpio_pin);
+                        ESP_LOGW(TAG, "GPIO %d re-initialized after read failure", gpio_event.gpio_pin);
+                    } else {
+                        ESP_LOGE(TAG, "Failed to re-add ISR for GPIO %d: %s", gpio_event.gpio_pin, esp_err_to_name(isr_ret));
+                    }
+                } else {
+                    ESP_LOGE(TAG, "Failed to reconfigure GPIO %d: %s", gpio_event.gpio_pin, esp_err_to_name(gpio_ret));
+                }
                 continue;
             }
             
@@ -602,14 +746,11 @@ esp_err_t relay_manager_set_active(const char *relay_id, bool active) {
             }
         }
         
-        esp_err_t ret = save_relay_config();
+        schedule_config_save();
         xSemaphoreGive(ctx->config_mutex);
         
-        if (ret == ESP_OK) {
-            ESP_LOGI(TAG, "Relay %s %s", relay_id, active ? "ACTIVATED" : "DEACTIVATED");
-        }
-        
-        return ret;
+        ESP_LOGI(TAG, "Relay %s %s", relay_id, active ? "ACTIVATED" : "DEACTIVATED");
+        return ESP_OK;
     }
     
     return ESP_FAIL;
@@ -681,14 +822,11 @@ esp_err_t relay_manager_set_contact_type(const char *relay_id, relay_contact_typ
             }
         }
         
-        esp_err_t ret = save_relay_config();
+        schedule_config_save();
         xSemaphoreGive(ctx->config_mutex);
         
-        if (ret == ESP_OK) {
-            ESP_LOGI(TAG, "Relay %s contact type changed to: %s", relay_id, contact_type_to_string(contact_type));
-        }
-        
-        return ret;
+        ESP_LOGI(TAG, "Relay %s contact type changed to: %s", relay_id, contact_type_to_string(contact_type));
+        return ESP_OK;
     }
     
     return ESP_FAIL;
@@ -737,7 +875,7 @@ static esp_err_t load_relay_config(void) {
     return ESP_OK;
 }
 
-static esp_err_t save_relay_config(void) {
+static esp_err_t save_relay_config_immediate(void) {
     relay_manager_context_t *ctx = &s_relay_ctx;
     esp_err_t ret;
     
@@ -772,7 +910,6 @@ static esp_err_t save_relay_config(void) {
         return ret;
     }
     
-    ESP_LOGI(TAG, "Relay configuration saved to NVS");
     return ESP_OK;
 }
 
@@ -837,11 +974,15 @@ esp_err_t relay_manager_get_all_states_json(char *json_buffer, size_t buffer_siz
         return ESP_ERR_INVALID_STATE;
     }
     
-    cJSON *root = cJSON_CreateObject();
-    if (!root) {
+    char *buffer = get_message_buffer();
+    if (!buffer) {
         return ESP_ERR_NO_MEM;
     }
     
+    int pos = 0;
+    pos += snprintf(buffer + pos, 256 - pos, "{");
+    
+    bool first = true;
     for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
         relay_config_t *relay = &ctx->relays[i];
         
@@ -849,43 +990,28 @@ esp_err_t relay_manager_get_all_states_json(char *json_buffer, size_t buffer_siz
             continue;
         }
         
-        cJSON *relay_obj = cJSON_CreateObject();
-        if (!relay_obj) {
-            cJSON_Delete(root);
-            return ESP_ERR_NO_MEM;
+        if (!first) {
+            pos += snprintf(buffer + pos, 256 - pos, ",");
         }
+        first = false;
         
-        cJSON_AddStringToObject(relay_obj, "name", relay->name);
-        cJSON_AddStringToObject(relay_obj, "status", relay_state_to_string(relay->current_state));
-        cJSON_AddNumberToObject(relay_obj, "pin", relay->gpio_pin);
-        cJSON_AddStringToObject(relay_obj, "contact_type", contact_type_to_string(relay->contact_type));
-        
-        cJSON *timestamp_obj = cJSON_CreateObject();
-        if (timestamp_obj) {
-            cJSON_AddNumberToObject(timestamp_obj, "value", relay->last_change_time / 1000);
-            cJSON_AddStringToObject(timestamp_obj, "type", "realtime");
-            cJSON_AddItemToObject(relay_obj, "timestamp", timestamp_obj);
-        }
-        
-        cJSON_AddItemToObject(root, relay->relay_id, relay_obj);
+        pos += snprintf(buffer + pos, 256 - pos,
+                       "\"%s\":{\"name\":\"%s\",\"status\":\"%s\",\"pin\":%d,\"contact_type\":\"%s\",\"timestamp\":{\"value\":%lld,\"type\":\"realtime\"}}",
+                       relay->relay_id, relay->name, relay_state_to_string(relay->current_state),
+                       relay->gpio_pin, contact_type_to_string(relay->contact_type),
+                       relay->last_change_time / 1000);
     }
     
-    char *json_string = cJSON_Print(root);
-    cJSON_Delete(root);
+    pos += snprintf(buffer + pos, 256 - pos, "}");
     
-    if (!json_string) {
-        return ESP_ERR_NO_MEM;
-    }
-    
-    if (strlen(json_string) >= buffer_size) {
-        free(json_string);
+    if (pos < buffer_size) {
+        strcpy(json_buffer, buffer);
+        release_message_buffer(buffer);
+        return ESP_OK;
+    } else {
+        release_message_buffer(buffer);
         return ESP_ERR_INVALID_SIZE;
     }
-    
-    strcpy(json_buffer, json_string);
-    free(json_string);
-    
-    return ESP_OK;
 }
 
 esp_err_t relay_manager_set_name(const char *relay_id, const char *name) {
@@ -907,21 +1033,46 @@ esp_err_t relay_manager_set_name(const char *relay_id, const char *name) {
         strncpy(ctx->relays[index].name, name, sizeof(ctx->relays[index].name) - 1);
         ctx->relays[index].name[sizeof(ctx->relays[index].name) - 1] = '\0';
         
-        esp_err_t ret = save_relay_config();
+        schedule_config_save();
         xSemaphoreGive(ctx->config_mutex);
         
-        if (ret == ESP_OK) {
-            ESP_LOGI(TAG, "Relay %s name changed to: %s", relay_id, name);
-        }
-        
-        return ret;
+        ESP_LOGI(TAG, "Relay %s name changed to: %s", relay_id, name);
+        return ESP_OK;
     }
     
     return ESP_FAIL;
 }
 
-esp_err_t relay_manager_process_mqtt_command(const char *command_json) {
-    if (!command_json) {
+static char* parse_simple_value(const char *data, const char *key) {
+    static char value_buffer[64];
+    char search_key[32];
+    
+    snprintf(search_key, sizeof(search_key), "%s=", key);
+    
+    char *start = strstr(data, search_key);
+    if (!start) {
+        return NULL;
+    }
+    
+    start += strlen(search_key);
+    char *end = strchr(start, '&');
+    if (!end) {
+        end = start + strlen(start);
+    }
+    
+    size_t len = end - start;
+    if (len >= sizeof(value_buffer)) {
+        len = sizeof(value_buffer) - 1;
+    }
+    
+    memcpy(value_buffer, start, len);
+    value_buffer[len] = '\0';
+    
+    return value_buffer;
+}
+
+esp_err_t relay_manager_process_mqtt_command(const char *command_data) {
+    if (!command_data) {
         return ESP_ERR_INVALID_ARG;
     }
     
@@ -932,60 +1083,52 @@ esp_err_t relay_manager_process_mqtt_command(const char *command_json) {
     
     ctx->mqtt_commands_processed++;
     
-    cJSON *json = cJSON_Parse(command_json);
-    if (!json) {
-        ESP_LOGE(TAG, "Invalid JSON command");
+    char *command = parse_simple_value(command_data, "command");
+    if (!command) {
+        ESP_LOGE(TAG, "No command found in data");
         return ESP_ERR_INVALID_ARG;
     }
     
-    cJSON *command = cJSON_GetObjectItem(json, "command");
-    if (!command || !cJSON_IsString(command)) {
-        cJSON_Delete(json);
-        return ESP_ERR_INVALID_ARG;
-    }
+    ESP_LOGI(TAG, "Processing MQTT command: %s", command);
     
     esp_err_t ret = ESP_FAIL;
-    const char *cmd_str = command->valuestring;
     
-    ESP_LOGI(TAG, "Processing MQTT command: %s", cmd_str);
-    
-    if (strcmp(cmd_str, "set_name") == 0) {
-        cJSON *relay_id = cJSON_GetObjectItem(json, "relay_id");
-        cJSON *name = cJSON_GetObjectItem(json, "name");
+    if (strcmp(command, "set_name") == 0) {
+        char *relay_id = parse_simple_value(command_data, "relay_id");
+        char *name = parse_simple_value(command_data, "name");
         
-        if (relay_id && cJSON_IsString(relay_id) && name && cJSON_IsString(name)) {
-            ret = relay_manager_set_name(relay_id->valuestring, name->valuestring);
+        if (relay_id && name) {
+            ret = relay_manager_set_name(relay_id, name);
         }
     }
-    else if (strcmp(cmd_str, "set_active") == 0) {
-        cJSON *relay_id = cJSON_GetObjectItem(json, "relay_id");
-        cJSON *active = cJSON_GetObjectItem(json, "active");
+    else if (strcmp(command, "set_active") == 0) {
+        char *relay_id = parse_simple_value(command_data, "relay_id");
+        char *active_str = parse_simple_value(command_data, "active");
         
-        if (relay_id && cJSON_IsString(relay_id) && active && cJSON_IsBool(active)) {
-            ret = relay_manager_set_active(relay_id->valuestring, cJSON_IsTrue(active));
+        if (relay_id && active_str) {
+            bool active = (strcmp(active_str, "true") == 0 || strcmp(active_str, "1") == 0);
+            ret = relay_manager_set_active(relay_id, active);
         }
     }
-    else if (strcmp(cmd_str, "set_contact_type") == 0) {
-        cJSON *relay_id = cJSON_GetObjectItem(json, "relay_id");
-        cJSON *contact_type = cJSON_GetObjectItem(json, "contact_type");
+    else if (strcmp(command, "set_contact_type") == 0) {
+        char *relay_id = parse_simple_value(command_data, "relay_id");
+        char *contact_type_str = parse_simple_value(command_data, "contact_type");
         
-        if (relay_id && cJSON_IsString(relay_id) && contact_type && cJSON_IsString(contact_type)) {
-            relay_contact_type_t type = string_to_contact_type(contact_type->valuestring);
-            ret = relay_manager_set_contact_type(relay_id->valuestring, type);
+        if (relay_id && contact_type_str) {
+            relay_contact_type_t type = string_to_contact_type(contact_type_str);
+            ret = relay_manager_set_contact_type(relay_id, type);
         }
     }
-    else if (strcmp(cmd_str, "get_config") == 0) {
+    else if (strcmp(command, "get_config") == 0) {
         ret = ESP_OK;
     }
     else {
-        ESP_LOGW(TAG, "Unknown command: %s", cmd_str);
+        ESP_LOGW(TAG, "Unknown command: %s", command);
         ret = ESP_ERR_NOT_SUPPORTED;
     }
     
-    cJSON_Delete(json);
-    
     if (ctx->mqtt_callback) {
-        ctx->mqtt_callback("relay_config", command_json, ctx->mqtt_callback_user_data);
+        ctx->mqtt_callback("relay_config", command_data, ctx->mqtt_callback_user_data);
     }
     
     return ret;
@@ -1122,44 +1265,37 @@ esp_err_t relay_manager_get_config_json(char *json_buffer, size_t buffer_size) {
         return ESP_ERR_INVALID_STATE;
     }
     
-    cJSON *root = cJSON_CreateObject();
-    if (!root) {
+    char *buffer = get_message_buffer();
+    if (!buffer) {
         return ESP_ERR_NO_MEM;
     }
+    
+    int pos = 0;
+    pos += snprintf(buffer + pos, 256 - pos, "{");
     
     for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
         relay_config_t *relay = &ctx->relays[i];
         
-        cJSON *relay_obj = cJSON_CreateObject();
-        if (!relay_obj) {
-            cJSON_Delete(root);
-            return ESP_ERR_NO_MEM;
+        if (i > 0) {
+            pos += snprintf(buffer + pos, 256 - pos, ",");
         }
         
-        cJSON_AddNumberToObject(relay_obj, "pin", relay->gpio_pin);
-        cJSON_AddBoolToObject(relay_obj, "active", relay->is_active);
-        cJSON_AddStringToObject(relay_obj, "name", relay->name);
-        cJSON_AddStringToObject(relay_obj, "contact_type", contact_type_to_string(relay->contact_type));
-        
-        cJSON_AddItemToObject(root, relay->relay_id, relay_obj);
+        pos += snprintf(buffer + pos, 256 - pos,
+                       "\"%s\":{\"pin\":%d,\"active\":%s,\"name\":\"%s\",\"contact_type\":\"%s\"}",
+                       relay->relay_id, relay->gpio_pin, relay->is_active ? "true" : "false",
+                       relay->name, contact_type_to_string(relay->contact_type));
     }
     
-    char *json_string = cJSON_Print(root);
-    cJSON_Delete(root);
+    pos += snprintf(buffer + pos, 256 - pos, "}");
     
-    if (!json_string) {
-        return ESP_ERR_NO_MEM;
-    }
-    
-    if (strlen(json_string) >= buffer_size) {
-        free(json_string);
+    if (pos < buffer_size) {
+        strcpy(json_buffer, buffer);
+        release_message_buffer(buffer);
+        return ESP_OK;
+    } else {
+        release_message_buffer(buffer);
         return ESP_ERR_INVALID_SIZE;
     }
-    
-    strcpy(json_buffer, json_string);
-    free(json_string);
-    
-    return ESP_OK;
 }
 
 esp_err_t relay_manager_get_diagnostics_json(char *json_buffer, size_t buffer_size) {
@@ -1172,38 +1308,17 @@ esp_err_t relay_manager_get_diagnostics_json(char *json_buffer, size_t buffer_si
         return ESP_ERR_INVALID_STATE;
     }
     
-    cJSON *root = cJSON_CreateObject();
-    if (!root) {
-        return ESP_ERR_NO_MEM;
-    }
-    
-    cJSON_AddNumberToObject(root, "total_events", ctx->total_events_processed);
-    cJSON_AddNumberToObject(root, "filtered_events", ctx->debounce_filtered_events);
-    cJSON_AddNumberToObject(root, "mqtt_commands", ctx->mqtt_commands_processed);
-    cJSON_AddNumberToObject(root, "active_relays", 0);
-    
     int active_count = 0;
     for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
         if (ctx->relays[i].is_active) {
             active_count++;
         }
     }
-    cJSON_SetNumberValue(cJSON_GetObjectItem(root, "active_relays"), active_count);
     
-    char *json_string = cJSON_Print(root);
-    cJSON_Delete(root);
-    
-    if (!json_string) {
-        return ESP_ERR_NO_MEM;
-    }
-    
-    if (strlen(json_string) >= buffer_size) {
-        free(json_string);
-        return ESP_ERR_INVALID_SIZE;
-    }
-    
-    strcpy(json_buffer, json_string);
-    free(json_string);
+    snprintf(json_buffer, buffer_size,
+             "{\"total_events\":%lu,\"filtered_events\":%lu,\"mqtt_commands\":%lu,\"active_relays\":%d}",
+             ctx->total_events_processed, ctx->debounce_filtered_events,
+             ctx->mqtt_commands_processed, active_count);
     
     return ESP_OK;
 }
@@ -1219,6 +1334,12 @@ esp_err_t relay_manager_deinit(void) {
     ESP_LOGI(TAG, "Deinitializing Relay Manager");
     ctx->state = RELAY_MGR_STATE_DEINITIALIZING;
     ctx->initialized = false;
+    
+    if (ctx->config_save_pending && ctx->config_save_timer) {
+        xTimerStop(ctx->config_save_timer, portMAX_DELAY);
+        save_relay_config_immediate();
+        ctx->config_save_pending = false;
+    }
     
     for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
         if (GPIO_IS_VALID_GPIO(ctx->relays[i].gpio_pin)) {
@@ -1249,6 +1370,16 @@ esp_err_t relay_manager_deinit(void) {
     if (ctx->gpio_event_queue) {
         vQueueDelete(ctx->gpio_event_queue);
         ctx->gpio_event_queue = NULL;
+    }
+    
+    if (ctx->config_save_timer) {
+        xTimerDelete(ctx->config_save_timer, portMAX_DELAY);
+        ctx->config_save_timer = NULL;
+    }
+    
+    if (ctx->pool_mutex) {
+        vSemaphoreDelete(ctx->pool_mutex);
+        ctx->pool_mutex = NULL;
     }
     
     if (ctx->config_mutex) {

@@ -1,6 +1,5 @@
 package com.pqsolutions.hdd_monitor.presentation.screens
 
-import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -28,8 +27,6 @@ import com.pqsolutions.hdd_monitor.presentation.state.PanelConfigurationState
 import com.pqsolutions.hdd_monitor.presentation.util.performHapticFeedback
 import com.pqsolutions.hdd_monitor.presentation.viewmodel.PanelConfigurationViewModel
 
-private const val TAG = "PanelConfigurationScreen"
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PanelConfigurationScreen(
@@ -55,17 +52,8 @@ fun PanelConfigurationScreen(
     val title = if (isEditMode) "Editar Panel" else "Crear Panel"
 
     DisposableEffect(viewModel) {
-        Log.d(TAG, "PanelConfigurationScreen iniciado - Modo: ${if (isEditMode) "Editar" else "Crear"}")
         viewModel.initializeScreen(panelId)
-
-        onDispose {
-            Log.d(TAG, "PanelConfigurationScreen disposed")
-            try {
-                // No llamar métodos del ViewModel aquí - puede estar disposed
-            } catch (e: Exception) {
-                Log.e(TAG, "Error during disposal", e)
-            }
-        }
+        onDispose { }
     }
 
     LaunchedEffect(uiState.currentPanel) {
@@ -78,7 +66,6 @@ fun PanelConfigurationScreen(
 
     LaunchedEffect(uiState.saveSuccess) {
         if (uiState.saveSuccess) {
-            Log.d(TAG, "Panel guardado exitosamente")
             onSaveSuccess()
         }
     }
@@ -101,25 +88,17 @@ fun PanelConfigurationScreen(
         },
         bottomBar = {
             PanelConfigurationBottomBar(
-                canSave = try {
-                    viewModel.canSave(panelName, panelLocation, selectedESP32, selectedClient)
-                } catch (e: Exception) {
-                    false
-                },
+                canSave = viewModel.canSave(panelName, panelLocation, selectedESP32, selectedClient),
                 isSaving = uiState.isSaving,
                 onSave = {
                     performHapticFeedback(context)
-                    try {
-                        viewModel.savePanel(
-                            panelId = panelId,
-                            name = panelName.trim(),
-                            location = panelLocation.trim(),
-                            esp32Device = selectedESP32,
-                            selectedClient = selectedClient
-                        )
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error saving panel", e)
-                    }
+                    viewModel.savePanel(
+                        panelId = panelId,
+                        name = panelName.trim(),
+                        location = panelLocation.trim(),
+                        esp32Device = selectedESP32,
+                        selectedClient = selectedClient
+                    )
                 },
                 onCancel = {
                     performHapticFeedback(context)
@@ -142,20 +121,8 @@ fun PanelConfigurationScreen(
                 uiState.error != null -> {
                     ErrorSection(
                         error = uiState.error!!,
-                        onRetry = {
-                            try {
-                                viewModel.initializeScreen(panelId)
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Error during retry", e)
-                            }
-                        },
-                        onDismiss = {
-                            try {
-                                viewModel.clearError()
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Error clearing error", e)
-                            }
-                        }
+                        onRetry = { viewModel.initializeScreen(panelId) },
+                        onDismiss = { viewModel.clearError() }
                     )
                 }
                 else -> {
@@ -365,7 +332,7 @@ private fun PanelConfigurationForm(
             onValueChange = onPanelNameChange,
             label = "Nombre del Panel",
             isError = panelName.isBlank(),
-            supportingText = if (panelName.isBlank()) "El nombre es requerido" else null
+            supportingText = if (panelName.isBlank()) "Ingrese un carácter como mínimo" else null
         )
 
         CustomTextField(
@@ -373,7 +340,7 @@ private fun PanelConfigurationForm(
             onValueChange = onPanelLocationChange,
             label = "Ubicación",
             isError = panelLocation.isBlank(),
-            supportingText = if (panelLocation.isBlank()) "La ubicación es requerida" else null
+            supportingText = if (panelLocation.isBlank()) "Ingrese un carácter como mínimo" else null
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -795,15 +762,4 @@ private fun PanelConfigurationBottomBar(
             }
         }
     }
-}
-
-private fun canSavePanel(
-    panelName: String,
-    panelLocation: String,
-    selectedESP32: ESP32Device?,
-    isEditMode: Boolean
-): Boolean {
-    return panelName.isNotBlank() &&
-            panelLocation.isNotBlank() &&
-            (selectedESP32 != null || isEditMode)
 }

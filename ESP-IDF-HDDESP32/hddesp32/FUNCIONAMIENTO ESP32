@@ -1,0 +1,603 @@
+# **FUNCIONAMIENTO COMPLETO DEL ESP32 PARA DETECCIÓN DE PANELES CONTRA INCENDIOS**
+
+## **FASE 1: INICIALIZACIÓN DEL SISTEMA**
+
+### Arranque y Configuración Básica
+1. **Inicio del sistema**: El ESP32 arranca y ejecuta la función principal (`app_main`)
+2. **Creación de semáforos globales**: 
+   - Mutex para callbacks (`g_callback_mutex`)
+   - Mutex para estado global (`g_global_state_mutex`)
+3. **Inicialización del Watchdog Manager**:
+   - Configura timeouts: 60s modo CONFIG, 45s modo RUNNING, 20s modo CRITICAL
+   - Establece umbrales de memoria: 40KB/35KB/25KB según modo
+   - Activa Task Watchdog Timer (TWDT) del ESP-IDF
+   - Configura callbacks de eventos de watchdog
+4. **Registro de tarea principal**: La tarea `app_main` se registra en el watchdog
+5. **Inicialización de gestores base** en orden:
+   - **Config Manager**: Acceso a memoria no volátil (NVS)
+   - **ESP32 ID Manager**: Gestión de identidad única
+   - **WiFi Manager**: Control de conectividad inalámbrica
+   - **Time Manager**: Sincronización de tiempo
+   - **MQTT Manager**: Comunicación con broker
+
+### Generación de Identidad del Dispositivo
+6. **Obtención de MAC**: Lee dirección MAC desde EFUSE del ESP32
+7. **Generación de ID único**: 
+   - Formato: [últimos_4_dígitos_MAC] + "AC" + [primeros_2_dígitos_MAC]
+   - Ejemplo: Si MAC = 123456789ABC → ID = "9ABCAC12"
+8. **Verificación de ID existente**: Busca ID previamente guardado en NVS
+9. **Almacenamiento persistente**: Guarda ID en memoria no volátil para uso futuro
+10. **Logging de eventos**: Registra generación/carga de ID en histórico
+
+## **FASE 2: CONFIGURACIÓN DE CONECTIVIDAD WiFi**
+
+### Verificación de Credenciales Existentes
+11. **Búsqueda en NVS**: Busca claves `wifi_ssid` y `wifi_password` guardadas
+12. **Validación de credenciales**: Verifica que ambas existan y no estén vacías
+
+### Escenario A: Credenciales Existentes
+13. **Configuración automática**: Carga SSID y contraseña desde NVS
+14. **Intento de conexión**: Ejecuta `wifi_manager_connect_saved()`
+15. **Configuración de red**: Modo STA, autenticación WPA2-PSK
+16. **Espera de conexión**: Timeout de 45 segundos para obtener IP
+17. **Si conecta exitosamente**: Pasa al paso 29 (sincronización de tiempo)
+
+### Escenario B: Sin Credenciales - Portal Cautivo
+18. **Generación de SSID único**: "FirePanel_[últimos_6_dígitos_ID]"
+19. **Activación modo AP+STA**:
+    - IP del AP: 192.168.4.1
+    - Contraseña: "firepanel"
+    - Máximo 4 conexiones simultáneas
+20. **Inicio del servidor DNS cautivo**:
+    - Escucha en puerto 53
+    - Redirige TODAS las consultas DNS a 192.168.4.1
+21. **Inicio del servidor HTTP**:
+    - Puerto 80
+    - Sirve interfaz web de configuración
+    - Stack optimizado de 5120 bytes
+22. **Interfaz de configuración disponible**:
+    - Página principal con status de conexión
+    - Botón de escaneo de redes WiFi
+    - Formulario de configuración
+    - API endpoints: `/api/status`, `/api/scan`, `/api/connect`
+
+### Proceso de Configuración WiFi Manual
+23. **Usuario accede a interfaz**: Conecta a AP y navega a cualquier URL
+24. **Escaneo de redes**:
+    - Cambia temporalmente a modo AP+STA para escanear
+    - Busca redes disponibles (máximo 20 resultados)
+    - Ordena por intensidad de señal (RSSI)
+    - Revierte a modo AP después del escaneo
+25. **Selección de red**: Usuario selecciona SSID de la lista
+26. **Ingreso de credenciales**: Usuario introduce contraseña
+27. **Intento de conexión**: Sistema intenta conectar con nuevas credenciales
+28. **Guardado exitoso**: Si conecta, guarda credenciales en NVS y cierra portal
+
+## **FASE 3: SINCRONIZACIÓN DE TIEMPO**
+
+### Configuración de Zona Horaria
+29. **Establecimiento de timezone**: Configura "PET5" (Lima, Perú UTC-5)
+30. **Configuración de variables de entorno**: setenv("TZ", "PET5", 1) y tzset()
+
+### Sincronización NTP
+31. **Configuración de servidores NTP**:
+    - Primario: pool.ntp.org
+    - Secundario: time.nist.gov  
+    - Respaldo: time.google.com
+32. **Inicialización SNTP**: Modo polling cada 15 minutos
+33. **Callback de sincronización**: Configura función para notificar sincronización exitosa
+34. **Primer intento de sincronización**: Timeout de 30 segundos
+35. **Validación de tiempo**: Confirma que timestamp es razonable (> 2020)
+36. **Marca de tiempo sincronizada**: Establece flag de tiempo sincronizado
+
+## **FASE 4: CONEXIÓN MQTT**
+
+### Configuración de Conexión
+37. **Configuración de broker**: node02.myqtthub.com puerto 8883 (SSL)
+38. **Resolución DNS**: Verifica que el broker sea alcanzable
+39. **Configuración de credenciales MQTT**:
+    - Client ID: [ESP32_ID]
+    - Username: [ESP32_ID]
+    - Password: [ESP32_ID]
+40. **Configuración SSL/TLS**:
+    - Certificado bundle del ESP-IDF
+    - Skip common name check (modo permisivo)
+    - Timeouts extendidos: 60 segundos
+41. **Configuración Last Will Testament**:
+    - Tópico: `system/status/[ESP32_ID]`
+    - Mensaje: JSON con status "OFFLINE" y timestamp
+42. **Buffers y configuración de tarea**:
+    - Buffer entrada/salida: 2048 bytes cada uno
+    - Stack de tarea: 10240 bytes
+    - Cola de mensajes pendientes: 20 mensajes máximo
+
+### Establecimiento de Conexión
+43. **Inicio de cliente MQTT**: esp_mqtt_client_start()
+44. **Negociación SSL**: Handshake TLS con el broker
+45. **Autenticación**: Envío de credenciales de conexión
+46. **Confirmación de conexión**: Recepción de CONNACK del broker
+
+### Suscripciones Iniciales
+47. **Suscripción a configuración global**: `esp32/config/[ESP32_ID]` (QoS 2)
+48. **Suscripción a notificaciones**: `esp32/notify/[ESP32_ID]/deleted` (QoS 2)
+49. **Suscripciones genéricas de relés**: 
+    - `clients/+/panels/+/relay_config` (QoS 2)
+    - `clients/+/panels/+/relays` (QoS 2)
+
+### Primer Reporte de Estado
+50. **Construcción de mensaje de red**:
+    - ESP32 ID, MAC, IP asignada
+    - Status: "AWAITING_CONFIG"
+    - Timestamp de Lima (si sincronizado) o monotónico
+    - Información de memoria libre
+51. **Publicación**: Envío a tópico `esp32/network_info` (QoS 1)
+
+## **FASE 5: ESPERA Y RECEPCIÓN DE CONFIGURACIÓN DEL PANEL**
+
+### Estado de Espera
+52. **Monitor de mensajes**: Sistema queda escuchando mensajes MQTT
+53. **Heartbeat periódico**: Cada 5 minutos envía estado a `esp32/heartbeat/[ESP32_ID]`
+54. **Verificación de conectividad**: Monitor continuo de WiFi y MQTT
+
+### Recepción de Configuración del Panel
+55. **Mensaje en tópico de configuración**: `esp32/config/[ESP32_ID]`
+56. **Parsing del JSON de configuración**:
+    - Extrae `client_id` (identificador del cliente)
+    - Extrae `panel_id` (identificador específico del panel)
+    - Extrae campos opcionales: `panel_name`, `location`
+57. **Validación de parámetros**: Verifica que client_id y panel_id no estén vacíos
+58. **Almacenamiento en NVS**:
+    - Guarda `client_id` en memoria no volátil
+    - Guarda `panel_id` en memoria no volátil
+    - Guarda campos opcionales si existen
+59. **Configuración de contexto MQTT**: Actualiza configuración interna del MQTT Manager
+
+### Confirmación de Configuración
+60. **Construcción de respuesta**: JSON con resultado de configuración
+61. **Envío de confirmación**: Publica a `esp32/config/[ESP32_ID]/response`
+62. **Creación de tarea de configuración**: Lanza tarea asíncrona para completar setup
+
+### Suscripciones Específicas del Panel
+63. **Tópico de estado**: `clients/[CLIENT_ID]/panels/[PANEL_ID]/status` (QoS 1)
+64. **Tópico de configuración de relés**: `clients/[CLIENT_ID]/panels/[PANEL_ID]/relay_config` (QoS 1)
+65. **Tópico de comandos**: `clients/[CLIENT_ID]/panels/[PANEL_ID]/command` (QoS 1)
+
+## **FASE 6: CONFIGURACIÓN ESPECÍFICA DE RELÉS**
+
+### Estado Inicial de Relés
+66. **Configuración por defecto**:
+    - 6 relés mapeados a GPIOs: 32, 33, 25, 26, 27, 14
+    - Todos inician como **DESACTIVADOS** (no monitoreados)
+    - Nombres genéricos: "Relay 1", "Relay 2", "Relay 3", "Relay 4", "Relay 5", "Relay 6"
+    - Tipo por defecto: NC (Normalmente Cerrado)
+    - IDs: "relay_1", "relay_2", "relay_3", "relay_4", "relay_5", "relay_6"
+
+### Carga de Configuración Previa
+67. **Búsqueda en NVS**: Intenta cargar configuración guardada:
+    - Estados de activación (blob de 6 booleans)
+    - Nombres personalizados (strings individuales)
+    - Tipos de contacto (blob de 6 enum values)
+68. **Si encuentra configuración**: Aplica configuración guardada
+69. **Si es primera vez**: Mantiene valores por defecto
+
+### Recepción de Configuración Individual de Relés
+70. **Mensajes en tópico**: `clients/[CLIENT_ID]/panels/[PANEL_ID]/relay_config`
+71. **Para cada relé que se quiere configurar**, el sistema central envía:
+
+**Ejemplo - Configuración Relé 1:**
+```json
+{
+  "command": "update_config",
+  "relay_id": "relay_1",
+  "is_active": true,
+  "contact_type": "NC",
+  "custom_name": "Detector Humo Oficinas"
+}
+```
+
+72. **Procesamiento de configuración individual**:
+    - Extrae `relay_id` para identificar relé específico
+    - Extrae `is_active` (true/false) para habilitar/deshabilitar monitoreo
+    - Extrae `contact_type` ("NC" o "NO")
+    - Extrae `custom_name` para nombre descriptivo
+
+73. **Aplicación de configuración por relé**:
+    - Actualiza estado interno del relé específico
+    - Cambia tipo de contacto (afecta lógica de interpretación)
+    - Asigna nombre personalizado
+    - **ACTIVA** el monitoreo solo si `is_active = true`
+
+74. **Re-lectura de estado tras configuración**:
+    - Deshabilita temporalmente interrupciones del GPIO
+    - Toma múltiples lecturas estables del pin físico
+    - Aplica nueva lógica según tipo de contacto:
+      - NC: GPIO=0 → Estado OK, GPIO=1 → Estado DISC
+      - NO: GPIO=1 → Estado OK, GPIO=0 → Estado DISC
+    - Reactiva interrupciones del GPIO
+
+75. **Guardado persistente**: Almacena configuración completa en NVS
+76. **Confirmación**: Log y respuesta de configuración aplicada
+
+### Resultado de Configuración Específica
+77. **Mapa final de relés activos**: Solo los configurados con `is_active = true`
+78. **Personalización completa**: Cada relé activo tiene nombre y tipo específico
+79. **Preparación para monitoreo**: Solo relés activos entran en sistema de supervisión
+
+## **FASE 7: INICIALIZACIÓN DEL SISTEMA DE RELÉS**
+
+### Configuración de Hardware
+80. **Instalación del servicio ISR**: `gpio_install_isr_service()` para interrupciones
+81. **Configuración individual de GPIOs** (solo para relés activos):
+    - Modo entrada con pull-up habilitado
+    - Pull-down deshabilitado
+    - Interrupciones inicialmente deshabilitadas
+82. **Estabilización inicial**: Espera 150ms para estabilización de pull-ups
+
+### Determinación de Estados Iniciales
+83. **Lectura estable por relé activo**:
+    - 5 lecturas rápidas cada 50ms
+    - Si todas coinciden: acepta resultado
+    - Si hay variación: toma hasta 25 lecturas adicionales
+    - Usa mayoría para determinar estado estable
+84. **Aplicación de lógica de contacto**:
+    - Para NC: GPIO=0 → OK, GPIO=1 → DISC
+    - Para NO: GPIO=1 → OK, GPIO=0 → DISC
+85. **Almacenamiento de estado inicial**: Guarda estado de cada relé activo
+86. **Timestamp inicial**: Marca tiempo de primera lectura
+
+### Configuración de Interrupciones
+87. **Creación de cola de eventos**: Cola de 100 eventos GPIO
+88. **Creación de pools de memoria**: 3 buffers de 256 bytes para mensajes JSON
+89. **Creación de tarea de eventos**: Tarea dedicada con stack de 8192 bytes
+90. **Configuración de ISR por GPIO**:
+    - Tipo de interrupción: ANYEDGE (flanco ascendente y descendente)
+    - Handler: función que añade evento a cola
+    - Habilitación de interrupciones por pin
+
+### Primer Reporte de Estados
+91. **Espera de estabilización**: 500ms para asegurar configuración completa
+92. **Construcción de reporte inicial**:
+    - Solo incluye relés con `is_active = true`
+    - Estado actual de cada relé activo
+    - Nombres personalizados y tipos de contacto
+    - Timestamp real (si tiempo sincronizado)
+93. **Publicación de estados iniciales**: Envío a `clients/[CLIENT_ID]/panels/[PANEL_ID]/relays`
+
+**Ejemplo de reporte inicial:**
+```json
+{
+  "relay_1": {
+    "status": "OK",
+    "timestamp": 1703123456789,
+    "contact_type": "NC",
+    "old_status": "DISC"
+  },
+  "relay_3": {
+    "status": "DISC",
+    "timestamp": 1703123456789,
+    "contact_type": "NO", 
+    "old_status": "DISC"
+  }
+}
+```
+
+## **FASE 8: OPERACIÓN NORMAL - MONITOREO CONTINUO**
+
+### Inicio de Supervisión del Sistema
+94. **Creación de tarea de monitoreo**: Tarea principal de supervisión con stack de 12288 bytes
+95. **Registro en watchdog**: Tarea de monitoreo se registra en sistema de supervisión
+96. **Inicialización de contadores**: Contadores de eventos, errores y ciclos
+97. **Modo operacional**: Watchdog cambia a modo RUNNING (timeouts más estrictos)
+
+### Ciclo Principal de Monitoreo (cada 5 segundos)
+98. **Feed de watchdog principal**: Tarea principal alimenta watchdog
+99. **Verificación de estados de conectividad**:
+    - Verifica estado de WiFi
+    - Verifica estado de MQTT
+    - Actualiza variables globales de estado
+100. **Monitor de memoria**:
+     - Verifica heap libre y mínimo
+     - Detecta reducciones significativas (>5KB)
+     - Ejecuta limpieza de emergencia si es necesario
+101. **Verificación manual de relés** (cada 5 minutos):
+     - Re-lee todos los GPIOs de relés activos
+     - Compara con estados almacenados
+     - Reporta discrepancias como cambios de estado
+
+### Procesamiento de Eventos GPIO
+102. **Tarea de eventos de relés** (continua):
+     - Espera eventos en cola con timeout de 100ms
+     - Procesa interrupciones GPIO de forma síncrona
+     - Aplica debounce de 50ms para filtrar ruido
+     - Ejecuta verificación automática cada 2 segundos
+
+### Detección de Cambios de Estado
+103. **Al recibir interrupción GPIO**:
+     - ISR añade evento (número de GPIO) a cola
+     - No procesa en contexto de interrupción
+104. **Procesamiento en tarea de eventos**:
+     - Identifica relé por número de GPIO
+     - Verifica que relé esté activo
+     - Aplica debounce temporal (50ms desde último cambio)
+105. **Validación de cambio**:
+     - Lectura rápida inicial para filtro básico
+     - Si difiere del estado actual: ejecuta lectura estable
+     - Lectura estable (5-25 muestras según estabilidad)
+     - Aplica lógica del tipo de contacto del relé
+
+### Reporte de Cambios de Estado
+106. **Al confirmar cambio válido**:
+     - Actualiza estado interno del relé
+     - Obtiene timestamp preciso (real si sincronizado, monotónico si no)
+     - Construye mensaje JSON con información completa
+107. **Información incluida en reporte**:
+     - ID del relé (relay_1, relay_2, etc.)
+     - Estado anterior y nuevo (OK/DISC)
+     - Timestamp en milisegundos
+     - Tipo de contacto (NC/NO)
+     - Nombre personalizado del relé
+108. **Publicación inmediata**: Envío a `clients/[CLIENT_ID]/panels/[PANEL_ID]/relays` (QoS 1)
+
+**Ejemplo de reporte de cambio:**
+```json
+{
+  "relay": "relay_1",
+  "status": "DISC",
+  "timestamp": 1703123456789,
+  "contact_type": "NC",
+  "old_status": "OK"
+}
+```
+
+## **FASE 9: GESTIÓN DE CONFIGURACIÓN DINÁMICA**
+
+### Recepción de Comandos de Configuración
+109. **Monitor de tópico de configuración**: `clients/[CLIENT_ID]/panels/[PANEL_ID]/relay_config`
+110. **Tipos de comandos soportados**:
+     - `update_config`: Configuración completa de relé
+     - `set_active`: Activar/desactivar monitoreo
+     - `set_contact_type`: Cambiar entre NC/NO
+     - `set_name`: Cambiar nombre personalizado
+
+### Procesamiento de Comandos
+111. **Parsing de comandos**:
+     - Extrae tipo de comando
+     - Extrae parámetros específicos del comando
+     - Valida sintaxis y parámetros requeridos
+112. **Ejecución de cambios**:
+     - Modifica configuración en memoria
+     - Re-lee estado de GPIO si es necesario
+     - Aplica nueva lógica de contacto si cambió tipo
+113. **Persistencia**: Guarda cambios en NVS para sobrevivir reinicios
+114. **Confirmación**: Responde confirmando aplicación de cambio
+
+### Efectos de Cambios Dinámicos
+115. **Activación de relé**: Si cambia `is_active` de false a true:
+     - Deshabilita interrupciones del GPIO
+     - Re-lee estado actual de forma estable
+     - Configura y habilita interrupciones
+     - Reporta estado inicial del relé recién activado
+116. **Desactivación de relé**: Si cambia `is_active` de true a false:
+     - Deshabilita interrupciones del GPIO
+     - Deja de procesar eventos del pin
+     - No reporta más cambios de ese relé
+117. **Cambio de tipo de contacto**: Si cambia NC ↔ NO:
+     - Invierte lógica de interpretación
+     - Re-evalúa estado actual con nueva lógica
+     - Reporta cambio si el estado lógico cambió
+
+## **FASE 10: GESTIÓN DE CONECTIVIDAD Y RECUPERACIÓN**
+
+### Monitoreo de Conectividad WiFi
+118. **Verificación continua** (cada 5 segundos):
+     - Verifica estado de conexión WiFi
+     - Detecta desconexiones de red
+119. **Detección de problemas**: Al perder conectividad WiFi:
+     - Marca estado global como desconectado
+     - Inicia contador de intentos de recuperación
+     - Cambia watchdog a modo CONFIG (timeouts relajados)
+
+### Proceso de Recuperación WiFi
+120. **Ciclo de recuperación automática**:
+     - Intento de reconexión cada 8 segundos
+     - Usa credenciales guardadas en NVS
+     - Máximo 5 intentos con configuración actual
+121. **Escalación a modo de emergencia**:
+     - Después de 5 intentos fallidos: activa modo AP+STA
+     - Genera nuevo SSID de recuperación
+     - Mantiene portal cautivo por 60 segundos
+     - Permite reconfiguración de red si es necesario
+122. **Recuperación automática**:
+     - Retorna automáticamente a modo STA después del timeout
+     - Reinicia ciclo de reconexión con credenciales existentes
+     - Ciclo infinito de recuperación (no se rinde nunca)
+
+### Monitoreo de Conectividad MQTT
+123. **Verificación de estado MQTT** (cada 5 segundos):
+     - Verifica que cliente MQTT esté conectado
+     - Detecta desconexiones del broker
+124. **Recuperación MQTT**:
+     - Reconexión automática cada 30 segundos
+     - Solo si WiFi está conectado
+     - Recrea cliente MQTT si es necesario
+125. **Cola de mensajes**: Durante desconexión MQTT:
+     - Almacena hasta 20 mensajes pendientes
+     - Al reconectar: envía mensajes en cola con throttling
+     - Descarta mensajes más antiguos si cola se llena
+
+### Gestión de Errores de Hardware
+126. **Detección de fallos GPIO**:
+     - Si lectura estable falla repetidamente
+     - Si pin no responde a configuración
+127. **Recuperación de GPIO**:
+     - Deshabilita interrupciones del pin problemático
+     - Resetea configuración del pin
+     - Reconfigura como entrada con pull-up
+     - Reinstala handler de interrupción
+     - Si falla: marca relé como ERROR
+128. **Escalación de problemas**: Si múltiples GPIOs fallan:
+     - Incrementa contador de errores del watchdog
+     - Puede provocar reinicio preventivo del sistema
+
+## **FASE 11: SUPERVISIÓN Y MANTENIMIENTO DEL SISTEMA**
+
+### Sistema de Watchdog Multicapa
+129. **Supervisión de tareas**:
+     - Cada tarea debe alimentar watchdog periódicamente
+     - Tarea principal: cada 5 segundos
+     - Tarea de monitoreo: cada 5 segundos
+     - Tarea de eventos de relés: según actividad
+130. **Monitoreo de subsistemas**:
+     - Memoria: verifica heap libre vs umbrales
+     - WiFi: confirma conectividad y calidad de señal
+     - MQTT: verifica conexión y latencia
+     - Relés: confirma funcionamiento de interrupciones
+131. **Escalación automática de modos**:
+     - CONFIG: Durante configuración inicial (timeouts relajados)
+     - RUNNING: Operación normal (timeouts standard)
+     - CRITICAL: Problemas detectados (timeouts estrictos)
+
+### Gestión Inteligente de Memoria
+132. **Monitoreo continuo** (cada 2 minutos):
+     - Verifica heap libre actual
+     - Monitorea heap mínimo histórico
+     - Detecta fragmentación excesiva
+133. **Limpieza preventiva**:
+     - Libera buffers no utilizados del pool
+     - Limpia cola de mensajes MQTT antiguos
+     - Ejecuta garbage collection de pools de memoria
+134. **Acciones de emergencia**:
+     - Si memoria crítica (<25KB): ejecuta limpieza agresiva
+     - Si memoria crítica persiste: prepara reinicio controlado
+     - Notifica problema vía MQTT antes de reiniciar
+
+### Verificaciones Automáticas
+135. **Chequeo de consistencia** (cada 2 minutos):
+     - Re-lee todos los GPIOs de relés activos
+     - Compara lecturas físicas con estados almacenados
+     - Detecta posibles fallos de hardware o pérdida de eventos
+136. **Auto-corrección**:
+     - Si detecta inconsistencia: reporta como cambio de estado
+     - Actualiza estado interno para reflejar realidad física
+     - Incrementa contador de auto-correcciones
+137. **Diagnóstico de rendimiento**:
+     - Monitorea cola de eventos GPIO (detecta saturación)
+     - Verifica latencia de procesamiento de eventos
+     - Cuenta eventos filtrados por debounce
+
+## **FASE 12: REPORTES PERIÓDICOS Y MANTENIMIENTO**
+
+### Heartbeat del Sistema
+138. **Reporte de estado** (cada 5 minutos) a `esp32/heartbeat/[ESP32_ID]`:
+     - Timestamp actual
+     - Memoria libre y mínima registrada
+     - Tiempo de funcionamiento (uptime)
+     - Contadores de eventos procesados
+     - Estado de watchdog y errores
+139. **Información de conectividad**:
+     - Estado de WiFi (conectado/desconectado)
+     - Calidad de señal (RSSI)
+     - Estado de MQTT (conectado/reconectando)
+     - Número de reconexiones
+
+### Reporte de Información de Red
+140. **Actualización periódica** (cada hora o al cambiar configuración):
+     - Envío a `esp32/network_info`
+     - Estado actual: "ONLINE" (si configurado) o "AWAITING_CONFIG"
+     - Información completa de red y configuración
+     - Incluye client_id y panel_id si están configurados
+141. **Trigger de reporte**:
+     - Después de sincronización de tiempo exitosa
+     - Después de recibir configuración de panel
+     - Al detectar cambio significativo en el sistema
+
+### Estadísticas de Relés
+142. **Contadores por relé**:
+     - Número total de cambios de estado detectados
+     - Eventos filtrados por debounce
+     - Timestamp del último cambio
+     - Tiempo acumulado en cada estado
+143. **Reporte de diagnóstico** (bajo demanda):
+     - Información de configuración de todos los relés
+     - Estadísticas de funcionamiento
+     - Estado actual de cada GPIO
+     - Información de errores y recuperaciones
+
+## **FASE 13: GESTIÓN DE EMERGENCIAS Y RECUPERACIÓN**
+
+### Detección de Condiciones Críticas
+144. **Monitoreo de watchdog**:
+     - Si alguna tarea no alimenta watchdog en tiempo: marca como problema
+     - Si memoria crítica persiste: prepara reinicio
+     - Si conectividad falla por tiempo prolongado: modo de emergencia
+145. **Escalación a modo crítico**:
+     - Timeouts de watchdog reducidos a 20 segundos
+     - Frecuencia de verificaciones aumentada
+     - Limpieza agresiva de memoria
+     - Preparación para reinicio si es necesario
+
+### Reinicio Controlado
+146. **Preparación para reinicio**:
+     - Guarda estado actual de todos los relés en NVS
+     - Guarda timestamp del último estado conocido
+     - Guarda razón del reinicio para diagnóstico
+147. **Notificación pre-reinicio**:
+     - Envía mensaje de estado crítico vía MQTT
+     - Last Will Testament se activa automáticamente
+     - Logs finales con información de diagnóstico
+148. **Ejecución de reinicio**: `esp_restart()` para reinicio limpio del sistema
+
+### Recuperación Post-Reinicio
+149. **Carga de configuración**:
+     - Lee configuración de panel desde NVS
+     - Carga configuración específica de relés
+     - Restaura credenciales WiFi y configuración MQTT
+150. **Reestablecimiento de conexiones**:
+     - Reconecta a WiFi usando credenciales guardadas
+     - Reestablece conexión MQTT
+     - Restaura suscripciones a tópicos específicos
+151. **Sincronización de estado**:
+     - Compara estado físico actual vs estado guardado
+     - Reporta cualquier cambio ocurrido durante reinicio
+     - Resume monitoreo normal desde último estado conocido
+
+### Notificación de Recuperación
+152. **Reporte de reinicio**:
+     - Envía información de recuperación exitosa
+     - Incluye razón del reinicio anterior
+     - Confirma que todos los sistemas están operativos
+153. **Verificación de integridad**:
+     - Verifica funcionamiento de todos los relés activos
+     - Confirma conectividad completa
+     - Valida sincronización de tiempo
+
+## **FLUJO CONTINUO DE OPERACIÓN NORMAL**
+
+### Ciclo Típico de 5 Segundos
+154. **Feed de watchdog**: Todas las tareas alimentan watchdog
+155. **Verificación de conectividad**: WiFi y MQTT status check
+156. **Procesamiento de mensajes MQTT**: En tiempo real según llegada
+157. **Gestión de memoria**: Monitoreo pasivo de heap
+158. **Actualización de contadores**: Estadísticas de sistema
+
+### Procesamiento de Eventos en Tiempo Real
+159. **Detección de cambios GPIO**: Latencia < 100ms desde evento físico
+160. **Debounce y validación**: 50-150ms según estabilidad de señal
+161. **Reporte inmediato**: Publicación MQTT en < 200ms total
+162. **Confirmación de entrega**: QoS 1 garantiza entrega al broker
+163. **Logging local**: Registro en memoria para diagnóstico
+
+### Mantenimiento Periódico
+164. **Verificación manual** (cada 2 minutos): Re-lectura de todos los GPIOs
+165. **Heartbeat** (cada 5 minutos): Reporte de estado general
+166. **Limpieza de memoria** (según necesidad): Liberación de recursos no utilizados
+167. **Estadísticas** (cada hora): Contadores y métricas de rendimiento
+168. **Verificación de sincronización** (cada 15 minutos): Re-sincronización NTP
+
+### Gestión Automática de Recursos
+169. **Pools de memoria**: Rotación de buffers para evitar fragmentación
+170. **Colas de mensajes**: Gestión automática de tamaño y antigüedad
+171. **Conexiones de red**: Mantenimiento automático de keepalive
+172. **Interrupciones GPIO**: Auto-recuperación de pines problemáticos
+
+Este sistema proporciona **monitoreo robusto, confiable y en tiempo real** de paneles contra incendios, con capacidades completas de **auto-configuración, auto-recuperación y reporte detallado** de todos los eventos de estado de los detectores conectados.

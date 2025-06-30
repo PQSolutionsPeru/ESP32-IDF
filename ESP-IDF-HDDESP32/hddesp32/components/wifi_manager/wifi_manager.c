@@ -24,8 +24,8 @@
 #define WIFI_CONNECT_FAIL_BIT BIT4
 
 #define MAX_RECONNECT_ATTEMPTS 5
-#define WIFI_CONNECT_TIMEOUT_MS 20000
-#define RECONNECT_DELAY_MS 2000
+#define WIFI_CONNECT_TIMEOUT_MS 45000
+#define RECONNECT_DELAY_MS 5000
 #define DEFAULT_AP_IP "192.168.4.1"
 
 typedef struct {
@@ -47,11 +47,85 @@ typedef struct {
     bool scan_in_progress;
     bool temporary_apsta_mode;
     bool connection_in_progress;
+    uint32_t event_group_operations;
+    uint32_t netif_recreation_count;
     void (*state_callback)(wifi_manager_state_t state, void *user_data);
     void *user_data;
 } wifi_manager_context_t;
 
 static wifi_manager_context_t s_wifi_manager_ctx = {0};
+
+static esp_err_t recreate_wifi_event_group(wifi_manager_context_t *ctx) {
+    EventBits_t current_bits = xEventGroupGetBits(ctx->event_group);
+    
+    vEventGroupDelete(ctx->event_group);
+    ctx->event_group = xEventGroupCreate();
+    
+    if (ctx->event_group == NULL) {
+        ESP_LOGE(TAG, "Failed to recreate WiFi event group");
+        return ESP_ERR_NO_MEM;
+    }
+    
+    if (current_bits != 0) {
+        xEventGroupSetBits(ctx->event_group, current_bits);
+    }
+    
+    ctx->event_group_operations = 0;
+    ESP_LOGI(TAG, "WiFi event group recreated");
+    return ESP_OK;
+}
+
+static void safe_wifi_set_bits(wifi_manager_context_t *ctx, EventBits_t bits) {
+    ctx->event_group_operations++;
+    
+    if (ctx->event_group_operations >= 1000000) {
+        recreate_wifi_event_group(ctx);
+    }
+    
+    xEventGroupSetBits(ctx->event_group, bits);
+}
+
+static void safe_wifi_clear_bits(wifi_manager_context_t *ctx, EventBits_t bits) {
+    ctx->event_group_operations++;
+    
+    if (ctx->event_group_operations >= 1000000) {
+        recreate_wifi_event_group(ctx);
+    }
+    
+    xEventGroupClearBits(ctx->event_group, bits);
+}
+
+static esp_err_t cleanup_and_recreate_netifs(wifi_manager_context_t *ctx) {
+    esp_err_t ret = ESP_OK;
+    
+    if (ctx->sta_netif) {
+        esp_netif_destroy(ctx->sta_netif);
+        ctx->sta_netif = NULL;
+    }
+    
+    if (ctx->ap_netif) {
+        esp_netif_destroy(ctx->ap_netif);
+        ctx->ap_netif = NULL;
+    }
+    
+    vTaskDelay(pdMS_TO_TICKS(100));
+    
+    ctx->sta_netif = esp_netif_create_default_wifi_sta();
+    if (ctx->sta_netif == NULL) {
+        ESP_LOGE(TAG, "Failed to recreate station netif");
+        return ESP_FAIL;
+    }
+    
+    ctx->ap_netif = esp_netif_create_default_wifi_ap();
+    if (ctx->ap_netif == NULL) {
+        ESP_LOGE(TAG, "Failed to recreate AP netif");
+        esp_netif_destroy(ctx->sta_netif);
+        ctx->sta_netif = NULL;
+        return ESP_FAIL;
+    }
+    
+    return ret;
+}
 
 static esp_err_t _internal_wifi_connect_safe(void) {
     wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
@@ -95,116 +169,31 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     
     if (event_base == WIFI_EVENT) {
         switch (event_id) {
-            case WIFI_EVENT_STA_START:
-                ESP_LOGI(TAG, "WiFi station started");
-                break;
-            
-            case WIFI_EVENT_STA_CONNECTED:
-                ESP_LOGI(TAG, "Connected to WiFi network: %s", ctx->ssid);
-                break;
-            
-            case WIFI_EVENT_STA_DISCONNECTED: {
-                wifi_event_sta_disconnected_t *disconn = (wifi_event_sta_disconnected_t*) event_data;
-                ESP_LOGW(TAG, "Disconnected from WiFi network: %s, reason: %d", 
-                        ctx->ssid, (int)disconn->reason);
-                
-                ctx->connection_in_progress = false;
-                
-                if (ctx->state != WIFI_MANAGER_STATE_STA_AP_MODE) {
-                    xEventGroupClearBits(ctx->event_group, WIFI_CONNECTED_BIT);
-                    xEventGroupSetBits(ctx->event_group, WIFI_DISCONNECTED_BIT);
-                }
-                
-                if (ctx->credentials_saved && ctx->reconnect_attempts < MAX_RECONNECT_ATTEMPTS) {
-                    ctx->reconnect_attempts++;
-                    ESP_LOGI(TAG, "WiFi disconnected, reconnection attempt %d/%d", 
-                            ctx->reconnect_attempts, MAX_RECONNECT_ATTEMPTS);
-                    
-                    if (ctx->state != WIFI_MANAGER_STATE_STA_AP_MODE) {
-                        ctx->state = WIFI_MANAGER_STATE_CONNECTING;
-                        if (ctx->state_callback) {
-                            ctx->state_callback(ctx->state, ctx->user_data);
-                        }
-                    }
-                    
-                    if (xSemaphoreTake(ctx->connection_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
-                        vTaskDelay(pdMS_TO_TICKS(RECONNECT_DELAY_MS));
-                        esp_err_t reconnect_result = _internal_wifi_connect_safe();
-                        if (reconnect_result != ESP_OK) {
-                            ESP_LOGW(TAG, "Automatic reconnection failed: %s", esp_err_to_name(reconnect_result));
-                        }
-                        xSemaphoreGive(ctx->connection_mutex);
-                    }
-                } else if (ctx->reconnect_attempts >= MAX_RECONNECT_ATTEMPTS) {
-                    ESP_LOGE(TAG, "Max reconnection attempts reached");
-                    xEventGroupSetBits(ctx->event_group, WIFI_CONNECT_FAIL_BIT);
-                    
-                    if (ctx->state != WIFI_MANAGER_STATE_STA_AP_MODE) {
-                        ctx->state = WIFI_MANAGER_STATE_ERROR;
-                        if (ctx->state_callback) {
-                            ctx->state_callback(ctx->state, ctx->user_data);
-                        }
-                    }
-                } else {
-                    if (ctx->state != WIFI_MANAGER_STATE_STA_AP_MODE) {
-                        ctx->state = WIFI_MANAGER_STATE_DISCONNECTED;
-                        if (ctx->state_callback) {
-                            ctx->state_callback(ctx->state, ctx->user_data);
-                        }
-                    }
-                }
-                break;
-            }
-            
-            case WIFI_EVENT_AP_START:
-                ESP_LOGI(TAG, "WiFi Access Point started");
-                xEventGroupSetBits(ctx->event_group, WIFI_AP_STARTED_BIT);
-                
-                if (ctx->state != WIFI_MANAGER_STATE_STA_AP_MODE) {
-                    ctx->state = WIFI_MANAGER_STATE_AP_MODE;
-                    if (ctx->state_callback) {
-                        ctx->state_callback(ctx->state, ctx->user_data);
-                    }
-                }
-                break;
-                
-            case WIFI_EVENT_AP_STOP:
-                ESP_LOGI(TAG, "WiFi Access Point stopped");
-                xEventGroupClearBits(ctx->event_group, WIFI_AP_STARTED_BIT);
-                break;
-                
-            case WIFI_EVENT_AP_STACONNECTED: {
-                wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
-                ESP_LOGI(TAG, "Station connected to AP - MAC: " MACSTR, MAC2STR(event->mac));
-                break;
-            }
-                
-            case WIFI_EVENT_AP_STADISCONNECTED: {
-                wifi_event_ap_stadisconnected_t* event = (wifi_event_ap_stadisconnected_t*) event_data;
-                ESP_LOGI(TAG, "Station disconnected from AP - MAC: " MACSTR, MAC2STR(event->mac));
-                break;
-            }
-                
             case WIFI_EVENT_SCAN_DONE: {
                 wifi_event_sta_scan_done_t *scan_done = (wifi_event_sta_scan_done_t*) event_data;
                 ESP_LOGI(TAG, "WiFi scan completed, status: %d, found APs: %u",
-                         (int)scan_done->status, (unsigned int)scan_done->number);
+                        (int)scan_done->status, (unsigned int)scan_done->number);
                 
                 ctx->scan_in_progress = false;
                 
                 if (scan_done->status == 0) {
                     if (ctx->scan_ap_list != NULL) {
-                        free(ctx->scan_ap_list);
                         ctx->scan_ap_list = NULL;
                     }
                     
                     ctx->scan_ap_count = scan_done->number;
+                    if (ctx->scan_ap_count > 20) {
+                        ctx->scan_ap_count = 20;
+                        ESP_LOGW(TAG, "Limiting scan results to 20 APs to preserve memory");
+                    }
+                    
                     if (ctx->scan_ap_count > 0) {
-                        ctx->scan_ap_list = (wifi_ap_record_t*)malloc(ctx->scan_ap_count * sizeof(wifi_ap_record_t));
-                        if (ctx->scan_ap_list == NULL) {
-                            ESP_LOGE(TAG, "Failed to allocate memory for scan results");
-                            ctx->scan_ap_count = 0;
-                        } else {
+                        size_t free_heap = esp_get_free_heap_size();
+                        
+                        if (free_heap > 50000) {
+                            static wifi_ap_record_t static_scan_results[20];
+                            ctx->scan_ap_list = static_scan_results;
+                            
                             esp_err_t get_ret = esp_wifi_scan_get_ap_records(&ctx->scan_ap_count, ctx->scan_ap_list);
                             if (get_ret == ESP_OK) {
                                 ESP_LOGI(TAG, "Successfully retrieved %u scan results", ctx->scan_ap_count);
@@ -220,10 +209,12 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                 }
                             } else {
                                 ESP_LOGE(TAG, "Failed to get scan records: %s", esp_err_to_name(get_ret));
-                                free(ctx->scan_ap_list);
                                 ctx->scan_ap_list = NULL;
                                 ctx->scan_ap_count = 0;
                             }
+                        } else {
+                            ESP_LOGW(TAG, "Insufficient memory for scan results, skipping allocation");
+                            ctx->scan_ap_count = 0;
                         }
                     }
                 }
@@ -240,9 +231,23 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                     }
                 }
                 
-                xEventGroupSetBits(ctx->event_group, WIFI_SCAN_DONE_BIT);
+                safe_wifi_set_bits(ctx, WIFI_SCAN_DONE_BIT);
                 break;
             }
+            
+            case WIFI_EVENT_AP_START:
+                ESP_LOGI(TAG, "Access Point started");
+                ctx->state = WIFI_MANAGER_STATE_AP_MODE;
+                safe_wifi_set_bits(ctx, WIFI_AP_STARTED_BIT);
+                if (ctx->state_callback) {
+                    ctx->state_callback(ctx->state, ctx->user_data);
+                }
+                break;
+                
+            case WIFI_EVENT_AP_STOP:
+                ESP_LOGI(TAG, "Access Point stopped");
+                safe_wifi_clear_bits(ctx, WIFI_AP_STARTED_BIT);
+                break;
             
             default:
                 ESP_LOGD(TAG, "Unhandled WiFi event: %d", (int)event_id);
@@ -256,8 +261,8 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                 
                 ctx->connection_in_progress = false;
                 
-                xEventGroupClearBits(ctx->event_group, WIFI_DISCONNECTED_BIT | WIFI_CONNECT_FAIL_BIT);
-                xEventGroupSetBits(ctx->event_group, WIFI_CONNECTED_BIT);
+                safe_wifi_clear_bits(ctx, WIFI_DISCONNECTED_BIT | WIFI_CONNECT_FAIL_BIT);
+                safe_wifi_set_bits(ctx, WIFI_CONNECTED_BIT);
                 
                 ctx->reconnect_attempts = 0;
                 
@@ -281,7 +286,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
             case IP_EVENT_STA_LOST_IP:
                 ESP_LOGW(TAG, "Lost IP address");
                 if (ctx->state != WIFI_MANAGER_STATE_STA_AP_MODE) {
-                    xEventGroupClearBits(ctx->event_group, WIFI_CONNECTED_BIT);
+                    safe_wifi_clear_bits(ctx, WIFI_CONNECTED_BIT);
                 }
                 break;
                 
@@ -308,6 +313,8 @@ esp_err_t wifi_manager_init(void)
     ctx->scan_in_progress = false;
     ctx->temporary_apsta_mode = false;
     ctx->connection_in_progress = false;
+    ctx->event_group_operations = 0;
+    ctx->netif_recreation_count = 0;
     
     ctx->event_group = xEventGroupCreate();
     if (ctx->event_group == NULL) {
@@ -391,7 +398,7 @@ esp_err_t wifi_manager_init(void)
     ctx->scan_config.scan_time.active.max = 300;
     
     ctx->state = WIFI_MANAGER_STATE_DISCONNECTED;
-    xEventGroupSetBits(ctx->event_group, WIFI_DISCONNECTED_BIT);
+    safe_wifi_set_bits(ctx, WIFI_DISCONNECTED_BIT);
     
     ESP_LOGI(TAG, "WiFi Manager initialized successfully");
     return ESP_OK;
@@ -768,14 +775,43 @@ esp_err_t wifi_manager_stop_ap_mode(void)
 }
 
 esp_err_t wifi_manager_set_sta_mode(void) {
+    wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
+    
     ESP_LOGI(TAG, "Switching to station-only mode");
     
-    wifi_manager_stop_ap_mode();
+    if (ctx->event_group == NULL) {
+        ESP_LOGE(TAG, "WiFi Manager not initialized");
+        return ESP_ERR_INVALID_STATE;
+    }
     
-    esp_err_t ret = esp_wifi_set_mode(WIFI_MODE_STA);
+    wifi_mode_t current_mode;
+    esp_err_t ret = esp_wifi_get_mode(&current_mode);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to set WiFi mode: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "Failed to get WiFi mode: %s", esp_err_to_name(ret));
         return ret;
+    }
+    
+    if (current_mode == WIFI_MODE_STA) {
+        ESP_LOGI(TAG, "Already in STA mode");
+        return ESP_OK;
+    }
+    
+    if (current_mode == WIFI_MODE_APSTA) {
+        ret = esp_wifi_set_mode(WIFI_MODE_STA);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to set WiFi mode: %s", esp_err_to_name(ret));
+            return ret;
+        }
+        
+        if (wifi_manager_is_connected()) {
+            ctx->state = WIFI_MANAGER_STATE_CONNECTED;
+        } else {
+            ctx->state = WIFI_MANAGER_STATE_DISCONNECTED;
+        }
+        
+        if (ctx->state_callback) {
+            ctx->state_callback(ctx->state, ctx->user_data);
+        }
     }
     
     return ESP_OK;
@@ -997,7 +1033,7 @@ esp_err_t wifi_manager_start_scan(void)
         ctx->temporary_apsta_mode = false;
     }
     
-    xEventGroupClearBits(ctx->event_group, WIFI_SCAN_DONE_BIT);
+    safe_wifi_clear_bits(ctx, WIFI_SCAN_DONE_BIT);
     
     ctx->scan_in_progress = true;
     
@@ -1085,43 +1121,106 @@ esp_err_t wifi_manager_set_state_callback(void (*callback)(wifi_manager_state_t 
 
 esp_err_t wifi_manager_handle_disconnection(const char *ap_ssid_prefix, const char *ap_password, int max_attempts) {
     static int reconnect_attempts = 0;
+    static int recovery_cycle = 0;
     static int64_t last_reconnect_time = 0;
+    static int64_t ap_mode_start_time = 0;
+    static bool ap_mode_active = false;
+    static int netif_cleanup_cycle = 0;
     int64_t current_time = esp_timer_get_time() / 1000;
+    
+    const int64_t RECONNECT_INTERVAL_MS = 8000;
+    const int64_t AP_MODE_TIMEOUT_MS = 60000;
+    const int64_t RECOVERY_CYCLE_TIMEOUT_MS = 300000;
+    const int NETIF_CLEANUP_THRESHOLD = 50;
     
     if (wifi_manager_is_connected()) {
         reconnect_attempts = 0;
+        recovery_cycle = 0;
+        ap_mode_active = false;
         return ESP_OK;
     }
     
-    if (current_time - last_reconnect_time > 10000) {
+    if (current_time - last_reconnect_time > RECONNECT_INTERVAL_MS) {
         last_reconnect_time = current_time;
         
-        reconnect_attempts++;
-        ESP_LOGI(TAG, "WiFi disconnected, reconnection attempt %d/%d", 
-                 reconnect_attempts, max_attempts);
-        
-        esp_err_t ret = wifi_manager_connect_saved();
-        
-        if (reconnect_attempts >= max_attempts && ret != ESP_OK) {
-            ESP_LOGI(TAG, "Failed to reconnect to WiFi after %d attempts, activating AP mode", 
-                     reconnect_attempts);
+        if (!ap_mode_active) {
+            reconnect_attempts++;
+            netif_cleanup_cycle++;
             
-            char ap_ssid[33];
-            esp_err_t ap_ret = wifi_manager_generate_ap_ssid(ap_ssid, sizeof(ap_ssid), ap_ssid_prefix);
-            if (ap_ret != ESP_OK) {
-                ESP_LOGE(TAG, "Failed to generate AP SSID");
-                return ESP_FAIL;
+            if (netif_cleanup_cycle >= NETIF_CLEANUP_THRESHOLD) {
+                wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
+                ESP_LOGI(TAG, "Performing netif cleanup after %d reconnections", netif_cleanup_cycle);
+                
+                esp_wifi_stop();
+                vTaskDelay(pdMS_TO_TICKS(500));
+                
+                if (cleanup_and_recreate_netifs(ctx) == ESP_OK) {
+                    ESP_LOGI(TAG, "Netifs recreated successfully");
+                    netif_cleanup_cycle = 0;
+                } else {
+                    ESP_LOGE(TAG, "Failed to recreate netifs");
+                }
+                
+                esp_wifi_start();
+                vTaskDelay(pdMS_TO_TICKS(1000));
             }
             
-            ESP_LOGI(TAG, "Starting AP with SSID: %s", ap_ssid);
+            ESP_LOGI(TAG, "WiFi recovery cycle %d, reconnection attempt %d (cleanup cycle: %d)", 
+                     recovery_cycle + 1, reconnect_attempts, netif_cleanup_cycle);
             
-            ap_ret = wifi_manager_start_ap_mode(ap_ssid, ap_password);
-            if (ap_ret != ESP_OK) {
-                ESP_LOGE(TAG, "Failed to start AP mode");
-                return ESP_FAIL;
+            if (reconnect_attempts % 5 == 0 && netif_cleanup_cycle < NETIF_CLEANUP_THRESHOLD) {
+                esp_wifi_stop();
+                vTaskDelay(pdMS_TO_TICKS(1000));
+                esp_wifi_start();
+                vTaskDelay(pdMS_TO_TICKS(2000));
             }
             
-            reconnect_attempts = 0;
+            esp_err_t ret = wifi_manager_connect_saved();
+            
+            if (reconnect_attempts >= max_attempts && ret != ESP_OK) {
+                ESP_LOGI(TAG, "Starting AP+STA mode for reconfiguration opportunity");
+                
+                char ap_ssid[33];
+                esp_err_t ap_ret = wifi_manager_generate_ap_ssid(ap_ssid, sizeof(ap_ssid), ap_ssid_prefix);
+                if (ap_ret != ESP_OK) {
+                    ESP_LOGE(TAG, "Failed to generate AP SSID");
+                    return ESP_FAIL;
+                }
+                
+                ESP_LOGI(TAG, "Starting AP+STA with SSID: %s", ap_ssid);
+                
+                ap_ret = wifi_manager_start_sta_ap_mode(ap_ssid, ap_password);
+                if (ap_ret == ESP_OK) {
+                    ap_mode_active = true;
+                    ap_mode_start_time = current_time;
+                    reconnect_attempts = 0;
+                } else {
+                    ESP_LOGE(TAG, "Failed to start AP+STA mode");
+                }
+            }
+        } else {
+            if (current_time - ap_mode_start_time > AP_MODE_TIMEOUT_MS) {
+                ESP_LOGI(TAG, "AP+STA timeout reached, returning to saved network reconnection");
+                
+                wifi_manager_state_t current_state = wifi_manager_get_state();
+                if (current_state == WIFI_MANAGER_STATE_STA_AP_MODE || 
+                    current_state == WIFI_MANAGER_STATE_AP_MODE) {
+                    
+                    esp_err_t ret = esp_wifi_set_mode(WIFI_MODE_STA);
+                    if (ret == ESP_OK) {
+                        ap_mode_active = false;
+                        reconnect_attempts = 0;
+                        recovery_cycle++;
+                        
+                        if (recovery_cycle * RECOVERY_CYCLE_TIMEOUT_MS > current_time) {
+                            recovery_cycle = 0;
+                        }
+                        
+                        vTaskDelay(pdMS_TO_TICKS(2000));
+                        wifi_manager_connect_saved();
+                    }
+                }
+            }
         }
     }
     

@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "hddesp32",
-    "project_version":    "d32061de-dirty",
+    "project_version":    "41ea77e4-dirty",
     "project_path":       "E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32",
     "idf_path":           "C:/Espressif/frameworks/esp-idf-v5.4.1",
     "build_dir":          "E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build",
@@ -126,7 +126,7 @@
             "type": "LIBRARY",
             "lib": "__idf_config_manager",
             "reqs": [ "nvs_flash" ],
-            "priv_reqs": [],
+            "priv_reqs": [ "esp_timer", "freertos" ],
             "managed_reqs": [],
             "managed_priv_reqs": [],
             "file": "E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/config_manager/libconfig_manager.a",
@@ -2989,7 +2989,7 @@
             "dir": "E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/components/config_manager",
             "lib": "__idf_config_manager",
             "reqs": [ "nvs_flash" ],
-            "priv_reqs": [],
+            "priv_reqs": [ "esp_timer", "freertos" ],
             "managed_reqs": [],
             "managed_priv_reqs": [],
             "include_dirs": [ "include" ]
