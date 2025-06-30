@@ -4,6 +4,8 @@ import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.Source
+import com.google.firebase.firestore.MetadataChanges
 import com.pqsolutions.hdd_monitor.data.util.IdManager
 import com.pqsolutions.hdd_monitor.esp32.ESP32Device
 import com.pqsolutions.hdd_monitor.esp32.ESP32Repository
@@ -31,10 +33,12 @@ class PanelRepository @Inject constructor(
         private const val BASE_PATH = "hdd-monitor/accounts/clients"
         private const val MAX_RETRIES = 3
         private const val INITIAL_RETRY_DELAY = 500L
+        private const val SERVER_VALIDATION_INTERVAL = 30000L
     }
 
     private val activeListeners = ConcurrentHashMap<String, ListenerRegistration>()
     private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var lastServerValidation = 0L
 
     private suspend fun <T> withRetry(
         maxRetries: Int = MAX_RETRIES,
@@ -75,13 +79,19 @@ class PanelRepository @Inject constructor(
         Log.d(TAG, "getPanels called with clientDocName: $clientDocName")
 
         try {
+            trySend(emptyList())
+
             if (clientDocName != null) {
-                setupClientPanelsFlow(clientDocName) { panels ->
-                    trySend(panels)
+                setupValidatedClientPanelsFlow(clientDocName) { panels ->
+                    validateAndSend(panels, clientDocName) { validatedPanels ->
+                        trySend(validatedPanels)
+                    }
                 }
             } else {
-                setupAdminPanelsFlow { panels ->
-                    trySend(panels)
+                setupValidatedAdminPanelsFlow { panels ->
+                    validateAndSend(panels, null) { validatedPanels ->
+                        trySend(validatedPanels)
+                    }
                 }
             }
 
@@ -94,6 +104,318 @@ class PanelRepository @Inject constructor(
             close(e)
         }
     }.flowOn(Dispatchers.IO)
+
+    private suspend fun verifyPanelsInServer(clientDocName: String?): List<Panel> {
+        return try {
+            Log.d(TAG, "Verifying panels in server")
+
+            val serverSnapshot = if (clientDocName != null) {
+                firestore.collection("$BASE_PATH/$clientDocName/panels")
+                    .get(Source.SERVER)
+                    .await()
+            } else {
+                Log.d(TAG, "Admin mode: usando collectionGroup('panels')")
+                firestore.collectionGroup("panels")
+                    .get(Source.SERVER)
+                    .await()
+            }
+
+            val panelCount = serverSnapshot.size()
+            lastServerValidation = System.currentTimeMillis()
+
+            Log.d(TAG, "Server response: $panelCount panels")
+
+            if (clientDocName == null) {
+                Log.d(TAG, "=== DEBUG COLLECTIONGROUP ===")
+                serverSnapshot.documents.forEachIndexed { index, doc ->
+                    Log.d(TAG, "Document $index:")
+                    Log.d(TAG, "  - ID: ${doc.id}")
+                    Log.d(TAG, "  - Path: ${doc.reference.path}")
+                    Log.d(TAG, "  - Exists: ${doc.exists()}")
+                    if (doc.exists()) {
+                        Log.d(TAG, "  - Data keys: ${doc.data?.keys}")
+                    }
+                }
+                Log.d(TAG, "=== END DEBUG ===")
+            }
+
+            if (panelCount == 0) {
+                return getAdminPanelsAlternative()
+            }
+
+            val panels = mutableListOf<Panel>()
+            for (doc in serverSnapshot.documents) {
+                if (doc.exists()) {
+                    val clientId = if (clientDocName != null) {
+                        clientDocName
+                    } else {
+                        val pathParts = doc.reference.path.split("/")
+                        Log.d(TAG, "Path parts: $pathParts")
+
+                        val clientsIndex = pathParts.indexOf("clients")
+                        if (clientsIndex != -1 && clientsIndex + 1 < pathParts.size) {
+                            val extractedClientId = pathParts[clientsIndex + 1]
+                            Log.d(TAG, "Extracted clientId: $extractedClientId")
+                            extractedClientId
+                        } else {
+                            Log.w(TAG, "Could not extract clientId from path: ${doc.reference.path}")
+                            continue
+                        }
+                    }
+
+                    Log.d(TAG, "Loading panel for clientId: $clientId")
+                    val panel = loadCompletePanel(clientId, doc)
+                    if (panel != null) {
+                        panels.add(panel)
+                        Log.d(TAG, "Panel loaded successfully: ${panel.name}")
+                    } else {
+                        Log.w(TAG, "Failed to load panel from doc: ${doc.id}")
+                    }
+                }
+            }
+
+            Log.d(TAG, "Total panels loaded: ${panels.size}")
+            panels
+        } catch (e: Exception) {
+            Log.e(TAG, "Error verifying server", e)
+            getAdminPanelsAlternative()
+        }
+    }
+
+    private suspend fun getAdminPanelsAlternative(): List<Panel> {
+        return try {
+            Log.d(TAG, "Using alternative method to get all panels for admin")
+
+            val clientsSnapshot = firestore.collection("$BASE_PATH")
+                .get(Source.SERVER)
+                .await()
+
+            val allPanels = mutableListOf<Panel>()
+
+            for (clientDoc in clientsSnapshot.documents) {
+                if (clientDoc.exists()) {
+                    val clientId = clientDoc.id
+                    Log.d(TAG, "Checking panels for client: $clientId")
+
+                    try {
+                        val panelsSnapshot = firestore.collection("$BASE_PATH/$clientId/panels")
+                            .get(Source.SERVER)
+                            .await()
+
+                        Log.d(TAG, "Client $clientId has ${panelsSnapshot.size()} panels")
+
+                        for (panelDoc in panelsSnapshot.documents) {
+                            if (panelDoc.exists()) {
+                                Log.d(TAG, "Found panel document: ${panelDoc.id} in client: $clientId")
+                                val panel = loadCompletePanel(clientId, panelDoc)
+                                if (panel != null) {
+                                    allPanels.add(panel)
+                                    Log.d(TAG, "Added panel: ${panel.name} from client: $clientId")
+                                } else {
+                                    Log.w(TAG, "Failed to load panel ${panelDoc.id} from client: $clientId")
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error getting panels for client $clientId", e)
+                    }
+                }
+            }
+
+            Log.d(TAG, "Alternative method found ${allPanels.size} panels total")
+            allPanels
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in alternative admin panels method", e)
+            emptyList()
+        }
+    }
+
+    private fun validateAndSend(
+        panels: List<Panel>,
+        clientDocName: String?,
+        onValidated: (List<Panel>) -> Unit
+    ) {
+        val currentTime = System.currentTimeMillis()
+
+        if (currentTime - lastServerValidation > SERVER_VALIDATION_INTERVAL) {
+            coroutineScope.launch {
+                val serverPanels = verifyPanelsInServer(clientDocName)
+
+                if (panels.size != serverPanels.size) {
+                    Log.w(TAG, "Inconsistency detected: Local=${panels.size}, Server=${serverPanels.size}")
+                    onValidated(serverPanels)
+                } else {
+                    onValidated(panels)
+                }
+            }
+        } else {
+            onValidated(panels)
+        }
+    }
+
+    private fun setupValidatedAdminPanelsFlow(onUpdate: (List<Panel>) -> Unit) {
+        coroutineScope.launch {
+            try {
+                val clientsSnapshot = firestore.collection("$BASE_PATH")
+                    .get()
+                    .await()
+
+                val allClientIds = clientsSnapshot.documents.mapNotNull { doc ->
+                    if (doc.exists()) doc.id else null
+                }
+
+                Log.d(TAG, "Setting up individual listeners for ${allClientIds.size} clients")
+
+                val allPanels = mutableListOf<Panel>()
+
+                allClientIds.forEach { clientId ->
+                    val clientListenerId = "admin_client_${clientId}_${System.currentTimeMillis()}"
+
+                    val clientPanelRegistration = firestore.collection("$BASE_PATH/$clientId/panels")
+                        .addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
+                            if (error != null) {
+                                Log.e(TAG, "Error in client panels listener for $clientId", error)
+                                return@addSnapshotListener
+                            }
+
+                            coroutineScope.launch {
+                                try {
+                                    val clientPanels = mutableListOf<Panel>()
+
+                                    snapshot?.documents?.forEach { doc ->
+                                        if (doc.exists()) {
+                                            val panel = loadCompletePanel(clientId, doc)
+                                            if (panel != null) {
+                                                clientPanels.add(panel)
+                                            }
+                                        }
+                                    }
+
+                                    synchronized(allPanels) {
+                                        allPanels.removeAll { it.clientName == clientId }
+                                        allPanels.addAll(clientPanels)
+
+                                        Log.d(TAG, "Updated panels for client $clientId: ${clientPanels.size}, Total: ${allPanels.size}")
+
+                                        setupRelayListeners(null, allPanels.toList(), onUpdate)
+                                        onUpdate(allPanels.toList())
+                                    }
+
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Error processing panels for client $clientId", e)
+                                }
+                            }
+                        }
+
+                    activeListeners[clientListenerId] = clientPanelRegistration
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Error setting up admin panels flow", e)
+                onUpdate(emptyList())
+            }
+        }
+    }
+
+    private fun setupValidatedClientPanelsFlow(clientDocName: String, onUpdate: (List<Panel>) -> Unit) {
+        val panelListenerId = "panels_validated_${clientDocName}_${System.currentTimeMillis()}"
+
+        val panelRegistration = firestore.collection("$BASE_PATH/$clientDocName/panels")
+            .addSnapshotListener(MetadataChanges.INCLUDE) { panelsSnapshot, error ->
+                if (error != null) {
+                    Log.e(TAG, "Error in panels listener for client $clientDocName", error)
+                    onUpdate(emptyList())
+                    return@addSnapshotListener
+                }
+
+                if (panelsSnapshot == null) {
+                    onUpdate(emptyList())
+                    return@addSnapshotListener
+                }
+
+                if (panelsSnapshot.metadata.isFromCache) {
+                    Log.w(TAG, "Cache data detected for client $clientDocName")
+
+                    coroutineScope.launch {
+                        val serverPanels = verifyPanelsInServer(clientDocName)
+
+                        if (serverPanels.isEmpty() && !panelsSnapshot.isEmpty) {
+                            Log.w(TAG, "Obsolete cache for client $clientDocName")
+                            onUpdate(emptyList())
+                        } else {
+                            processClientPanels(clientDocName, panelsSnapshot.documents, onUpdate)
+                        }
+                    }
+                    return@addSnapshotListener
+                }
+
+                coroutineScope.launch {
+                    processClientPanels(clientDocName, panelsSnapshot.documents, onUpdate)
+                }
+            }
+
+        activeListeners[panelListenerId] = panelRegistration
+    }
+
+    private suspend fun processAdminPanels(
+        documents: List<com.google.firebase.firestore.DocumentSnapshot>,
+        onUpdate: (List<Panel>) -> Unit
+    ) {
+        if (documents.isEmpty()) {
+            Log.d(TAG, "No documents from admin query, trying alternative method")
+            val alternativePanels = getAdminPanelsAlternative()
+            setupRelayListeners(null, alternativePanels, onUpdate)
+            onUpdate(alternativePanels)
+            return
+        }
+
+        val panels = mutableListOf<Panel>()
+
+        for (doc in documents) {
+            if (doc.exists()) {
+                val documentPath = doc.reference.path
+                val pathParts = documentPath.split("/")
+
+                val clientsIndex = pathParts.indexOf("clients")
+                if (clientsIndex != -1 && clientsIndex + 1 < pathParts.size) {
+                    val clientId = pathParts[clientsIndex + 1]
+                    val panel = loadCompletePanel(clientId, doc)
+
+                    if (panel != null) {
+                        panels.add(panel)
+                        Log.d(TAG, "Admin panel loaded: ${panel.name}, relays: ${panel.relays.size}")
+                    }
+                }
+            }
+        }
+
+        setupRelayListeners(null, panels, onUpdate)
+        onUpdate(panels)
+        Log.d(TAG, "Admin panels loaded: ${panels.size}")
+    }
+
+    private suspend fun processClientPanels(
+        clientDocName: String,
+        documents: List<com.google.firebase.firestore.DocumentSnapshot>,
+        onUpdate: (List<Panel>) -> Unit
+    ) {
+        val panels = mutableListOf<Panel>()
+
+        for (doc in documents) {
+            if (doc.exists()) {
+                val panel = loadCompletePanel(clientDocName, doc)
+                if (panel != null) {
+                    panels.add(panel)
+                    Log.d(TAG, "Client panel loaded: ${panel.name}, relays: ${panel.relays.size}")
+                }
+            }
+        }
+
+        setupRelayListeners(clientDocName, panels, onUpdate)
+        onUpdate(panels)
+        Log.d(TAG, "Client panels loaded for $clientDocName: ${panels.size}")
+    }
 
     private suspend fun loadCompletePanel(
         clientDocName: String,
@@ -178,99 +500,6 @@ class PanelRepository @Inject constructor(
             Log.e(TAG, "Error loading ESP32 status $esp32Id", e)
             ESP32Device.STATUS_OFFLINE
         }
-    }
-
-    private fun setupClientPanelsFlow(clientDocName: String, onUpdate: (List<Panel>) -> Unit) {
-        val panelListenerId = "panels_${clientDocName}_${System.currentTimeMillis()}"
-
-        val panelRegistration = firestore.collection("$BASE_PATH/$clientDocName/panels")
-            .addSnapshotListener { panelsSnapshot, error ->
-                if (error != null) {
-                    Log.e(TAG, "Error in panels listener for client $clientDocName", error)
-                    onUpdate(emptyList())
-                    return@addSnapshotListener
-                }
-
-                if (panelsSnapshot == null) {
-                    onUpdate(emptyList())
-                    return@addSnapshotListener
-                }
-
-                coroutineScope.launch {
-                    try {
-                        val panels = mutableListOf<Panel>()
-
-                        for (doc in panelsSnapshot.documents) {
-                            if (doc.exists()) {
-                                val panel = loadCompletePanel(clientDocName, doc)
-                                if (panel != null) {
-                                    panels.add(panel)
-                                    Log.d(TAG, "Client panel loaded: ${panel.name}, relays: ${panel.relays.size}")
-                                }
-                            }
-                        }
-
-                        setupRelayListeners(clientDocName, panels, onUpdate)
-                        onUpdate(panels)
-                        Log.d(TAG, "Client panels loaded for $clientDocName: ${panels.size}")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error processing panels for client $clientDocName", e)
-                        onUpdate(emptyList())
-                    }
-                }
-            }
-
-        activeListeners[panelListenerId] = panelRegistration
-    }
-
-    private fun setupAdminPanelsFlow(onUpdate: (List<Panel>) -> Unit) {
-        val panelListenerId = "admin_panels_${System.currentTimeMillis()}"
-
-        val panelRegistration = firestore.collectionGroup("panels")
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e(TAG, "Error in admin panels listener", error)
-                    onUpdate(emptyList())
-                    return@addSnapshotListener
-                }
-
-                if (snapshot == null) {
-                    onUpdate(emptyList())
-                    return@addSnapshotListener
-                }
-
-                coroutineScope.launch {
-                    try {
-                        val panels = mutableListOf<Panel>()
-
-                        for (doc in snapshot.documents) {
-                            if (doc.exists()) {
-                                val documentPath = doc.reference.path
-                                val pathParts = documentPath.split("/")
-
-                                if (pathParts.size >= 4) {
-                                    val clientId = pathParts[3]
-                                    val panel = loadCompletePanel(clientId, doc)
-
-                                    if (panel != null) {
-                                        panels.add(panel)
-                                        Log.d(TAG, "Admin panel loaded: ${panel.name}, relays: ${panel.relays.size}")
-                                    }
-                                }
-                            }
-                        }
-
-                        setupRelayListeners(null, panels, onUpdate)
-                        onUpdate(panels)
-                        Log.d(TAG, "Admin panels loaded: ${panels.size}")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error processing admin panels", e)
-                        onUpdate(emptyList())
-                    }
-                }
-            }
-
-        activeListeners[panelListenerId] = panelRegistration
     }
 
     private fun setupRelayListeners(clientDocName: String?, panels: List<Panel>, onUpdate: (List<Panel>) -> Unit) {

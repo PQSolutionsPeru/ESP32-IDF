@@ -331,6 +331,18 @@ static void mqtt_state_callback(mqtt_manager_state_t state, void *user_data) {
                     watchdog_manager_set_mode(WATCHDOG_MODE_RUNNING);
                 }
             }
+            
+            wifi_manager_state_t wifi_state = wifi_manager_get_state();
+            if (wifi_state == WIFI_MANAGER_STATE_STA_AP_MODE && 
+                wifi_manager_is_connected() && mqtt_manager_is_connected()) {
+                
+                vTaskDelay(pdMS_TO_TICKS(5000));
+                
+                if (wifi_manager_is_connected() && mqtt_manager_is_connected()) {
+                    ESP_LOGI(TAG, "WiFi and MQTT stable - switching to STA mode only");
+                    wifi_manager_set_sta_mode();
+                }
+            }
             break;
             
         case MQTT_MANAGER_STATE_DISCONNECTED:

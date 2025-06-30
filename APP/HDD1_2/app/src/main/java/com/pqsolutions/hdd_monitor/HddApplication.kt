@@ -43,7 +43,6 @@ class HddApplication : Application(), Configuration.Provider {
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
 
-    // Scope para operaciones en la aplicación
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override val workManagerConfiguration: Configuration
@@ -55,25 +54,16 @@ class HddApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
 
-        // Inicializar Firebase con reintentos
         initializeFirebaseWithRetry()
-
-        // Configurar Firestore para optimizar rendimiento
         setupFirestore()
-
-        // Crear canales de notificación
         createNotificationChannels()
 
-        // Iniciar servicio de monitoreo con delay para dar tiempo a Firebase
         applicationScope.launch {
-            delay(2000) // Esperar 2 segundos para asegurar inicialización
+            delay(2000)
             startMonitoringService()
         }
 
-        // Configurar la app para mantenerla viva
         setupKeepAlive()
-
-        // Programar trabajo periódico para verificar el servicio
         scheduleServiceCheck()
     }
 
@@ -86,16 +76,13 @@ class HddApplication : Application(), Configuration.Provider {
                 try {
                     FirebaseApp.initializeApp(this@HddApplication)
                     Log.d(TAG, "Firebase inicializado correctamente")
-
-                    // Inicializar FCM con reintento
                     initializeMessagingWithRetry()
                     break
-
                 } catch (e: Exception) {
                     Log.e(TAG, "Error inicializando Firebase, intento ${retries + 1}", e)
                     retries++
                     if (retries < maxRetries) {
-                        delay(2000L * retries) // Backoff exponencial
+                        delay(2000L * retries)
                     }
                 }
             }
@@ -107,14 +94,12 @@ class HddApplication : Application(), Configuration.Provider {
             FirebaseMessaging.getInstance().apply {
                 isAutoInitEnabled = true
 
-                // Suscribir a tópicos con manejo de errores
                 subscribeToTopic("panel_updates")
                     .addOnSuccessListener {
                         Log.d(TAG, "Suscrito a panel_updates")
                     }
                     .addOnFailureListener { e ->
                         Log.e(TAG, "Error suscribiendo a tópico, se reintentará", e)
-                        // Reintentar después de un delay
                         applicationScope.launch {
                             delay(5000)
                             subscribeToTopic("panel_updates")
@@ -141,15 +126,21 @@ class HddApplication : Application(), Configuration.Provider {
                     .setPersistenceEnabled(true)
                     .setCacheSizeBytes(FirebaseFirestoreSettings.CACHE_SIZE_UNLIMITED)
                     .setSslEnabled(true)
+                    .setHost("firestore.googleapis.com")
                     .build()
 
                 val firestore = FirebaseFirestore.getInstance()
                 firestore.firestoreSettings = settings
 
-                // No hacer disable/enable network aquí, causa problemas
                 Log.d(TAG, "Firestore configurado correctamente")
             } catch (e: Exception) {
                 Log.e(TAG, "Error configurando Firestore", e)
+                try {
+                    val basicSettings = FirebaseFirestoreSettings.Builder().build()
+                    FirebaseFirestore.getInstance().firestoreSettings = basicSettings
+                } catch (fallbackError: Exception) {
+                    Log.e(TAG, "Error crítico configurando Firestore", fallbackError)
+                }
             }
         }
     }
@@ -158,7 +149,6 @@ class HddApplication : Application(), Configuration.Provider {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-            // Canal para el servicio de monitoreo
             val serviceChannel = NotificationChannel(
                 "MonitoringServiceChannel",
                 "Estado del Servicio",
@@ -173,7 +163,6 @@ class HddApplication : Application(), Configuration.Provider {
             }
             notificationManager.createNotificationChannel(serviceChannel)
 
-            // Canal para eventos y alarmas
             val eventChannel = NotificationChannel(
                 "event_notifications",
                 getString(R.string.channel_name),
@@ -187,7 +176,6 @@ class HddApplication : Application(), Configuration.Provider {
             }
             notificationManager.createNotificationChannel(eventChannel)
 
-            // Canal para estado de panel
             val statusChannel = NotificationChannel(
                 "status_notifications",
                 "Estado del Panel",
@@ -199,7 +187,6 @@ class HddApplication : Application(), Configuration.Provider {
             }
             notificationManager.createNotificationChannel(statusChannel)
 
-            // Canal para relays
             val relayChannel = NotificationChannel(
                 "relay_notifications",
                 "Estado del Relay",
@@ -224,7 +211,6 @@ class HddApplication : Application(), Configuration.Provider {
             Log.d(TAG, "Servicio de monitoreo iniciado")
         } catch (e: Exception) {
             Log.e(TAG, "Error iniciando servicio de monitoreo", e)
-            // Reintentar después de un delay
             applicationScope.launch {
                 delay(5000)
                 startMonitoringService()
@@ -233,7 +219,6 @@ class HddApplication : Application(), Configuration.Provider {
     }
 
     private fun setupKeepAlive() {
-        // Solo verificar, no solicitar automáticamente
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val powerManager = getSystemService(POWER_SERVICE) as PowerManager
             if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {

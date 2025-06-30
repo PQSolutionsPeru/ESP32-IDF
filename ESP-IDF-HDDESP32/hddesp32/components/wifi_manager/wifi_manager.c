@@ -1123,15 +1123,15 @@ esp_err_t wifi_manager_handle_disconnection(const char *ap_ssid_prefix, const ch
     static int reconnect_attempts = 0;
     static int recovery_cycle = 0;
     static int64_t last_reconnect_time = 0;
-    static int64_t ap_mode_start_time = 0;
     static bool ap_mode_active = false;
     static int netif_cleanup_cycle = 0;
     int64_t current_time = esp_timer_get_time() / 1000;
     
     const int64_t RECONNECT_INTERVAL_MS = 8000;
-    const int64_t AP_MODE_TIMEOUT_MS = 60000;
-    const int64_t RECOVERY_CYCLE_TIMEOUT_MS = 300000;
     const int NETIF_CLEANUP_THRESHOLD = 50;
+    const int ATTEMPTS_BEFORE_AP = 5;
+    
+    wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
     
     if (wifi_manager_is_connected()) {
         reconnect_attempts = 0;
@@ -1143,43 +1143,8 @@ esp_err_t wifi_manager_handle_disconnection(const char *ap_ssid_prefix, const ch
     if (current_time - last_reconnect_time > RECONNECT_INTERVAL_MS) {
         last_reconnect_time = current_time;
         
-        if (!ap_mode_active) {
-            reconnect_attempts++;
-            netif_cleanup_cycle++;
-            
-            if (netif_cleanup_cycle >= NETIF_CLEANUP_THRESHOLD) {
-                wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
-                ESP_LOGI(TAG, "Performing netif cleanup after %d reconnections", netif_cleanup_cycle);
-                
-                esp_wifi_stop();
-                vTaskDelay(pdMS_TO_TICKS(500));
-                
-                if (cleanup_and_recreate_netifs(ctx) == ESP_OK) {
-                    ESP_LOGI(TAG, "Netifs recreated successfully");
-                    netif_cleanup_cycle = 0;
-                } else {
-                    ESP_LOGE(TAG, "Failed to recreate netifs");
-                }
-                
-                esp_wifi_start();
-                vTaskDelay(pdMS_TO_TICKS(1000));
-            }
-            
-            ESP_LOGI(TAG, "WiFi recovery cycle %d, reconnection attempt %d (cleanup cycle: %d)", 
-                     recovery_cycle + 1, reconnect_attempts, netif_cleanup_cycle);
-            
-            if (reconnect_attempts % 5 == 0 && netif_cleanup_cycle < NETIF_CLEANUP_THRESHOLD) {
-                esp_wifi_stop();
-                vTaskDelay(pdMS_TO_TICKS(1000));
-                esp_wifi_start();
-                vTaskDelay(pdMS_TO_TICKS(2000));
-            }
-            
-            esp_err_t ret = wifi_manager_connect_saved();
-            
-            if (reconnect_attempts >= max_attempts && ret != ESP_OK) {
-                ESP_LOGI(TAG, "Starting AP+STA mode for reconfiguration opportunity");
-                
+        if (!ctx->credentials_saved) {
+            if (!ap_mode_active) {
                 char ap_ssid[33];
                 esp_err_t ap_ret = wifi_manager_generate_ap_ssid(ap_ssid, sizeof(ap_ssid), ap_ssid_prefix);
                 if (ap_ret != ESP_OK) {
@@ -1187,40 +1152,70 @@ esp_err_t wifi_manager_handle_disconnection(const char *ap_ssid_prefix, const ch
                     return ESP_FAIL;
                 }
                 
-                ESP_LOGI(TAG, "Starting AP+STA with SSID: %s", ap_ssid);
+                ESP_LOGI(TAG, "No credentials - starting AP+STA with SSID: %s", ap_ssid);
                 
                 ap_ret = wifi_manager_start_sta_ap_mode(ap_ssid, ap_password);
                 if (ap_ret == ESP_OK) {
                     ap_mode_active = true;
-                    ap_mode_start_time = current_time;
                     reconnect_attempts = 0;
                 } else {
                     ESP_LOGE(TAG, "Failed to start AP+STA mode");
                 }
             }
-        } else {
-            if (current_time - ap_mode_start_time > AP_MODE_TIMEOUT_MS) {
-                ESP_LOGI(TAG, "AP+STA timeout reached, returning to saved network reconnection");
-                
-                wifi_manager_state_t current_state = wifi_manager_get_state();
-                if (current_state == WIFI_MANAGER_STATE_STA_AP_MODE || 
-                    current_state == WIFI_MANAGER_STATE_AP_MODE) {
-                    
-                    esp_err_t ret = esp_wifi_set_mode(WIFI_MODE_STA);
-                    if (ret == ESP_OK) {
-                        ap_mode_active = false;
-                        reconnect_attempts = 0;
-                        recovery_cycle++;
-                        
-                        if (recovery_cycle * RECOVERY_CYCLE_TIMEOUT_MS > current_time) {
-                            recovery_cycle = 0;
-                        }
-                        
-                        vTaskDelay(pdMS_TO_TICKS(2000));
-                        wifi_manager_connect_saved();
-                    }
-                }
+            return ESP_OK;
+        }
+        
+        reconnect_attempts++;
+        netif_cleanup_cycle++;
+        
+        if (netif_cleanup_cycle >= NETIF_CLEANUP_THRESHOLD) {
+            ESP_LOGI(TAG, "Performing netif cleanup after %d reconnections", netif_cleanup_cycle);
+            
+            esp_wifi_stop();
+            vTaskDelay(pdMS_TO_TICKS(500));
+            
+            if (cleanup_and_recreate_netifs(ctx) == ESP_OK) {
+                ESP_LOGI(TAG, "Netifs recreated successfully");
+                netif_cleanup_cycle = 0;
+            } else {
+                ESP_LOGE(TAG, "Failed to recreate netifs");
             }
+            
+            esp_wifi_start();
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+        
+        ESP_LOGI(TAG, "WiFi recovery cycle %d, reconnection attempt %d (cleanup cycle: %d)", 
+                 recovery_cycle + 1, reconnect_attempts, netif_cleanup_cycle);
+        
+        if (reconnect_attempts % 5 == 0 && netif_cleanup_cycle < NETIF_CLEANUP_THRESHOLD) {
+            esp_wifi_stop();
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            esp_wifi_start();
+            vTaskDelay(pdMS_TO_TICKS(2000));
+        }
+        
+        if (!ap_mode_active && reconnect_attempts >= ATTEMPTS_BEFORE_AP) {
+            char ap_ssid[33];
+            esp_err_t ap_ret = wifi_manager_generate_ap_ssid(ap_ssid, sizeof(ap_ssid), ap_ssid_prefix);
+            if (ap_ret != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to generate AP SSID");
+                return ESP_FAIL;
+            }
+            
+            ESP_LOGI(TAG, "Starting AP+STA with SSID: %s while continuing reconnection attempts", ap_ssid);
+            
+            ap_ret = wifi_manager_start_sta_ap_mode(ap_ssid, ap_password);
+            if (ap_ret == ESP_OK) {
+                ap_mode_active = true;
+            } else {
+                ESP_LOGE(TAG, "Failed to start AP+STA mode");
+            }
+        }
+        
+        esp_err_t ret = wifi_manager_connect_saved();
+        if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "Connection attempt failed: %s", esp_err_to_name(ret));
         }
     }
     
