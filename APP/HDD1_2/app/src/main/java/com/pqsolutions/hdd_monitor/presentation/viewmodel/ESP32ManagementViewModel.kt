@@ -43,6 +43,7 @@ class ESP32ManagementViewModel @Inject constructor(
 
     init {
         Log.d(TAG, "ESP32ManagementViewModel initialized")
+        _uiState.value = _uiState.value.copy(isLoading = true, error = null)
         loadData()
     }
 
@@ -58,11 +59,11 @@ class ESP32ManagementViewModel @Inject constructor(
     private fun loadData() {
         Log.d(TAG, "Iniciando carga de datos")
 
+        _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+
         panelsLoaded = false
         assignedESP32sLoaded = false
         unassignedESP32sLoaded = false
-
-        _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
         viewModelScope.launch {
             try {
@@ -155,20 +156,24 @@ class ESP32ManagementViewModel @Inject constructor(
 
     private fun checkAndUpdateLoadingState() {
         if (panelsLoaded && assignedESP32sLoaded && unassignedESP32sLoaded) {
-            if (_uiState.value.isLoading) {
+            val hasData = _uiState.value.panels.isNotEmpty() || _uiState.value.availableESP32s.isNotEmpty()
+            if (_uiState.value.isLoading && hasData) {
                 _uiState.value = _uiState.value.copy(isLoading = false)
-                Log.d(TAG, "Todos los datos cargados, ocultando loading")
+                Log.d(TAG, "Todos los datos cargados con contenido, ocultando loading")
+            } else if (_uiState.value.isLoading && !hasData) {
+                viewModelScope.launch {
+                    kotlinx.coroutines.delay(1000)
+                    if (_uiState.value.isLoading) {
+                        _uiState.value = _uiState.value.copy(isLoading = false)
+                        Log.d(TAG, "Timeout de loading alcanzado, ocultando loading")
+                    }
+                }
             }
         }
     }
 
     private fun cancelJobs() {
-        panelsJob?.cancel()
-        assignedESP32Job?.cancel()
-        unassignedESP32Job?.cancel()
-        panelsJob = null
-        assignedESP32Job = null
-        unassignedESP32Job = null
+        Log.d(TAG, "cancelJobs called - maintaining jobs for continuous monitoring")
     }
 
     private fun updatePanels(panels: List<Panel>) {
@@ -322,15 +327,6 @@ class ESP32ManagementViewModel @Inject constructor(
     }
 
     override fun onCleared() {
-        try {
-            super.onCleared()
-            Log.d(TAG, "ESP32ManagementViewModel limpiado - cancelando jobs")
-
-            cancelJobs()
-
-            Log.d(TAG, "ESP32ManagementViewModel limpiado exitosamente")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in ESP32ManagementViewModel.onCleared", e)
-        }
+        super.onCleared()
     }
 }

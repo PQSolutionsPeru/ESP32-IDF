@@ -848,6 +848,15 @@ class RelayControlRepository @Inject constructor(
 
         Log.d(TAG, "Configuración por lotes aplicada exitosamente")
     }
+
+    fun getListenerStats(): Map<String, Any> {
+        return mapOf(
+            "activeListeners" to activeListeners.size,
+            "maxListeners" to 20,
+            "pendingCommands" to pendingCommands.size,
+            "timestamp" to System.currentTimeMillis()
+        )
+    }
 }
 
 // Clases de datos fuera de la clase principal

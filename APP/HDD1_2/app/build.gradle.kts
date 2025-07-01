@@ -2,11 +2,11 @@ import java.io.FileInputStream
 import java.util.Properties
 
 plugins {
-    alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.hilt.android)
-    alias(libs.plugins.google.services)
-    id("com.google.firebase.crashlytics")
+    id("com.android.application") version "8.2.2"
+    id("org.jetbrains.kotlin.android") version "1.9.22"
+    id("com.google.dagger.hilt.android") version "2.50"
+    id("com.google.gms.google-services") version "4.4.2"
+    id("com.google.firebase.crashlytics") version "2.9.9"
     kotlin("kapt")
 }
 
@@ -81,7 +81,7 @@ android {
     }
 
     composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.compose.compiler.get()
+        kotlinCompilerExtensionVersion = "1.5.8"
     }
 
     packaging {
@@ -112,84 +112,88 @@ dependencies {
     implementation(composeBom)
     androidTestImplementation(composeBom)
 
-    implementation(libs.androidx.hilt.work)
-    kapt(libs.androidx.hilt.compiler)
+    // Hilt Work
+    implementation("androidx.hilt:hilt-work:1.2.0")
+    kapt("androidx.hilt:hilt-compiler:1.2.0")
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
 
-    implementation(libs.androidx.work.runtime.ktx)
+    // Firebase BOM - maneja las versiones de todas las librerías de Firebase
+    implementation(platform("com.google.firebase:firebase-bom:32.8.0"))
+    // Dependencias de Firebase SIN versiones - las maneja el BOM
+    implementation("com.google.firebase:firebase-messaging-ktx")
+    implementation("com.google.firebase:firebase-analytics-ktx")
+    implementation("com.google.firebase:firebase-auth-ktx")
+    implementation("com.google.firebase:firebase-firestore-ktx")
+    implementation("com.google.firebase:firebase-functions-ktx")
+    implementation("com.google.firebase:firebase-crashlytics-ktx")
 
-    implementation(platform(libs.firebase.bom.v3280))
+    // Hilt
+    implementation("com.google.dagger:hilt-android:2.50")
+    kapt("com.google.dagger:hilt-android-compiler:2.50")
+    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
-    implementation(libs.com.google.firebase.firebase.messaging.ktx2)
-    implementation(libs.com.google.firebase.firebase.analytics.ktx)
-    implementation(libs.com.google.firebase.firebase.auth.ktx2)
-    implementation(libs.com.google.firebase.firebase.firestore.ktx2)
-    implementation(libs.com.google.firebase.firebase.functions.ktx)
-    implementation(libs.google.firebase.crashlytics.ktx)
+    // Compose UI
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.material3:material3:1.2.1")
+    implementation("androidx.compose.runtime:runtime")
+    implementation("androidx.compose.animation:animation")
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material:material-icons-extended")
+    debugImplementation("androidx.compose.ui:ui-tooling")
 
-    implementation(libs.hilt.android)
-    kapt(libs.hilt.android.compiler)
-    implementation(libs.androidx.hilt.navigation.compose)
-    implementation(libs.androidx.hilt.work)
-    kapt(libs.androidx.hilt.compiler)
-
-    implementation(libs.ui)
-    implementation(libs.ui.graphics)
-    implementation(libs.ui.tooling.preview)
-    implementation("androidx.compose.material3:material3")
-    implementation(libs.androidx.runtime)
-    implementation(libs.androidx.animation)
-    implementation(libs.androidx.foundation)
-    implementation(libs.androidx.material.icons.extended)
-    debugImplementation(libs.ui.tooling)
-
-    implementation(libs.org.eclipse.paho.client.mqttv3)
+    // MQTT
+    implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5")
     implementation("org.eclipse.paho:org.eclipse.paho.android.service:1.1.1") {
         exclude(group = "com.android.support")
         exclude(module = "appcompat-v7")
         exclude(module = "support-v4")
     }
 
-    testImplementation(libs.junit)
-    testImplementation(libs.mockito.core)
-    testImplementation(libs.kotlinx.coroutines.test)
+    // Testing
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.mockito:mockito-core:5.7.0")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
 
-    androidTestImplementation(libs.androidx.test.ext.junit)
-    androidTestImplementation(libs.androidx.test.espresso.core)
-    androidTestImplementation(libs.ui.test.junit4)
-    debugImplementation(libs.ui.test.manifest)
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.activity.compose)
-    implementation(libs.androidx.room.ktx)
+    // AndroidX Core
+    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+    implementation("androidx.activity:activity-compose:1.8.2")
+    implementation("androidx.room:room-ktx:2.6.1")
 
-    implementation(libs.androidx.navigation.compose.v276)
-    implementation(libs.androidx.paging.compose)
+    // Navigation
+    implementation("androidx.navigation:navigation-compose:2.7.6")
+    implementation("androidx.paging:paging-compose:3.3.2")
 
-    implementation(libs.kotlinx.coroutines.android)
-    implementation(libs.kotlinx.coroutines.play.services)
+    // Coroutines
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
 
-    implementation(libs.play.services.base)
-    implementation(libs.play.services.auth)
+    // Google Play Services
+    implementation("com.google.android.gms:play-services-base:18.5.0")
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
 
-    implementation(libs.androidx.work.runtime.ktx)
+    // Lifecycle
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.6")
+    implementation("androidx.activity:activity-ktx:1.9.2")
 
-    implementation(libs.androidx.lifecycle.viewmodel.ktx)
-    implementation(libs.androidx.lifecycle.runtime.ktx.v286)
-    implementation(libs.androidx.activity.ktx)
+    // Dialogs
+    implementation("com.maxkeppeler.sheets-compose-dialogs:core:1.2.0")
+    implementation("com.maxkeppeler.sheets-compose-dialogs:calendar:1.2.0")
+    implementation("com.maxkeppeler.sheets-compose-dialogs:clock:1.2.0")
+    implementation("com.maxkeppeler.sheets-compose-dialogs:state:1.2.0")
 
-    implementation(libs.core)
-    implementation(libs.calendar)
-    implementation(libs.clock)
-    implementation(libs.state)
-
-    implementation(libs.androidx.datastore.preferences)
-
-    implementation(libs.androidx.multidex)
-
-    implementation(libs.play.services.nearby)
-
-    implementation(libs.androidx.localbroadcastmanager)
+    // Other
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
+    implementation("androidx.multidex:multidex:2.0.1")
+    implementation("com.google.android.gms:play-services-nearby:19.3.0")
+    implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
 }
 
 kapt {

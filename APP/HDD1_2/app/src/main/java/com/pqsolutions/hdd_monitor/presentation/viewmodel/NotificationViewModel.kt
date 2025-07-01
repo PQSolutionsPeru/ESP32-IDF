@@ -264,16 +264,7 @@ class NotificationViewModel @Inject constructor(
     }
 
     override fun onCleared() {
-        try {
-            Log.d(TAG, "onCleared: Limpiando recursos")
-            notificationRepository.clearListeners()
-            _uiState.value = NotificationUiState()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error durante onCleared", e)
-        } finally {
-            super.onCleared()
-            Log.d(TAG, "ViewModel cleared")
-        }
+        super.onCleared()
     }
 
     fun restartNotificationCollection() {

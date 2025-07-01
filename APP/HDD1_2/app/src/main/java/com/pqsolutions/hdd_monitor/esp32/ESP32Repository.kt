@@ -24,6 +24,8 @@ class ESP32Repository @Inject constructor(
         private const val TAG = "ESP32Repository"
         private const val ESP32_COLLECTION = "hdd-monitor/esp32/registered"
         private const val BASE_PATH = "hdd-monitor/accounts/clients"
+        private const val MAX_LISTENERS = 50
+        private var lastCleanup = 0L
     }
 
     private val activeListeners = ConcurrentHashMap<String, ListenerRegistration>()
@@ -633,5 +635,18 @@ class ESP32Repository @Inject constructor(
         }
 
         Log.d(TAG, "Listeners de ESP32 limpiados correctamente")
+    }
+
+    fun getListenerStats(): Map<String, Any> {
+        return mapOf(
+            "activeListeners" to activeListeners.size,
+            "maxListeners" to MAX_LISTENERS,
+            "listenersByClient" to activeListeners.keys.groupBy { key ->
+                key.split("_").getOrNull(1) ?: "unknown"
+            }.mapValues { it.value.size },
+            "lastCleanup" to lastCleanup,
+            "oldestListener" to if (activeListeners.isNotEmpty())
+                System.currentTimeMillis() - 300000L else 0L
+        )
     }
 }

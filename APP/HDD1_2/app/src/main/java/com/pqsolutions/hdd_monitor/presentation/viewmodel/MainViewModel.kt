@@ -18,7 +18,6 @@ import com.pqsolutions.hdd_monitor.data.UserData
 import com.pqsolutions.hdd_monitor.data.UserPreferences
 import com.pqsolutions.hdd_monitor.data.UserRepository
 import com.pqsolutions.hdd_monitor.domain.model.UserRole
-import com.pqsolutions.hdd_monitor.presentation.navigation.Screen
 import com.pqsolutions.hdd_monitor.presentation.state.MainUiEvent
 import com.pqsolutions.hdd_monitor.presentation.state.MainUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -29,7 +28,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -99,16 +97,11 @@ class MainViewModel @Inject constructor(
                     isLoggedIn = true,
                     userData = savedUser
                 )
-                startSessionCheck()
-                checkPendingNotifications()
             }
 
             combineUserPreferences().collect { state ->
                 _uiState.value = state
                 Log.d(TAG, "UI State updated")
-                if (state.isLoggedIn) {
-                    checkPendingNotifications()
-                }
             }
         }
 
@@ -240,7 +233,6 @@ class MainViewModel @Inject constructor(
     private suspend fun handleLoginSuccess(user: UserData) {
         userPreferences.setUserData(user)
         updateFCMToken()
-        startSessionCheck()
         _uiState.value = _uiState.value.copy(
             isLoading = false,
             isLoggedIn = true,
@@ -248,7 +240,6 @@ class MainViewModel @Inject constructor(
             error = null
         )
         Log.d(TAG, "Login successful for user: ${user.name}")
-        checkPendingNotifications()
     }
 
     private fun handleLoginFailure(e: Throwable) {
@@ -271,12 +262,6 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             Log.d(TAG, "Attempting logout")
             try {
-                sessionCheckJob?.cancel()
-                sessionCheckJob = null
-                panelRepository.clearListeners()
-                notificationRepository.clearListeners()
-                eventRepository.clearListeners()
-
                 _navigateToRelayControl.value = false
 
                 _uiState.value = _uiState.value.copy(
@@ -298,11 +283,7 @@ class MainViewModel @Inject constructor(
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "Logout failed: ${e.message}", e)
-                try {
-                    userPreferences.clearUserData()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to clear user data during logout error recovery", e)
-                }
+                userPreferences.clearUserData()
             }
         }
     }
@@ -310,12 +291,6 @@ class MainViewModel @Inject constructor(
     private fun handleLogout() {
         viewModelScope.launch {
             Log.d(TAG, "Handling automatic logout")
-
-            sessionCheckJob?.cancel()
-            sessionCheckJob = null
-            panelRepository.clearListeners()
-            notificationRepository.clearListeners()
-            eventRepository.clearListeners()
 
             _navigateToRelayControl.value = false
 
@@ -466,7 +441,6 @@ class MainViewModel @Inject constructor(
         super.onCleared()
         sessionCheckJob?.cancel()
         pendingNotificationsJob?.cancel()
-        eventRepository.clearListeners()
         LocalBroadcastManager.getInstance(context).unregisterReceiver(panelUpdateReceiver)
     }
 }

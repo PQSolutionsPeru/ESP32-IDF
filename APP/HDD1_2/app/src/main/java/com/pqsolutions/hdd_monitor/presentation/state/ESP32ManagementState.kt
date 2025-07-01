@@ -7,24 +7,18 @@ import com.pqsolutions.hdd_monitor.esp32.ESP32Device
  * Estado de la UI para la gestión de ESP32s
  */
 data class ESP32ManagementState(
-    val isLoading: Boolean = false,
+    val isLoading: Boolean = true,
     val panels: List<Panel> = emptyList(),
     val availableESP32s: List<ESP32Device> = emptyList(),
-    val esp32StatusMap: Map<String, String> = emptyMap(), // ESP32_ID -> Status
+    val esp32StatusMap: Map<String, String> = emptyMap(),
     val onlineESP32Count: Int = 0,
     val error: String? = null,
     val lastUpdate: Long = System.currentTimeMillis(),
-
-    // Estados de filtros y búsqueda
     val searchQuery: String = "",
     val statusFilter: ESP32StatusFilter = ESP32StatusFilter.ALL,
     val showOnlyAvailable: Boolean = false,
-
-    // Estados de operaciones
     val operationInProgress: Boolean = false,
     val lastOperationResult: ESP32OperationResult? = null,
-
-    // Información adicional
     val userRole: String = "USER",
     val clientName: String = "",
     val totalESP32Count: Int = 0

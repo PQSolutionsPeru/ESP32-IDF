@@ -126,7 +126,11 @@ fun UserDashboardScreen(
                     .weight(1f)
                     .padding(horizontal = 16.dp)
             ) {
-                if (uiState.panels.isEmpty()) {
+                if (uiState.isLoading) {
+                    item {
+                        LoadingContent()
+                    }
+                } else if (uiState.panels.isEmpty()) {
                     item {
                         EmptyPanelsContent()
                     }
@@ -184,6 +188,24 @@ private fun DashboardActions(
                 onManageESP32Click()
             },
             text = "Gestionar ESP32"
+        )
+    }
+}
+
+@Composable
+private fun LoadingContent() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        CircularProgressIndicator()
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Cargando paneles...",
+            style = MaterialTheme.typography.bodyLarge
         )
     }
 }

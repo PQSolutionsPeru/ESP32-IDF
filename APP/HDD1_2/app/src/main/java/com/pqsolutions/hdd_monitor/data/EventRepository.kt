@@ -418,4 +418,12 @@ class EventRepository @Inject constructor(
         eventListeners.forEach { it.remove() }
         eventListeners.clear()
     }
+
+    fun getListenerStats(): Map<String, Any> {
+        return mapOf(
+            "activeListeners" to eventListeners.size,
+            "maxListeners" to 10,
+            "timestamp" to System.currentTimeMillis()
+        )
+    }
 }

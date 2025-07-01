@@ -5,10 +5,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
-import android.provider.Settings
 import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.BackoffPolicy
@@ -29,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
@@ -38,6 +37,8 @@ class HddApplication : Application(), Configuration.Provider {
     companion object {
         private const val TAG = "HddApplication"
         private const val SERVICE_CHECK_WORK = "service_check_work"
+        private const val MEMORY_CHECK_INTERVAL = 120000L
+        private const val MAX_MEMORY_USAGE_MB = 400L
     }
 
     @Inject
@@ -65,6 +66,7 @@ class HddApplication : Application(), Configuration.Provider {
 
         setupKeepAlive()
         scheduleServiceCheck()
+        startMemoryMonitoring()
     }
 
     private fun initializeFirebaseWithRetry() {
@@ -234,7 +236,7 @@ class HddApplication : Application(), Configuration.Provider {
             .build()
 
         val serviceCheckWork = PeriodicWorkRequestBuilder<ServiceCheckWorker>(
-            15, TimeUnit.MINUTES)
+            2, TimeUnit.HOURS)
             .setConstraints(constraints)
             .setBackoffCriteria(
                 BackoffPolicy.LINEAR,
@@ -250,6 +252,47 @@ class HddApplication : Application(), Configuration.Provider {
             serviceCheckWork
         )
 
-        Log.d(TAG, "Service check work programado")
+        Log.d(TAG, "Service check work programado cada 2 horas")
+    }
+
+    private fun startMemoryMonitoring() {
+        applicationScope.launch {
+            while (true) {
+                try {
+                    val runtime = Runtime.getRuntime()
+                    val memoryUsage = (runtime.totalMemory() - runtime.freeMemory()) / 1024 / 1024
+
+                    if (memoryUsage > MAX_MEMORY_USAGE_MB) {
+                        Log.w(TAG, "Memoria alta detectada: ${memoryUsage}MB")
+                        System.gc()
+                    }
+
+                    delay(MEMORY_CHECK_INTERVAL)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error en monitoreo de memoria", e)
+                    delay(60000)
+                }
+            }
+        }
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        Log.w(TAG, "Memoria baja detectada")
+        System.gc()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        when (level) {
+            TRIM_MEMORY_RUNNING_CRITICAL -> {
+                Log.w(TAG, "Memoria crítica detectada")
+                System.gc()
+            }
+            TRIM_MEMORY_RUNNING_LOW -> {
+                Log.w(TAG, "Memoria baja detectada")
+                System.gc()
+            }
+        }
     }
 }

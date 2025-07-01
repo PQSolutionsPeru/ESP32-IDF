@@ -45,7 +45,6 @@ class DashboardViewModel @Inject constructor(
 
         _uiState.update { it.copy(isLoading = true, error = null) }
 
-        panelsJob?.cancel()
         panelsJob = viewModelScope.launch {
             try {
                 val currentUser = userRepository.getCurrentUser()
@@ -156,18 +155,7 @@ class DashboardViewModel @Inject constructor(
     }
 
     override fun onCleared() {
-        try {
-            super.onCleared()
-            Log.d(TAG, "DashboardViewModel clearing")
-
-            panelsJob?.cancel()
-            panelsJob = null
-            panelRepository.clearListeners()
-
-            Log.d(TAG, "DashboardViewModel cleared successfully")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in DashboardViewModel.onCleared", e)
-        }
+        super.onCleared()
     }
 
     data class DashboardUiState(

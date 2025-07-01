@@ -27,6 +27,8 @@ class NotificationRepository @Inject constructor(
         private const val DATE_FORMAT = "dd/MM/yyyy, HH:mm"
         private const val MAX_NOTIFICATIONS = 20
         private const val HOURS_TO_KEEP = 24L
+        private const val MAX_LISTENERS = 20
+        private var lastCleanup = 0L
     }
 
     private val activeListeners = mutableListOf<ListenerRegistration>()
@@ -400,5 +402,14 @@ class NotificationRepository @Inject constructor(
             .await()
 
         Log.d(TAG, "Notification deleted: $notificationDocName")
+    }
+
+    fun getListenerStats(): Map<String, Any> {
+        return mapOf(
+            "activeListeners" to activeListeners.size,
+            "maxListeners" to MAX_LISTENERS,
+            "listenersByClient" to mapOf<String, Int>(),
+            "lastCleanup" to lastCleanup
+        )
     }
 }

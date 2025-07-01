@@ -34,11 +34,128 @@ class PanelRepository @Inject constructor(
         private const val MAX_RETRIES = 3
         private const val INITIAL_RETRY_DELAY = 500L
         private const val SERVER_VALIDATION_INTERVAL = 30000L
+        private const val MAX_ACTIVE_LISTENERS = 50
+        private const val CLEANUP_INTERVAL = 300000L
+        private const val STALE_LISTENER_TIMEOUT = 600000L
     }
 
-    private val activeListeners = ConcurrentHashMap<String, ListenerRegistration>()
+    private val activeListeners = ConcurrentHashMap<String, ListenerInfo>()
     private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var lastServerValidation = 0L
+    private var lastCleanup = 0L
+    private var reconnectionAttempts = 0
+
+    data class ListenerInfo(
+        val registration: ListenerRegistration,
+        val createdAt: Long,
+        val clientId: String,
+        val panelId: String,
+        val type: String
+    )
+
+    init {
+        startPeriodicCleanup()
+    }
+
+    private fun startPeriodicCleanup() {
+        coroutineScope.launch {
+            while (true) {
+                try {
+                    delay(CLEANUP_INTERVAL)
+                    performPeriodicCleanup()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error en limpieza periódica", e)
+                }
+            }
+        }
+    }
+
+    private fun cleanupExcessiveListeners() {
+        val sortedListeners = activeListeners.toList().sortedBy { it.second.createdAt }
+        val toRemove = sortedListeners.take(activeListeners.size - (MAX_ACTIVE_LISTENERS / 2))
+
+        toRemove.forEach { (key, _) ->
+            removeListener(key)
+        }
+    }
+
+    private fun addListener(
+        key: String,
+        registration: ListenerRegistration,
+        clientId: String,
+        panelId: String,
+        type: String
+    ): String {
+        if (activeListeners.size >= MAX_ACTIVE_LISTENERS) {
+            cleanupExcessiveListeners()
+        }
+
+        val finalKey = if (activeListeners.containsKey(key)) {
+            "${key}_${System.currentTimeMillis()}"
+        } else {
+            key
+        }
+
+        val info = ListenerInfo(
+            registration = registration,
+            createdAt = System.currentTimeMillis(),
+            clientId = clientId,
+            panelId = panelId,
+            type = type
+        )
+
+        activeListeners[finalKey] = info
+        return finalKey
+    }
+
+    private fun removeListener(key: String) {
+        activeListeners[key]?.let { info ->
+            try {
+                info.registration.remove()
+                activeListeners.remove(key)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error removiendo listener $key", e)
+                activeListeners.remove(key)
+            }
+        }
+    }
+
+    fun clearListeners() {
+        Log.d(TAG, "Limpiando ${activeListeners.size} listeners")
+
+        val listenersSnapshot = activeListeners.toMap()
+        activeListeners.clear()
+
+        listenersSnapshot.forEach { (key, info) ->
+            try {
+                info.registration.remove()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error removiendo listener: $key", e)
+            }
+        }
+
+        System.gc()
+    }
+
+    fun clearListenersForClient(clientId: String) {
+        val clientListeners = activeListeners.filter { (_, info) ->
+            info.clientId == clientId
+        }
+
+        clientListeners.keys.forEach { key ->
+            removeListener(key)
+        }
+    }
+
+    fun clearListenersForPanel(clientId: String, panelId: String) {
+        val panelListeners = activeListeners.filter { (_, info) ->
+            info.clientId == clientId && info.panelId == panelId
+        }
+
+        panelListeners.keys.forEach { key ->
+            removeListener(key)
+        }
+    }
 
     private suspend fun <T> withRetry(
         maxRetries: Int = MAX_RETRIES,
@@ -60,27 +177,10 @@ class PanelRepository @Inject constructor(
         error("This line should never be reached")
     }
 
-    fun clearListeners() {
-        Log.d(TAG, "Clearing ${activeListeners.size} active listeners")
-        val listenersToRemove = activeListeners.toMap()
-        activeListeners.clear()
-
-        listenersToRemove.forEach { (key, listener) ->
-            try {
-                listener.remove()
-                Log.d(TAG, "Removed listener: $key")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error removing listener $key", e)
-            }
-        }
-    }
-
     fun getPanels(clientDocName: String?): Flow<List<Panel>> = callbackFlow {
         Log.d(TAG, "getPanels called with clientDocName: $clientDocName")
 
         try {
-            trySend(emptyList())
-
             if (clientDocName != null) {
                 setupValidatedClientPanelsFlow(clientDocName) { panels ->
                     validateAndSend(panels, clientDocName) { validatedPanels ->
@@ -97,7 +197,6 @@ class PanelRepository @Inject constructor(
 
             awaitClose {
                 Log.d(TAG, "Closing panel flow for clientDocName: $clientDocName")
-                clearListeners()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error setting up panels listener", e)
@@ -269,8 +368,38 @@ class PanelRepository @Inject constructor(
 
                 val allPanels = mutableListOf<Panel>()
 
+                Log.d(TAG, "Loading existing panels initially for admin")
+                for (clientId in allClientIds) {
+                    try {
+                        val panelsSnapshot = firestore.collection("$BASE_PATH/$clientId/panels")
+                            .get()
+                            .await()
+
+                        val clientPanels = mutableListOf<Panel>()
+                        for (panelDoc in panelsSnapshot.documents) {
+                            if (panelDoc.exists()) {
+                                val panel = loadCompletePanel(clientId, panelDoc)
+                                if (panel != null) {
+                                    clientPanels.add(panel)
+                                    Log.d(TAG, "Initially loaded panel: ${panel.name} from client: $clientId")
+                                }
+                            }
+                        }
+
+                        allPanels.addAll(clientPanels)
+                        Log.d(TAG, "Client $clientId: loaded ${clientPanels.size} panels initially")
+
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error loading initial panels for client $clientId", e)
+                    }
+                }
+
+                Log.d(TAG, "Sending initial panels: ${allPanels.size} total")
+                setupRelayListeners(null, allPanels.toList(), onUpdate)
+                onUpdate(allPanels.toList())
+
                 allClientIds.forEach { clientId ->
-                    val clientListenerId = "admin_client_${clientId}_${System.currentTimeMillis()}"
+                    val clientListenerId = "admin_client_${clientId}"
 
                     val clientPanelRegistration = firestore.collection("$BASE_PATH/$clientId/panels")
                         .addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
@@ -308,7 +437,7 @@ class PanelRepository @Inject constructor(
                             }
                         }
 
-                    activeListeners[clientListenerId] = clientPanelRegistration
+                    addListener(clientListenerId, clientPanelRegistration, clientId, "", "admin_panels")
                 }
 
             } catch (e: Exception) {
@@ -319,7 +448,7 @@ class PanelRepository @Inject constructor(
     }
 
     private fun setupValidatedClientPanelsFlow(clientDocName: String, onUpdate: (List<Panel>) -> Unit) {
-        val panelListenerId = "panels_validated_${clientDocName}_${System.currentTimeMillis()}"
+        val panelListenerId = "panels_validated_${clientDocName}"
 
         val panelRegistration = firestore.collection("$BASE_PATH/$clientDocName/panels")
             .addSnapshotListener(MetadataChanges.INCLUDE) { panelsSnapshot, error ->
@@ -355,7 +484,7 @@ class PanelRepository @Inject constructor(
                 }
             }
 
-        activeListeners[panelListenerId] = panelRegistration
+        addListener(panelListenerId, panelRegistration, clientDocName, "", "client_panels")
     }
 
     private suspend fun processAdminPanels(
@@ -504,9 +633,10 @@ class PanelRepository @Inject constructor(
 
     private fun setupRelayListeners(clientDocName: String?, panels: List<Panel>, onUpdate: (List<Panel>) -> Unit) {
         panels.forEach { panel ->
-            val relayListenerId = "relays_${panel.clientName}_${panel.documentName}_${System.currentTimeMillis()}"
+            val relayListenerId = "relays_${panel.clientName}_${panel.documentName}"
 
-            if (activeListeners.containsKey(relayListenerId)) {
+            val existingListener = activeListeners[relayListenerId]
+            if (existingListener != null) {
                 return@forEach
             }
 
@@ -554,7 +684,7 @@ class PanelRepository @Inject constructor(
                     }
                 }
 
-            activeListeners[relayListenerId] = relayRegistration
+            addListener(relayListenerId, relayRegistration, panel.clientName, panel.documentName, "relay")
         }
     }
 
@@ -741,7 +871,7 @@ class PanelRepository @Inject constructor(
         }
 
         keysToRemove.forEach { key ->
-            activeListeners.remove(key)?.remove()
+            removeListener(key)
         }
     }
 
@@ -835,13 +965,55 @@ class PanelRepository @Inject constructor(
                 loadAndSendPanel()
             }
 
-        activeListeners[panelListenerId] = panelRegistration
-        activeListeners[relayListenerId] = relayRegistration
+        addListener(panelListenerId, panelRegistration, clientDocName, panelDocName, "panel_observer")
+        addListener(relayListenerId, relayRegistration, clientDocName, panelDocName, "relay_observer")
 
         awaitClose {
             Log.d(TAG, "Closing panel updates observation")
-            activeListeners.remove(panelListenerId)?.remove()
-            activeListeners.remove(relayListenerId)?.remove()
+            removeListener(panelListenerId)
+            removeListener(relayListenerId)
         }
     }.flowOn(Dispatchers.IO)
+
+    fun getListenerStats(): Map<String, Any> {
+        return mapOf(
+            "activeListeners" to activeListeners.size,
+            "maxListeners" to MAX_ACTIVE_LISTENERS,
+            "memoryUsageMB" to getMemoryUsage(),
+            "reconnectionAttempts" to reconnectionAttempts,
+            "listenersByType" to activeListeners.values.groupBy { it.type }.mapValues { it.value.size }
+        )
+    }
+
+    private fun getMemoryUsage(): Long {
+        val runtime = Runtime.getRuntime()
+        return (runtime.totalMemory() - runtime.freeMemory()) / 1024 / 1024
+    }
+
+    fun performPeriodicCleanup() {
+        if (System.currentTimeMillis() - lastCleanup < CLEANUP_INTERVAL) return
+
+        val currentTime = System.currentTimeMillis()
+        val staleListeners = activeListeners.filter { (_, info) ->
+            currentTime - info.createdAt > STALE_LISTENER_TIMEOUT
+        }
+
+        staleListeners.keys.forEach { key ->
+            removeListener(key)
+        }
+
+        if (activeListeners.size > MAX_ACTIVE_LISTENERS) {
+            cleanupExcessiveListeners()
+        }
+
+        lastCleanup = currentTime
+    }
+
+    fun forceCleanupAllListeners() {
+        Log.w(TAG, "LIMPIEZA FORZADA DE TODOS LOS LISTENERS")
+        val allKeys = activeListeners.keys.toList()
+        allKeys.forEach { key ->
+            removeListener(key)
+        }
+    }
 }

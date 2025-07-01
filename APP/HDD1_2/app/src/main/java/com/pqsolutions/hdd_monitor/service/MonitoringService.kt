@@ -44,7 +44,6 @@ class MonitoringService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "Servicio iniciado/reiniciado")
 
-        // Inmediatamente mostrar la notificación para cumplir con el requisito de Android
         try {
             startForeground(NOTIFICATION_ID, createNotification())
         } catch (e: Exception) {
@@ -52,18 +51,13 @@ class MonitoringService : Service() {
             startForeground(NOTIFICATION_ID, createFallbackNotification())
         }
 
-        // Después de mostrar la notificación, verificar el estado de login
         serviceScope.launch {
             try {
                 val isLoggedIn = userRepository.getCurrentUser() != null
                 if (!isLoggedIn) {
                     Log.d(TAG, "Usuario no logueado, deteniendo servicio")
                     stopSelf()
-                    return@launch
                 }
-
-                // Iniciar el monitoreo solo si el usuario está logueado
-                startMonitoringLoop()
             } catch (e: Exception) {
                 Log.e(TAG, "Error verificando estado de login", e)
                 stopSelf()

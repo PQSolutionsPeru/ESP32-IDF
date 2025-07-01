@@ -463,6 +463,6 @@ class PanelConfigurationViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        cancelJobs()
+        saveJob?.cancel()
     }
 }

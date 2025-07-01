@@ -2,11 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Permisos de Internet y Red -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-
-    <!-- Permisos de Notificaciones y Sistema -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -14,7 +11,6 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
-    <!-- Permisos específicos para Android 14 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"
         android:minSdkVersion="34"
         tools:targetApi="34" />
@@ -22,7 +18,6 @@
         android:minSdkVersion="34"
         tools:targetApi="34" />
 
-    <!-- Permisos de Bluetooth -->
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
@@ -30,7 +25,6 @@
         tools:targetApi="s" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
-    <!-- Características de hardware opcionales -->
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
     <uses-feature android:name="android.hardware.bluetooth" android:required="true" />
 
@@ -44,7 +38,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.HDD1_2"
-        android:usesCleartextTraffic="true"
+        android:usesCleartextTraffic="false"
         android:enableOnBackInvokedCallback="true"
         tools:targetApi="tiramisu">
 
@@ -55,12 +49,10 @@
             tools:node="remove">
         </provider>
 
-        <!-- Metadatos para Google Play Services -->
         <meta-data
             android:name="com.google.android.gms.version"
             android:value="@integer/google_play_services_version" />
 
-        <!-- Configuración de Firebase Cloud Messaging -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="event_notifications" />
@@ -73,7 +65,6 @@
             android:name="com.google.firebase.messaging.default_notification_color"
             android:resource="@android:color/holo_red_dark" />
 
-        <!-- Actividad principal -->
         <activity
             android:name=".presentation.MainActivity"
             android:exported="true"
@@ -91,21 +82,20 @@
             </intent-filter>
         </activity>
 
-        <!-- Servicio de Monitoreo -->
         <service
             android:name=".service.MonitoringService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="dataSync"
+            android:stopWithTask="false"
             tools:targetApi="34" />
 
-        <!-- Receptor de Arranque -->
         <receiver
             android:name=".service.BootReceiver"
             android:enabled="true"
             android:exported="false"
             android:directBootAware="true">
-            <intent-filter>
+            <intent-filter android:priority="1000">
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
@@ -113,7 +103,6 @@
             </intent-filter>
         </receiver>
 
-        <!-- Firebase Messaging Service -->
         <service
             android:name=".service.FirebaseMessagingService"
             android:directBootAware="true"
@@ -123,7 +112,6 @@
             </intent-filter>
         </service>
 
-        <!-- Servicio MQTT -->
         <service
             android:name="org.eclipse.paho.android.service.MqttService"
             android:exported="false">

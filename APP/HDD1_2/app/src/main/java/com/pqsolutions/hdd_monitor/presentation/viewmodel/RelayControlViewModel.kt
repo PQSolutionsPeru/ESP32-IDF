@@ -247,7 +247,5 @@ class RelayControlViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        Log.d(TAG, "RelayControlViewModel limpiado")
-        currentJob?.cancel()
     }
 }
