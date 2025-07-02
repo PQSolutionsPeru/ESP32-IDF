@@ -103,6 +103,22 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".service.KeepAliveReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter android:priority="1000">
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.PACKAGE_REPLACED" />
+                <data android:scheme="package" />
+            </intent-filter>
+            <intent-filter android:priority="1000">
+                <action android:name="android.intent.action.SCREEN_OFF" />
+                <action android:name="android.intent.action.SCREEN_ON" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name=".service.FirebaseMessagingService"
             android:directBootAware="true"

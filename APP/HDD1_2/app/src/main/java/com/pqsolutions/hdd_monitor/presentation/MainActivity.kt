@@ -71,7 +71,7 @@ class MainActivity : ComponentActivity() {
     ) { permissions ->
         val allGranted = permissions.entries.all { it.value }
         if (allGranted) {
-            startMonitoringService()
+            startMonitoringServiceWithRetry()
         } else {
             Log.d(TAG, "Algunos permisos fueron denegados")
         }
@@ -124,7 +124,7 @@ class MainActivity : ComponentActivity() {
         if (permissionsToRequest.isNotEmpty()) {
             requestPermissionLauncher.launch(permissionsToRequest)
         } else {
-            startMonitoringService()
+            startMonitoringServiceWithRetry()
         }
     }
 
@@ -133,7 +133,7 @@ class MainActivity : ComponentActivity() {
             val powerManager = getSystemService(POWER_SERVICE) as PowerManager
             if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
                 lifecycleScope.launch(Dispatchers.Main) {
-                    delay(5000)
+                    delay(2000)
                     if (!isFinishing && !isDestroyed) {
                         showBatteryOptimizationDialog()
                     }
@@ -146,15 +146,16 @@ class MainActivity : ComponentActivity() {
         if (!isFinishing && !isDestroyed) {
             try {
                 AlertDialog.Builder(this)
-                    .setTitle("Optimización de batería")
-                    .setMessage("Para asegurar el correcto funcionamiento de la aplicación, es necesario desactivar la optimización de batería. ¿Desea hacerlo ahora?")
-                    .setPositiveButton("Sí") { _, _ ->
+                    .setTitle("CRÍTICO: Optimización de batería")
+                    .setMessage("Para el funcionamiento 24/7 del sistema de monitoreo de incendios, DEBE desactivar la optimización de batería. Sin esto, las notificaciones pueden fallar.")
+                    .setPositiveButton("Configurar Ahora") { _, _ ->
                         requestBatteryOptimizationExemption()
                     }
-                    .setNegativeButton("Más tarde") { dialog, _ ->
+                    .setNegativeButton("Recordar después") { dialog, _ ->
                         dialog.dismiss()
+                        scheduleReminderForBatteryOptimization()
                     }
-                    .setCancelable(true)
+                    .setCancelable(false)
                     .show()
             } catch (e: Exception) {
                 Log.e(TAG, "Error mostrando diálogo de batería", e)
@@ -162,36 +163,77 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun startMonitoringService() {
-        try {
-            val serviceIntent = Intent(this, MonitoringService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(serviceIntent)
-            } else {
-                startService(serviceIntent)
+    private fun scheduleReminderForBatteryOptimization() {
+        lifecycleScope.launch {
+            delay(300000)
+            if (!isFinishing && !isDestroyed) {
+                val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+                if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
+                    showBatteryOptimizationDialog()
+                }
             }
-            Log.d(TAG, "Servicio de monitoreo iniciado correctamente")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error al iniciar el servicio de monitoreo", e)
+        }
+    }
+
+    private fun startMonitoringServiceWithRetry() {
+        lifecycleScope.launch {
+            var attempts = 0
+            val maxAttempts = 3
+
+            while (attempts < maxAttempts) {
+                try {
+                    val serviceIntent = Intent(this@MainActivity, MonitoringService::class.java)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        startForegroundService(serviceIntent)
+                    } else {
+                        startService(serviceIntent)
+                    }
+
+                    delay(2000)
+
+                    if (MonitoringService.isRunning()) {
+                        Log.d(TAG, "Servicio de monitoreo iniciado correctamente")
+                        break
+                    } else {
+                        attempts++
+                        if (attempts < maxAttempts) {
+                            Log.w(TAG, "Reintentando iniciar servicio (${attempts}/${maxAttempts})")
+                            delay(3000)
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error al iniciar el servicio de monitoreo, intento $attempts", e)
+                    attempts++
+                    if (attempts < maxAttempts) {
+                        delay(5000)
+                    }
+                }
+            }
+
+            if (!MonitoringService.isRunning()) {
+                Log.e(TAG, "CRÍTICO: No se pudo iniciar el servicio de monitoreo después de $maxAttempts intentos")
+            }
         }
     }
 
     private fun requestBatteryOptimizationExemption() {
-        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
-        if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
-            try {
-                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                    data = Uri.parse("package:$packageName")
-                }
-                startActivity(intent)
-            } catch (e: Exception) {
-                Log.e(TAG, "Error solicitando exención de optimización de batería", e)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+            if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
                 try {
-                    val settingsIntent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                    startActivity(settingsIntent)
-                } catch (e2: Exception) {
-                    Log.e(TAG, "No se pudo abrir la configuración de optimización de batería", e2)
-                    showAppSettings()
+                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error solicitando exención de optimización de batería", e)
+                    try {
+                        val settingsIntent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                        startActivity(settingsIntent)
+                    } catch (e2: Exception) {
+                        Log.e(TAG, "No se pudo abrir la configuración de optimización de batería", e2)
+                        showAppSettings()
+                    }
                 }
             }
         }
@@ -332,6 +374,14 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         Log.d(TAG, "onResume: Actividad en primer plano")
+
+        lifecycleScope.launch {
+            delay(1000)
+            if (!MonitoringService.isRunning()) {
+                Log.w(TAG, "Servicio no está corriendo en onResume, reiniciando")
+                startMonitoringServiceWithRetry()
+            }
+        }
     }
 
     override fun onPause() {

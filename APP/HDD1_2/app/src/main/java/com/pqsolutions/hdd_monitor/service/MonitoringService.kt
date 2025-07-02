@@ -5,9 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
-import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.google.firebase.messaging.FirebaseMessaging
 import com.pqsolutions.hdd_monitor.R
 import com.pqsolutions.hdd_monitor.data.UserRepository
 import com.pqsolutions.hdd_monitor.presentation.MainActivity
@@ -20,7 +20,6 @@ class MonitoringService : Service() {
     @Inject
     lateinit var userRepository: UserRepository
 
-    private var wakeLock: PowerManager.WakeLock? = null
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
     private val NOTIFICATION_ID = 1
@@ -29,20 +28,21 @@ class MonitoringService : Service() {
     companion object {
         private const val TAG = "MonitoringService"
         private var isServiceRunning = false
+        private const val SESSION_CHECK_INTERVAL = 300_000L // 5 minutos
+        private const val FCM_HEALTH_CHECK_INTERVAL = 1_800_000L // 30 minutos
 
         fun isRunning() = isServiceRunning
     }
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "Servicio creado")
+        Log.d(TAG, "Servicio 24/7 creado")
         createNotificationChannel()
-        acquireWakeLock()
         isServiceRunning = true
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "Servicio iniciado/reiniciado")
+        Log.d(TAG, "Servicio 24/7 iniciado (modo FCM-only)")
 
         try {
             startForeground(NOTIFICATION_ID, createNotification())
@@ -51,23 +51,13 @@ class MonitoringService : Service() {
             startForeground(NOTIFICATION_ID, createFallbackNotification())
         }
 
-        serviceScope.launch {
-            try {
-                val isLoggedIn = userRepository.getCurrentUser() != null
-                if (!isLoggedIn) {
-                    Log.d(TAG, "Usuario no logueado, deteniendo servicio")
-                    stopSelf()
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error verificando estado de login", e)
-                stopSelf()
-            }
-        }
+        startOptimizedMonitoring()
+        startPeriodicFCMValidation()
 
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
-    private fun startMonitoringLoop() {
+    private fun startOptimizedMonitoring() {
         serviceScope.launch {
             while (isActive) {
                 try {
@@ -78,10 +68,34 @@ class MonitoringService : Service() {
                         break
                     }
 
-                    delay(30_000) // 30 segundos
+                    Log.d(TAG, "Verificación de sesión OK, próxima en 5 minutos")
+                    delay(SESSION_CHECK_INTERVAL)
+
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error en el loop de monitoreo", e)
-                    delay(5_000) // Esperar 5 segundos antes de reintentar
+                    Log.e(TAG, "Error en verificación de sesión", e)
+                    delay(60_000L) // 1 minuto en caso de error
+                }
+            }
+        }
+    }
+
+    private fun startPeriodicFCMValidation() {
+        serviceScope.launch {
+            while (isActive) {
+                try {
+                    FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                        if (task.isSuccessful) {
+                            Log.d(TAG, "FCM token válido - sistema 24/7 operativo")
+                        } else {
+                            Log.w(TAG, "Advertencia: Problema con FCM token", task.exception)
+                        }
+                    }
+
+                    delay(FCM_HEALTH_CHECK_INTERVAL)
+
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error en validación FCM", e)
+                    delay(300_000L) // 5 minutos en caso de error
                 }
             }
         }
@@ -91,10 +105,10 @@ class MonitoringService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Estado del Servicio",
+                "Sistema 24/7 (Optimizado)",
                 NotificationManager.IMPORTANCE_MIN
             ).apply {
-                description = "Estado del servicio de monitoreo"
+                description = "Monitoreo optimizado para funcionamiento continuo"
                 setShowBadge(false)
                 enableLights(false)
                 enableVibration(false)
@@ -114,8 +128,8 @@ class MonitoringService : Service() {
         val pendingIntent = PendingIntent.getActivity(this, 0, intent, pendingIntentFlags)
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("HDD Monitor")
-            .setContentText("Monitoreando estado del panel")
+            .setContentTitle("HDD Monitor 24/7")
+            .setContentText("Sistema optimizado activo (FCM-only)")
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
@@ -129,66 +143,39 @@ class MonitoringService : Service() {
 
     private fun createFallbackNotification(): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("HDD Monitor")
+            .setContentTitle("HDD Monitor 24/7")
+            .setContentText("Sistema optimizado")
             .setSmallIcon(R.drawable.ic_notification)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .build()
     }
 
-    private fun acquireWakeLock() {
-        try {
-            wakeLock = (getSystemService(Context.POWER_SERVICE) as PowerManager).run {
-                newWakeLock(
-                    PowerManager.PARTIAL_WAKE_LOCK,
-                    "HddMonitor::MonitoringLock"
-                ).apply {
-                    acquire(24 * 60 * 60 * 1000L) // 24 horas
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error adquiriendo WakeLock", e)
-        }
-    }
-
-    private fun releaseWakeLock() {
-        try {
-            wakeLock?.let {
-                if (it.isHeld) {
-                    it.release()
-                }
-            }
-            wakeLock = null
-        } catch (e: Exception) {
-            Log.e(TAG, "Error liberando WakeLock", e)
-        }
-    }
-
     override fun onDestroy() {
-        Log.d(TAG, "Servicio siendo destruido")
+        Log.d(TAG, "Servicio 24/7 optimizado siendo destruido")
         isServiceRunning = false
         serviceJob.cancel()
-        releaseWakeLock()
         super.onDestroy()
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        Log.d(TAG, "Tarea removida")
+        Log.d(TAG, "Tarea removida - verificando reinicio automático")
         super.onTaskRemoved(rootIntent)
 
-        // Verificar estado de login antes de reiniciar
         serviceScope.launch {
             try {
                 val isLoggedIn = userRepository.getCurrentUser() != null
                 if (isLoggedIn) {
-                    Log.d(TAG, "Usuario logueado, reiniciando servicio")
+                    Log.d(TAG, "Usuario logueado, programando reinicio del servicio")
+                    // Pequeña pausa antes de reiniciar
+                    delay(2000)
                     startService(Intent(applicationContext, MonitoringService::class.java))
                 } else {
                     Log.d(TAG, "Usuario no logueado, no se reinicia el servicio")
                     stopSelf()
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error verificando estado de login", e)
+                Log.e(TAG, "Error verificando estado para reinicio", e)
                 stopSelf()
             }
         }
@@ -196,8 +183,19 @@ class MonitoringService : Service() {
 
     override fun onLowMemory() {
         super.onLowMemory()
-        Log.d(TAG, "Memoria baja detectada")
+        Log.d(TAG, "Memoria baja detectada - activando limpieza")
         System.gc()
+    }
+
+    fun getServiceStats(): Map<String, Any> {
+        return mapOf(
+            "isRunning" to isServiceRunning,
+            "sessionCheckInterval" to SESSION_CHECK_INTERVAL,
+            "fcmCheckInterval" to FCM_HEALTH_CHECK_INTERVAL,
+            "wakeLockUsed" to false,
+            "optimizedFor24x7" to true,
+            "timestamp" to System.currentTimeMillis()
+        )
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

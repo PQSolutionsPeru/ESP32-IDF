@@ -20,15 +20,16 @@ class NotificationHandler:
                 admin_ref = self.db.document(f'hdd-monitor/accounts/admins/{account_id}')
                 admin_doc = admin_ref.get()
                 if admin_doc.exists:
-                    return admin_doc.to_dict().get('name', 'Admin')
+                    name = admin_doc.to_dict().get('name', 'Admin')
+                    return f'El administrador {name}'
 
             clients_ref = self.db.collection('hdd-monitor/accounts/clients')
             for client in clients_ref.stream():
                 user_ref = client.reference.collection('users').document(account_id)
                 user_doc = user_ref.get()
                 if user_doc.exists:
-                    return user_doc.to_dict().get('name', 'Usuario')
-
+                    name = user_doc.to_dict().get('name', 'Usuario')
+                    return f'El usuario {name}'
             return 'Usuario desconocido'
             
         except Exception as e:

@@ -236,7 +236,7 @@ class HddApplication : Application(), Configuration.Provider {
             .build()
 
         val serviceCheckWork = PeriodicWorkRequestBuilder<ServiceCheckWorker>(
-            2, TimeUnit.HOURS)
+            10, TimeUnit.MINUTES)
             .setConstraints(constraints)
             .setBackoffCriteria(
                 BackoffPolicy.LINEAR,
@@ -252,7 +252,7 @@ class HddApplication : Application(), Configuration.Provider {
             serviceCheckWork
         )
 
-        Log.d(TAG, "Service check work programado cada 2 horas")
+        Log.d(TAG, "Service check work programado cada 10 minutos")
     }
 
     private fun startMemoryMonitoring() {
