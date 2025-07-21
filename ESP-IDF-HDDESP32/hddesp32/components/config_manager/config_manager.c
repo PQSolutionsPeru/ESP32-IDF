@@ -35,22 +35,13 @@ static void delayed_commit_callback(TimerHandle_t xTimer) {
 static esp_err_t schedule_commit(void) {
     int64_t current_time = esp_timer_get_time() / 1000;
     
-    if (current_time - last_commit_time < MIN_COMMIT_INTERVAL_MS) {
-        if (!pending_commit) {
-            pending_commit = true;
-            if (commit_timer) {
-                xTimerReset(commit_timer, pdMS_TO_TICKS(100));
-            }
+    if (!pending_commit) {
+        pending_commit = true;
+        if (commit_timer) {
+            xTimerReset(commit_timer, pdMS_TO_TICKS(100));
         }
-        return ESP_OK;
     }
-    
-    esp_err_t err = nvs_commit(config_handle);
-    if (err == ESP_OK) {
-        last_commit_time = current_time;
-        pending_commit = false;
-    }
-    return err;
+    return ESP_OK;
 }
 
 static bool value_changed_str(const char *key, const char *new_value) {

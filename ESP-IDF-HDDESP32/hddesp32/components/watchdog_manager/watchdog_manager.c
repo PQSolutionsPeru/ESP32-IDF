@@ -6,7 +6,7 @@
 #include "freertos/task.h"
 #include "freertos/timers.h"
 #include "freertos/semphr.h"
-#include "esp_log.h"
+#include "custom_logging.h"
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "esp_task_wdt.h"
@@ -80,9 +80,9 @@ static void init_default_configs(void) {
     watchdog_manager_context_t *ctx = &s_watchdog_ctx;
     
     ctx->configs[WATCHDOG_MODE_CONFIG] = (watchdog_config_t) {
-        .timeout_ms = 60000,
-        .feed_interval_ms = 15000,
-        .health_check_interval_ms = 20000,
+        .timeout_ms = 20000,
+        .feed_interval_ms = 5000,
+        .health_check_interval_ms = 8000,
         .memory_threshold_bytes = 40000,
         .enable_memory_check = true,
         .enable_wifi_check = false,
@@ -91,9 +91,9 @@ static void init_default_configs(void) {
     };
     
     ctx->configs[WATCHDOG_MODE_RUNNING] = (watchdog_config_t) {
-        .timeout_ms = 45000,
-        .feed_interval_ms = 12000,
-        .health_check_interval_ms = 18000,
+        .timeout_ms = 12000,
+        .feed_interval_ms = 3000,
+        .health_check_interval_ms = 5000,
         .memory_threshold_bytes = 35000,
         .enable_memory_check = true,
         .enable_wifi_check = true,
@@ -102,17 +102,17 @@ static void init_default_configs(void) {
     };
     
     ctx->configs[WATCHDOG_MODE_CRITICAL] = (watchdog_config_t) {
-        .timeout_ms = 20000,
-        .feed_interval_ms = 7000,
-        .health_check_interval_ms = 10000,
-        .memory_threshold_bytes = 25000,
+        .timeout_ms = 6000,
+        .feed_interval_ms = 2000,
+        .health_check_interval_ms = 3000,
+        .memory_threshold_bytes = 30000,
         .enable_memory_check = true,
         .enable_wifi_check = true,
         .enable_mqtt_check = true,
         .enable_task_monitoring = true
     };
     
-    ESP_LOGI(TAG, "Conservative watchdog configurations initialized");
+    LOG_I(TAG, "Aggressive watchdog configurations initialized");
 }
 
 static void health_check_timer_callback(TimerHandle_t xTimer) {
@@ -126,7 +126,7 @@ static void health_check_timer_callback(TimerHandle_t xTimer) {
     static size_t last_free = 0;
     
     if (last_free > 0 && last_free > current_free && (last_free - current_free) > 5000) {
-        ESP_LOGW(TAG, "Significant memory decrease detected: %zu -> %zu", last_free, current_free);
+        LOG_W(TAG, "Significant memory decrease detected: %zu -> %zu", last_free, current_free);
         mqtt_manager_emergency_memory_cleanup();
     }
     last_free = current_free;
@@ -137,14 +137,14 @@ static void health_check_timer_callback(TimerHandle_t xTimer) {
         watchdog_health_status_t old_status = ctx->health_status;
         ctx->health_status = status;
         
-        ESP_LOGI(TAG, "System health changed: %d -> %d", old_status, status);
+        LOG_I(TAG, "System health changed: %d -> %d", old_status, status);
         
         if (ctx->event_callback) {
             ctx->event_callback(status, WATCHDOG_CHECK_TASKS, ctx->event_user_data);
         }
         
         if (status == WATCHDOG_HEALTH_CRITICAL) {
-            ESP_LOGE(TAG, "CRITICAL health status - initiating recovery procedures");
+            LOG_E(TAG, "CRITICAL health status - initiating recovery procedures");
             
             if (ctx->current_mode != WATCHDOG_MODE_CRITICAL) {
                 watchdog_manager_set_mode(WATCHDOG_MODE_CRITICAL);
@@ -152,11 +152,11 @@ static void health_check_timer_callback(TimerHandle_t xTimer) {
             
             size_t free_heap = esp_get_free_heap_size();
             if (free_heap < 20000) {
-                ESP_LOGE(TAG, "Critical memory situation, forcing system reset");
+                LOG_E(TAG, "Critical memory situation, forcing system reset");
                 watchdog_manager_force_reset("critical_memory_shortage");
             }
         } else if (status == WATCHDOG_HEALTH_ERROR) {
-            ESP_LOGE(TAG, "System health error detected");
+            LOG_E(TAG, "System health error detected");
             watchdog_manager_force_reset("system_health_error");
         }
     }
@@ -186,11 +186,11 @@ static void feed_timer_callback(TimerHandle_t xTimer) {
     }
     
     if (!any_task_fed && ctx->registered_task_count > 0) {
-        ESP_LOGW(TAG, "No tasks have fed watchdog recently");
+        LOG_W(TAG, "No tasks have fed watchdog recently");
         ctx->error_count++;
         
         if (ctx->error_count > 10) {
-            ESP_LOGE(TAG, "All tasks appear to be starved");
+            LOG_E(TAG, "All tasks appear to be starved");
             
             if (ctx->event_callback) {
                 ctx->event_callback(WATCHDOG_HEALTH_CRITICAL, WATCHDOG_CHECK_TASKS, ctx->event_user_data);
@@ -210,7 +210,7 @@ static watchdog_health_status_t check_wifi_health(void) {
     }
     
     if (!wifi_manager_is_connected()) {
-        ESP_LOGW(TAG, "WiFi disconnected");
+        LOG_W(TAG, "WiFi disconnected");
         return WATCHDOG_HEALTH_WARNING;
     }
     
@@ -228,8 +228,8 @@ static watchdog_health_status_t check_memory_health(void) {
     size_t free_heap = esp_get_free_heap_size();
     size_t min_free = esp_get_minimum_free_heap_size();
     
-    uint32_t critical_threshold = 35000;
-    uint32_t warning_threshold = 55000;
+    uint32_t critical_threshold = 25000;
+    uint32_t warning_threshold = 40000;
     
     static int critical_count = 0;
     static int warning_count = 0;
@@ -237,11 +237,11 @@ static watchdog_health_status_t check_memory_health(void) {
     if (free_heap < critical_threshold || min_free < critical_threshold) {
         critical_count++;
         if (critical_count >= 3) {
-            ESP_LOGE(TAG, "CRITICAL memory confirmed: free=%zu min=%zu threshold=%" PRIu32 " (count=%d)", 
+            LOG_E(TAG, "CRITICAL memory confirmed: free=%zu min=%zu threshold=%" PRIu32 " (count=%d)", 
                     free_heap, min_free, critical_threshold, critical_count);
             return WATCHDOG_HEALTH_CRITICAL;
         } else {
-            ESP_LOGW(TAG, "Critical memory detected but not confirmed: count=%d/3", critical_count);
+            LOG_W(TAG, "Critical memory detected but not confirmed: count=%d/3", critical_count);
             return WATCHDOG_HEALTH_WARNING;
         }
     } else {
@@ -251,7 +251,7 @@ static watchdog_health_status_t check_memory_health(void) {
     if (free_heap < warning_threshold || min_free < warning_threshold) {
         warning_count++;
         if (warning_count >= 5) {
-            ESP_LOGW(TAG, "Low memory confirmed: free=%zu min=%zu threshold=%" PRIu32,
+            LOG_W(TAG, "Low memory confirmed: free=%zu min=%zu threshold=%" PRIu32,
                     free_heap, min_free, warning_threshold);
             return WATCHDOG_HEALTH_WARNING;
         }
@@ -278,7 +278,7 @@ static watchdog_health_status_t check_tasks_health(void) {
             int64_t time_since_feed = current_time - ctx->registered_tasks[i].last_feed_time;
             
             if (time_since_feed > max_timeout) {
-                ESP_LOGE(TAG, "Task %s hasn't fed watchdog in %lld ms",
+                LOG_E(TAG, "Task %s hasn't fed watchdog in %lld ms",
                         ctx->registered_tasks[i].name, time_since_feed);
                 return WATCHDOG_HEALTH_CRITICAL;
             }
@@ -297,7 +297,7 @@ static watchdog_health_status_t check_mqtt_health(void) {
     }
     
     if (!mqtt_manager_is_connected()) {
-        ESP_LOGW(TAG, "MQTT disconnected");
+        LOG_W(TAG, "MQTT disconnected");
         return WATCHDOG_HEALTH_WARNING;
     }
     
@@ -316,17 +316,17 @@ static esp_err_t setup_twdt(watchdog_manager_context_t *ctx) {
     if (status_ret == ESP_ERR_INVALID_STATE) {
         esp_err_t ret = esp_task_wdt_init(&twdt_config);
         if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to initialize TWDT: %s", esp_err_to_name(ret));
+            LOG_E(TAG, "Failed to initialize TWDT: %s", esp_err_to_name(ret));
             return ret;
         }
-        ESP_LOGI(TAG, "TWDT initialized with %" PRIu32 "ms timeout", twdt_config.timeout_ms);
+        LOG_I(TAG, "TWDT initialized with %" PRIu32 "ms timeout", twdt_config.timeout_ms);
     } else {
         esp_err_t ret = esp_task_wdt_reconfigure(&twdt_config);
         if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to reconfigure TWDT: %s", esp_err_to_name(ret));
+            LOG_E(TAG, "Failed to reconfigure TWDT: %s", esp_err_to_name(ret));
             return ret;
         }
-        ESP_LOGI(TAG, "TWDT reconfigured with %" PRIu32 "ms timeout", twdt_config.timeout_ms);
+        LOG_I(TAG, "TWDT reconfigured with %" PRIu32 "ms timeout", twdt_config.timeout_ms);
     }
     
     return ESP_OK;
@@ -336,17 +336,17 @@ esp_err_t watchdog_manager_init(void) {
     watchdog_manager_context_t *ctx = &s_watchdog_ctx;
     
     if (ctx->initialized) {
-        ESP_LOGW(TAG, "Already initialized");
+        LOG_W(TAG, "Already initialized");
         return ESP_ERR_INVALID_STATE;
     }
     
-    ESP_LOGI(TAG, "Initializing Watchdog Manager");
+    LOG_I(TAG, "Initializing Watchdog Manager");
     
     memset(ctx, 0, sizeof(watchdog_manager_context_t));
     
     ctx->mutex = xSemaphoreCreateMutex();
     if (ctx->mutex == NULL) {
-        ESP_LOGE(TAG, "Failed to create mutex");
+        LOG_E(TAG, "Failed to create mutex");
         return ESP_ERR_NO_MEM;
     }
     
@@ -356,7 +356,7 @@ esp_err_t watchdog_manager_init(void) {
     
     esp_err_t ret = setup_twdt(ctx);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "TWDT setup failed: %s", esp_err_to_name(ret));
+        LOG_E(TAG, "TWDT setup failed: %s", esp_err_to_name(ret));
         vSemaphoreDelete(ctx->mutex);
         return ret;
     }
@@ -379,7 +379,7 @@ esp_err_t watchdog_manager_init(void) {
     );
     
     if (ctx->health_check_timer == NULL || ctx->feed_timer == NULL) {
-        ESP_LOGE(TAG, "Failed to create timers");
+        LOG_E(TAG, "Failed to create timers");
         if (ctx->mutex) {
             vSemaphoreDelete(ctx->mutex);
         }
@@ -399,7 +399,7 @@ esp_err_t watchdog_manager_init(void) {
     xTimerStart(ctx->health_check_timer, 0);
     xTimerStart(ctx->feed_timer, 0);
     
-    ESP_LOGI(TAG, "Watchdog Manager initialized successfully with TWDT active");
+    LOG_I(TAG, "Watchdog Manager initialized successfully with TWDT active");
     return ESP_OK;
 }
 
@@ -410,7 +410,7 @@ esp_err_t watchdog_manager_deinit(void) {
         return ESP_ERR_INVALID_STATE;
     }
     
-    ESP_LOGI(TAG, "Deinitializing Watchdog Manager");
+    LOG_I(TAG, "Deinitializing Watchdog Manager");
     
     if (ctx->health_check_timer) {
         xTimerStop(ctx->health_check_timer, portMAX_DELAY);
@@ -434,7 +434,7 @@ esp_err_t watchdog_manager_deinit(void) {
     
     memset(ctx, 0, sizeof(watchdog_manager_context_t));
     
-    ESP_LOGI(TAG, "Watchdog Manager deinitialized");
+    LOG_I(TAG, "Watchdog Manager deinitialized");
     return ESP_OK;
 }
 
@@ -451,7 +451,9 @@ esp_err_t watchdog_manager_set_mode(watchdog_mode_t mode) {
     
     if (xSemaphoreTake(ctx->mutex, pdMS_TO_TICKS(5000)) == pdTRUE) {
         if (mode != ctx->current_mode) {
-            ESP_LOGI(TAG, "Changing mode from %d to %d", ctx->current_mode, mode);
+            LOG_I(TAG, "Changing mode from %d to %d", ctx->current_mode, mode);
+            
+            vTaskSuspendAll();
             
             ctx->current_mode = mode;
             
@@ -462,22 +464,25 @@ esp_err_t watchdog_manager_set_mode(watchdog_mode_t mode) {
             };
             
             esp_err_t ret = esp_task_wdt_reconfigure(&twdt_config);
+            
+            xTaskResumeAll();
+            
             if (ret != ESP_OK) {
-                ESP_LOGW(TAG, "Failed to reconfigure TWDT for mode %d: %s", mode, esp_err_to_name(ret));
+                LOG_W(TAG, "Failed to reconfigure TWDT for mode %d: %s", mode, esp_err_to_name(ret));
             } else {
-                ESP_LOGI(TAG, "TWDT reconfigured for mode %d with %" PRIu32 "ms timeout", mode, twdt_config.timeout_ms);
+                LOG_I(TAG, "TWDT reconfigured for mode %d with %" PRIu32 "ms timeout", mode, twdt_config.timeout_ms);
             }
             
             if (ctx->health_check_timer) {
                 xTimerChangePeriod(ctx->health_check_timer,
                                   pdMS_TO_TICKS(ctx->configs[mode].health_check_interval_ms),
-                                  pdMS_TO_TICKS(1000));
+                                  pdMS_TO_TICKS(2000));
             }
                               
             if (ctx->feed_timer) {
                 xTimerChangePeriod(ctx->feed_timer,
                                   pdMS_TO_TICKS(ctx->configs[mode].feed_interval_ms),
-                                  pdMS_TO_TICKS(1000));
+                                  pdMS_TO_TICKS(2000));
             }
         }
         
@@ -515,27 +520,27 @@ esp_err_t watchdog_manager_register_task(TaskHandle_t task_handle, const char *t
     }
     
     if (xSemaphoreTake(ctx->mutex, pdMS_TO_TICKS(10000)) != pdTRUE) {
-        ESP_LOGE(TAG, "Could not acquire mutex to register task %s", task_name);
+        LOG_E(TAG, "Could not acquire mutex to register task %s", task_name);
         return ESP_ERR_TIMEOUT;
     }
     
     for (int i = 0; i < ctx->registered_task_count; i++) {
         if (ctx->registered_tasks[i].handle == task_handle) {
-            ESP_LOGW(TAG, "Task %s already registered", task_name);
+            LOG_W(TAG, "Task %s already registered", task_name);
             xSemaphoreGive(ctx->mutex);
             return ESP_OK;
         }
     }
     
     if (ctx->registered_task_count >= MAX_REGISTERED_TASKS) {
-        ESP_LOGE(TAG, "No space for more tasks (%d/%d)", ctx->registered_task_count, MAX_REGISTERED_TASKS);
+        LOG_E(TAG, "No space for more tasks (%d/%d)", ctx->registered_task_count, MAX_REGISTERED_TASKS);
         xSemaphoreGive(ctx->mutex);
         return ESP_ERR_NO_MEM;
     }
     
     esp_err_t ret = esp_task_wdt_add(task_handle);
     if (ret != ESP_OK && ret != ESP_ERR_INVALID_ARG) {
-        ESP_LOGE(TAG, "Failed to register task %s in TWDT: %s", task_name, esp_err_to_name(ret));
+        LOG_E(TAG, "Failed to register task %s in TWDT: %s", task_name, esp_err_to_name(ret));
         xSemaphoreGive(ctx->mutex);
         return ret;
     }
@@ -549,7 +554,7 @@ esp_err_t watchdog_manager_register_task(TaskHandle_t task_handle, const char *t
     
     ctx->registered_task_count++;
     
-    ESP_LOGI(TAG, "Registered task: %s (%d/%d) in TWDT", task_name, ctx->registered_task_count, MAX_REGISTERED_TASKS);
+    LOG_I(TAG, "Registered task: %s (%d/%d) in TWDT", task_name, ctx->registered_task_count, MAX_REGISTERED_TASKS);
     
     xSemaphoreGive(ctx->mutex);
     return ESP_OK;
@@ -573,7 +578,7 @@ esp_err_t watchdog_manager_unregister_task(TaskHandle_t task_handle) {
                 
                 ctx->registered_tasks[i].is_active = false;
                 
-                ESP_LOGI(TAG, "Unregistered task: %s", ctx->registered_tasks[i].name);
+                LOG_I(TAG, "Unregistered task: %s", ctx->registered_tasks[i].name);
                 
                 xSemaphoreGive(ctx->mutex);
                 return ESP_OK;
@@ -616,7 +621,7 @@ esp_err_t watchdog_manager_feed(void) {
     esp_err_t ret = esp_task_wdt_reset();
     if (ret != ESP_OK) {
         ctx->error_count++;
-        ESP_LOGW(TAG, "TWDT reset failed for task %s: %s", 
+        LOG_W(TAG, "TWDT reset failed for task %s: %s", 
                 task_index >= 0 ? ctx->registered_tasks[task_index].name : "unknown",
                 esp_err_to_name(ret));
         return ret;
@@ -655,9 +660,9 @@ void watchdog_manager_force_reset(const char *reason) {
     if (reason) {
         strncpy(ctx->last_reset_reason, reason, sizeof(ctx->last_reset_reason) - 1);
         ctx->last_reset_reason[sizeof(ctx->last_reset_reason) - 1] = '\0';
-        ESP_LOGE(TAG, "Forcing system reset: %s", reason);
+        LOG_E(TAG, "Forcing system reset: %s", reason);
     } else {
-        ESP_LOGE(TAG, "Forcing system reset: unknown reason");
+        LOG_E(TAG, "Forcing system reset: unknown reason");
     }
     
     vTaskDelay(pdMS_TO_TICKS(100));

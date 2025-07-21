@@ -8,7 +8,7 @@
 #include "freertos/semphr.h"
 #include "freertos/timers.h"
 #include "driver/gpio.h"
-#include "esp_log.h"
+#include "custom_logging.h"
 #include "esp_timer.h"
 #include "esp_system.h"
 #include "config_manager.h"
@@ -94,7 +94,7 @@ static char* get_message_buffer(void) {
         
         size_t free_heap = esp_get_free_heap_size();
         if (free_heap < 50000) {
-            ESP_LOGW(TAG, "Low memory during buffer allocation: %zu bytes", free_heap);
+            LOG_W(TAG, "Low memory during buffer allocation: %zu bytes", free_heap);
         }
     }
     return NULL;
@@ -142,9 +142,9 @@ static void config_save_timer_callback(TimerHandle_t xTimer) {
     if (should_save) {
         esp_err_t ret = save_relay_config_immediate();
         if (ret == ESP_OK) {
-            ESP_LOGI(TAG, "Deferred relay configuration saved to NVS");
+            LOG_I(TAG, "Deferred relay configuration saved to NVS");
         } else {
-            ESP_LOGE(TAG, "Failed to save deferred relay configuration: %s", esp_err_to_name(ret));
+            LOG_E(TAG, "Failed to save deferred relay configuration: %s", esp_err_to_name(ret));
         }
     }
 }
@@ -195,12 +195,12 @@ esp_err_t relay_manager_init(void) {
     relay_manager_context_t *ctx = &s_relay_ctx;
     
     if (ctx->state != RELAY_MGR_STATE_UNINITIALIZED) {
-        ESP_LOGW(TAG, "Already initialized or initializing");
+        LOG_W(TAG, "Already initialized or initializing");
         return ESP_ERR_INVALID_STATE;
     }
     
     ctx->state = RELAY_MGR_STATE_INITIALIZING;
-    ESP_LOGI(TAG, "Initializing Relay Manager with %d relays", RELAY_MANAGER_MAX_RELAYS);
+    LOG_I(TAG, "Initializing Relay Manager with %d relays", RELAY_MANAGER_MAX_RELAYS);
     
     memset(ctx->relays, 0, sizeof(ctx->relays));
     ctx->total_events_processed = 0;
@@ -210,7 +210,7 @@ esp_err_t relay_manager_init(void) {
     
     ctx->config_mutex = xSemaphoreCreateMutex();
     if (ctx->config_mutex == NULL) {
-        ESP_LOGE(TAG, "Failed to create config mutex");
+        LOG_E(TAG, "Failed to create config mutex");
         ctx->state = RELAY_MGR_STATE_UNINITIALIZED;
         return ESP_ERR_NO_MEM;
     }
@@ -219,7 +219,7 @@ esp_err_t relay_manager_init(void) {
     if (ctx->pool_mutex == NULL) {
         vSemaphoreDelete(ctx->config_mutex);
         ctx->config_mutex = NULL;
-        ESP_LOGE(TAG, "Failed to create pool mutex");
+        LOG_E(TAG, "Failed to create pool mutex");
         ctx->state = RELAY_MGR_STATE_UNINITIALIZED;
         return ESP_ERR_NO_MEM;
     }
@@ -237,7 +237,7 @@ esp_err_t relay_manager_init(void) {
         vSemaphoreDelete(ctx->config_mutex);
         ctx->pool_mutex = NULL;
         ctx->config_mutex = NULL;
-        ESP_LOGE(TAG, "Failed to create config save timer");
+        LOG_E(TAG, "Failed to create config save timer");
         ctx->state = RELAY_MGR_STATE_UNINITIALIZED;
         return ESP_ERR_NO_MEM;
     }
@@ -254,7 +254,7 @@ esp_err_t relay_manager_init(void) {
         ctx->config_save_timer = NULL;
         ctx->pool_mutex = NULL;
         ctx->config_mutex = NULL;
-        ESP_LOGE(TAG, "Failed to create GPIO event queue");
+        LOG_E(TAG, "Failed to create GPIO event queue");
         ctx->state = RELAY_MGR_STATE_UNINITIALIZED;
         return ESP_ERR_NO_MEM;
     }
@@ -275,21 +275,21 @@ esp_err_t relay_manager_init(void) {
     
     esp_err_t ret = load_relay_config();
     if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Could not load config from NVS, using defaults");
+        LOG_W(TAG, "Could not load config from NVS, using defaults");
     }
     
     ret = gpio_install_isr_service(0);
     if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
-        ESP_LOGE(TAG, "Failed to install ISR service: %s", esp_err_to_name(ret));
+        LOG_E(TAG, "Failed to install ISR service: %s", esp_err_to_name(ret));
         goto cleanup;
     }
-    ESP_LOGI(TAG, "GPIO ISR service ready");
+    LOG_I(TAG, "GPIO ISR service ready");
     
     for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
         relay_config_t *relay = &ctx->relays[i];
         
         if (!GPIO_IS_VALID_GPIO(relay->gpio_pin)) {
-            ESP_LOGE(TAG, "Invalid GPIO pin %d for relay %d", relay->gpio_pin, i);
+            LOG_E(TAG, "Invalid GPIO pin %d for relay %d", relay->gpio_pin, i);
             continue;
         }
         
@@ -303,7 +303,7 @@ esp_err_t relay_manager_init(void) {
         
         ret = gpio_config(&io_conf);
         if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to configure GPIO %d: %s", relay->gpio_pin, esp_err_to_name(ret));
+            LOG_E(TAG, "Failed to configure GPIO %d: %s", relay->gpio_pin, esp_err_to_name(ret));
             continue;
         }
         
@@ -317,14 +317,14 @@ esp_err_t relay_manager_init(void) {
             relay->current_state = gpio_to_logical_state(stable_reading, relay->contact_type);
             relay->last_change_time = esp_timer_get_time();
             
-            ESP_LOGI(TAG, "Relay %s (GPIO %d): %s, Type: %s, Active: %s, Initial: %s (GPIO=%d)", 
+            LOG_I(TAG, "Relay %s (GPIO %d): %s, Type: %s, Active: %s, Initial: %s (GPIO=%d)", 
                     relay->relay_id, relay->gpio_pin, relay->name,
                     contact_type_to_string(relay->contact_type),
                     relay->is_active ? "YES" : "NO",
                     relay_state_to_string(relay->current_state),
                     stable_reading);
         } else {
-            ESP_LOGE(TAG, "Failed to read stable state for GPIO %d", relay->gpio_pin);
+            LOG_E(TAG, "Failed to read stable state for GPIO %d", relay->gpio_pin);
             relay->current_state = RELAY_STATE_ERROR;
         }
     }
@@ -342,12 +342,12 @@ esp_err_t relay_manager_init(void) {
     );
     
     if (task_ret != pdPASS) {
-        ESP_LOGE(TAG, "Failed to create relay event task");
+        LOG_E(TAG, "Failed to create relay event task");
         ret = ESP_FAIL;
         goto cleanup;
     }
     
-    ESP_LOGI(TAG, "Relay event task created with 8KB stack");
+    LOG_I(TAG, "Relay event task created with 8KB stack");
     
     vTaskDelay(pdMS_TO_TICKS(500));
     
@@ -360,26 +360,26 @@ esp_err_t relay_manager_init(void) {
         
         ret = gpio_set_intr_type(relay->gpio_pin, GPIO_INTR_ANYEDGE);
         if (ret != ESP_OK) {
-            ESP_LOGW(TAG, "Failed to set interrupt type for GPIO %d", relay->gpio_pin);
+            LOG_W(TAG, "Failed to set interrupt type for GPIO %d", relay->gpio_pin);
             continue;
         }
         
         ret = gpio_isr_handler_add(relay->gpio_pin, gpio_isr_handler, (void*)(uintptr_t)relay->gpio_pin);
         if (ret != ESP_OK) {
-            ESP_LOGW(TAG, "Failed to add ISR for GPIO %d", relay->gpio_pin);
+            LOG_W(TAG, "Failed to add ISR for GPIO %d", relay->gpio_pin);
             continue;
         }
         
         ret = gpio_intr_enable(relay->gpio_pin);
         if (ret != ESP_OK) {
-            ESP_LOGW(TAG, "Failed to enable interrupt for GPIO %d", relay->gpio_pin);
+            LOG_W(TAG, "Failed to enable interrupt for GPIO %d", relay->gpio_pin);
             continue;
         }
     }
     
     vTaskDelay(pdMS_TO_TICKS(200));
     
-    ESP_LOGI(TAG, "Relay Manager initialized successfully");
+    LOG_I(TAG, "Relay Manager initialized successfully");
     return ESP_OK;
     
 cleanup:
@@ -446,7 +446,7 @@ esp_err_t relay_manager_report_initial_states(void) {
         return ESP_ERR_INVALID_STATE;
     }
     
-    ESP_LOGI(TAG, "Reporting initial relay states after configuration");
+    LOG_I(TAG, "Reporting initial relay states after configuration");
     
     int64_t real_timestamp_ms;
     if (time_manager_is_synchronized()) {
@@ -469,7 +469,7 @@ esp_err_t relay_manager_report_initial_states(void) {
             relay->last_change_time = real_timestamp_ms;
             relay->last_report_time = real_timestamp_ms;
             
-            ESP_LOGI(TAG, "Initial state report - Relay %s: %s (GPIO: %d)", 
+            LOG_I(TAG, "Initial state report - Relay %s: %s (GPIO: %d)", 
                     relay->relay_id,
                     relay_state_to_string(current_state),
                     stable_reading);
@@ -494,7 +494,7 @@ esp_err_t relay_manager_report_initial_states(void) {
         }
     }
     
-    ESP_LOGI(TAG, "Initial relay states reported");
+    LOG_I(TAG, "Initial relay states reported");
     return ESP_OK;
 }
 
@@ -504,7 +504,7 @@ static void relay_event_task(void *pvParameters) {
     uint32_t idle_cycles = 0;
     int64_t last_auto_check = 0;
     
-    ESP_LOGI(TAG, "Relay event task started");
+    LOG_I(TAG, "Relay event task started");
     
     vTaskDelay(pdMS_TO_TICKS(300));
     
@@ -627,12 +627,12 @@ static void relay_event_task(void *pvParameters) {
                                         (void*)(uintptr_t)gpio_event.gpio_pin);
                     if (isr_ret == ESP_OK) {
                         gpio_intr_enable(gpio_event.gpio_pin);
-                        ESP_LOGW(TAG, "GPIO %d re-initialized after read failure", gpio_event.gpio_pin);
+                        LOG_W(TAG, "GPIO %d re-initialized after read failure", gpio_event.gpio_pin);
                     } else {
-                        ESP_LOGE(TAG, "Failed to re-add ISR for GPIO %d: %s", gpio_event.gpio_pin, esp_err_to_name(isr_ret));
+                        LOG_E(TAG, "Failed to re-add ISR for GPIO %d: %s", gpio_event.gpio_pin, esp_err_to_name(isr_ret));
                     }
                 } else {
-                    ESP_LOGE(TAG, "Failed to reconfigure GPIO %d: %s", gpio_event.gpio_pin, esp_err_to_name(gpio_ret));
+                    LOG_E(TAG, "Failed to reconfigure GPIO %d: %s", gpio_event.gpio_pin, esp_err_to_name(gpio_ret));
                 }
                 continue;
             }
@@ -656,7 +656,7 @@ static void relay_event_task(void *pvParameters) {
             relay->last_change_time = real_timestamp_ms;
             relay->last_report_time = real_timestamp_ms;
             
-            ESP_LOGI(TAG, "Relay %s state change: %s -> %s (stable: %d)", 
+            LOG_I(TAG, "Relay %s state change: %s -> %s (stable: %d)", 
                     relay->relay_id,
                     relay_state_to_string(old_state),
                     relay_state_to_string(new_state),
@@ -684,7 +684,7 @@ static void relay_event_task(void *pvParameters) {
         }
     }
     
-    ESP_LOGW(TAG, "Relay event task exiting");
+    LOG_W(TAG, "Relay event task exiting");
     ctx->event_task_handle = NULL;
     vTaskDelete(NULL);
 }
@@ -718,7 +718,7 @@ esp_err_t relay_manager_set_active(const char *relay_id, bool active) {
         relay->is_active = active;
         
         if (active && GPIO_IS_VALID_GPIO(relay->gpio_pin)) {
-            ESP_LOGI(TAG, "Re-reading state for newly activated relay %s", relay_id);
+            LOG_I(TAG, "Re-reading state for newly activated relay %s", relay_id);
             
             gpio_intr_disable(relay->gpio_pin);
             vTaskDelay(pdMS_TO_TICKS(50));
@@ -738,7 +738,7 @@ esp_err_t relay_manager_set_active(const char *relay_id, bool active) {
                 relay->last_change_time = real_timestamp_ms;
                 relay->last_report_time = real_timestamp_ms;
                 
-                ESP_LOGI(TAG, "Relay %s activation read: GPIO=%d, State=%s", 
+                LOG_I(TAG, "Relay %s activation read: GPIO=%d, State=%s", 
                         relay_id, stable_reading, relay_state_to_string(relay->current_state));
                 
                 gpio_intr_enable(relay->gpio_pin);
@@ -749,7 +749,7 @@ esp_err_t relay_manager_set_active(const char *relay_id, bool active) {
         schedule_config_save();
         xSemaphoreGive(ctx->config_mutex);
         
-        ESP_LOGI(TAG, "Relay %s %s", relay_id, active ? "ACTIVATED" : "DEACTIVATED");
+        LOG_I(TAG, "Relay %s %s", relay_id, active ? "ACTIVATED" : "DEACTIVATED");
         return ESP_OK;
     }
     
@@ -825,7 +825,7 @@ esp_err_t relay_manager_set_contact_type(const char *relay_id, relay_contact_typ
         schedule_config_save();
         xSemaphoreGive(ctx->config_mutex);
         
-        ESP_LOGI(TAG, "Relay %s contact type changed to: %s", relay_id, contact_type_to_string(contact_type));
+        LOG_I(TAG, "Relay %s contact type changed to: %s", relay_id, contact_type_to_string(contact_type));
         return ESP_OK;
     }
     
@@ -845,7 +845,7 @@ static esp_err_t load_relay_config(void) {
         for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
             ctx->relays[i].is_active = active_states[i];
         }
-        ESP_LOGI(TAG, "Loaded active states from NVS");
+        LOG_I(TAG, "Loaded active states from NVS");
     }
     
     char names_key[32];
@@ -869,7 +869,7 @@ static esp_err_t load_relay_config(void) {
         for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
             ctx->relays[i].contact_type = contact_types[i];
         }
-        ESP_LOGI(TAG, "Loaded contact types from NVS");
+        LOG_I(TAG, "Loaded contact types from NVS");
     }
     
     return ESP_OK;
@@ -886,7 +886,7 @@ static esp_err_t save_relay_config_immediate(void) {
     
     ret = config_manager_set_blob("relay_active", active_states, sizeof(active_states));
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to save active states: %s", esp_err_to_name(ret));
+        LOG_E(TAG, "Failed to save active states: %s", esp_err_to_name(ret));
         return ret;
     }
     
@@ -895,7 +895,7 @@ static esp_err_t save_relay_config_immediate(void) {
         snprintf(names_key, sizeof(names_key), "relay_name_%d", i);
         ret = config_manager_set_str(names_key, ctx->relays[i].name);
         if (ret != ESP_OK) {
-            ESP_LOGW(TAG, "Failed to save name for relay %d", i);
+            LOG_W(TAG, "Failed to save name for relay %d", i);
         }
     }
     
@@ -906,7 +906,7 @@ static esp_err_t save_relay_config_immediate(void) {
     
     ret = config_manager_set_blob("relay_types", contact_types, sizeof(contact_types));
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to save contact types: %s", esp_err_to_name(ret));
+        LOG_E(TAG, "Failed to save contact types: %s", esp_err_to_name(ret));
         return ret;
     }
     
@@ -1036,7 +1036,7 @@ esp_err_t relay_manager_set_name(const char *relay_id, const char *name) {
         schedule_config_save();
         xSemaphoreGive(ctx->config_mutex);
         
-        ESP_LOGI(TAG, "Relay %s name changed to: %s", relay_id, name);
+        LOG_I(TAG, "Relay %s name changed to: %s", relay_id, name);
         return ESP_OK;
     }
     
@@ -1085,11 +1085,11 @@ esp_err_t relay_manager_process_mqtt_command(const char *command_data) {
     
     char *command = parse_simple_value(command_data, "command");
     if (!command) {
-        ESP_LOGE(TAG, "No command found in data");
+        LOG_E(TAG, "No command found in data");
         return ESP_ERR_INVALID_ARG;
     }
     
-    ESP_LOGI(TAG, "Processing MQTT command: %s", command);
+    LOG_I(TAG, "Processing MQTT command: %s", command);
     
     esp_err_t ret = ESP_FAIL;
     
@@ -1123,7 +1123,7 @@ esp_err_t relay_manager_process_mqtt_command(const char *command_data) {
         ret = ESP_OK;
     }
     else {
-        ESP_LOGW(TAG, "Unknown command: %s", command);
+        LOG_W(TAG, "Unknown command: %s", command);
         ret = ESP_ERR_NOT_SUPPORTED;
     }
     
@@ -1149,7 +1149,7 @@ esp_err_t relay_manager_check_all_states(bool force_report) {
     
     int state_changes = 0;
     
-    ESP_LOGI(TAG, "Manual check starting (force_report=%s)", force_report ? "true" : "false");
+    LOG_I(TAG, "Manual check starting (force_report=%s)", force_report ? "true" : "false");
     
     for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
         relay_config_t *relay = &ctx->relays[i];
@@ -1164,7 +1164,7 @@ esp_err_t relay_manager_check_all_states(bool force_report) {
         
         int stable_reading = relay_manager_read_stable_gpio(relay->gpio_pin);
         if (stable_reading < 0) {
-            ESP_LOGW(TAG, "Failed to read GPIO %d during manual check", relay->gpio_pin);
+            LOG_W(TAG, "Failed to read GPIO %d during manual check", relay->gpio_pin);
             continue;
         }
         
@@ -1178,7 +1178,7 @@ esp_err_t relay_manager_check_all_states(bool force_report) {
             
             state_changes++;
             
-            ESP_LOGI(TAG, "Manual check - Relay %s: %s -> %s (GPIO: %d)", 
+            LOG_I(TAG, "Manual check - Relay %s: %s -> %s (GPIO: %d)", 
                     relay->relay_id,
                     relay_state_to_string(old_state),
                     relay_state_to_string(current_state),
@@ -1204,7 +1204,7 @@ esp_err_t relay_manager_check_all_states(bool force_report) {
         }
     }
     
-    ESP_LOGI(TAG, "Manual check completed: %d state changes detected", state_changes);
+    LOG_I(TAG, "Manual check completed: %d state changes detected", state_changes);
     
     return ESP_OK;
 }
@@ -1331,7 +1331,7 @@ esp_err_t relay_manager_deinit(void) {
         return ESP_ERR_INVALID_STATE;
     }
     
-    ESP_LOGI(TAG, "Deinitializing Relay Manager");
+    LOG_I(TAG, "Deinitializing Relay Manager");
     ctx->state = RELAY_MGR_STATE_DEINITIALIZING;
     ctx->initialized = false;
     
@@ -1390,7 +1390,7 @@ esp_err_t relay_manager_deinit(void) {
     memset(ctx, 0, sizeof(relay_manager_context_t));
     ctx->state = RELAY_MGR_STATE_UNINITIALIZED;
     
-    ESP_LOGI(TAG, "Relay Manager deinitialized");
+    LOG_I(TAG, "Relay Manager deinitialized");
     
     return ESP_OK;
 }

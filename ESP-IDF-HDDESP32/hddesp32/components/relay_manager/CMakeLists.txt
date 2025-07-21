@@ -8,6 +8,7 @@ idf_component_register(
         nvs_flash
         json
         config_manager
+        custom_logging
     PRIV_REQUIRES
         esp_common
         log

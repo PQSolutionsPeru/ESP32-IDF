@@ -4,7 +4,7 @@
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
 #include "esp_wifi.h"
-#include "esp_log.h"
+#include "custom_logging.h"
 #include "esp_event.h"
 #include "esp_netif.h"
 #include "esp_mac.h"
@@ -62,7 +62,7 @@ static esp_err_t recreate_wifi_event_group(wifi_manager_context_t *ctx) {
     ctx->event_group = xEventGroupCreate();
     
     if (ctx->event_group == NULL) {
-        ESP_LOGE(TAG, "Failed to recreate WiFi event group");
+        LOG_E(TAG, "Failed to recreate WiFi event group");
         return ESP_ERR_NO_MEM;
     }
     
@@ -71,7 +71,7 @@ static esp_err_t recreate_wifi_event_group(wifi_manager_context_t *ctx) {
     }
     
     ctx->event_group_operations = 0;
-    ESP_LOGI(TAG, "WiFi event group recreated");
+    LOG_I(TAG, "WiFi event group recreated");
     return ESP_OK;
 }
 
@@ -112,13 +112,13 @@ static esp_err_t cleanup_and_recreate_netifs(wifi_manager_context_t *ctx) {
     
     ctx->sta_netif = esp_netif_create_default_wifi_sta();
     if (ctx->sta_netif == NULL) {
-        ESP_LOGE(TAG, "Failed to recreate station netif");
+        LOG_E(TAG, "Failed to recreate station netif");
         return ESP_FAIL;
     }
     
     ctx->ap_netif = esp_netif_create_default_wifi_ap();
     if (ctx->ap_netif == NULL) {
-        ESP_LOGE(TAG, "Failed to recreate AP netif");
+        LOG_E(TAG, "Failed to recreate AP netif");
         esp_netif_destroy(ctx->sta_netif);
         ctx->sta_netif = NULL;
         return ESP_FAIL;
@@ -131,7 +131,7 @@ static esp_err_t _internal_wifi_connect_safe(void) {
     wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
     
     if (ctx->connection_in_progress) {
-        ESP_LOGW(TAG, "Connection already in progress, skipping");
+        LOG_W(TAG, "Connection already in progress, skipping");
         return ESP_ERR_INVALID_STATE;
     }
     
@@ -142,7 +142,7 @@ static esp_err_t _internal_wifi_connect_safe(void) {
     }
     
     if (current_mode == WIFI_MODE_AP) {
-        ESP_LOGW(TAG, "Cannot connect in AP-only mode");
+        LOG_W(TAG, "Cannot connect in AP-only mode");
         return ESP_ERR_INVALID_STATE;
     }
     
@@ -150,11 +150,11 @@ static esp_err_t _internal_wifi_connect_safe(void) {
     
     ret = esp_wifi_connect();
     if (ret == ESP_ERR_WIFI_CONN) {
-        ESP_LOGW(TAG, "WiFi connect failed - connection already in progress");
+        LOG_W(TAG, "WiFi connect failed - connection already in progress");
         ctx->connection_in_progress = false;
         return ESP_ERR_INVALID_STATE;
     } else if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "WiFi connect failed: %s", esp_err_to_name(ret));
+        LOG_E(TAG, "WiFi connect failed: %s", esp_err_to_name(ret));
         ctx->connection_in_progress = false;
         return ret;
     }
@@ -171,7 +171,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         switch (event_id) {
             case WIFI_EVENT_SCAN_DONE: {
                 wifi_event_sta_scan_done_t *scan_done = (wifi_event_sta_scan_done_t*) event_data;
-                ESP_LOGI(TAG, "WiFi scan completed, status: %d, found APs: %u",
+                LOG_I(TAG, "WiFi scan completed, status: %d, found APs: %u",
                         (int)scan_done->status, (unsigned int)scan_done->number);
                 
                 ctx->scan_in_progress = false;
@@ -184,7 +184,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                     ctx->scan_ap_count = scan_done->number;
                     if (ctx->scan_ap_count > 20) {
                         ctx->scan_ap_count = 20;
-                        ESP_LOGW(TAG, "Limiting scan results to 20 APs to preserve memory");
+                        LOG_W(TAG, "Limiting scan results to 20 APs to preserve memory");
                     }
                     
                     if (ctx->scan_ap_count > 0) {
@@ -196,7 +196,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                             
                             esp_err_t get_ret = esp_wifi_scan_get_ap_records(&ctx->scan_ap_count, ctx->scan_ap_list);
                             if (get_ret == ESP_OK) {
-                                ESP_LOGI(TAG, "Successfully retrieved %u scan results", ctx->scan_ap_count);
+                                LOG_I(TAG, "Successfully retrieved %u scan results", ctx->scan_ap_count);
                                 
                                 for (int i = 0; i < ctx->scan_ap_count - 1; i++) {
                                     for (int j = i + 1; j < ctx->scan_ap_count; j++) {
@@ -208,25 +208,25 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                     }
                                 }
                             } else {
-                                ESP_LOGE(TAG, "Failed to get scan records: %s", esp_err_to_name(get_ret));
+                                LOG_E(TAG, "Failed to get scan records: %s", esp_err_to_name(get_ret));
                                 ctx->scan_ap_list = NULL;
                                 ctx->scan_ap_count = 0;
                             }
                         } else {
-                            ESP_LOGW(TAG, "Insufficient memory for scan results, skipping allocation");
+                            LOG_W(TAG, "Insufficient memory for scan results, skipping allocation");
                             ctx->scan_ap_count = 0;
                         }
                     }
                 }
                 
                 if (ctx->temporary_apsta_mode) {
-                    ESP_LOGI(TAG, "Reverting to AP mode after scan completion");
+                    LOG_I(TAG, "Reverting to AP mode after scan completion");
                     ctx->temporary_apsta_mode = false;
                     
                     if (!wifi_manager_is_connected()) {
                         esp_err_t mode_ret = esp_wifi_set_mode(WIFI_MODE_AP);
                         if (mode_ret != ESP_OK) {
-                            ESP_LOGE(TAG, "Failed to revert to AP mode: %s", esp_err_to_name(mode_ret));
+                            LOG_E(TAG, "Failed to revert to AP mode: %s", esp_err_to_name(mode_ret));
                         }
                     }
                 }
@@ -236,7 +236,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
             }
             
             case WIFI_EVENT_AP_START:
-                ESP_LOGI(TAG, "Access Point started");
+                LOG_I(TAG, "Access Point started");
                 ctx->state = WIFI_MANAGER_STATE_AP_MODE;
                 safe_wifi_set_bits(ctx, WIFI_AP_STARTED_BIT);
                 if (ctx->state_callback) {
@@ -245,19 +245,19 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                 break;
                 
             case WIFI_EVENT_AP_STOP:
-                ESP_LOGI(TAG, "Access Point stopped");
+                LOG_I(TAG, "Access Point stopped");
                 safe_wifi_clear_bits(ctx, WIFI_AP_STARTED_BIT);
                 break;
             
             default:
-                ESP_LOGD(TAG, "Unhandled WiFi event: %d", (int)event_id);
+                LOG_D(TAG, "Unhandled WiFi event: %d", (int)event_id);
                 break;
         }
     } else if (event_base == IP_EVENT) {
         switch (event_id) {
             case IP_EVENT_STA_GOT_IP: {
                 ip_event_got_ip_t *event = (ip_event_got_ip_t*) event_data;
-                ESP_LOGI(TAG, "Got IP address: " IPSTR, IP2STR(&event->ip_info.ip));
+                LOG_I(TAG, "Got IP address: " IPSTR, IP2STR(&event->ip_info.ip));
                 
                 ctx->connection_in_progress = false;
                 
@@ -278,20 +278,20 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                 }
                 
                 if (esp_wifi_sta_get_ap_info(&ctx->ap_info) != ESP_OK) {
-                    ESP_LOGW(TAG, "Failed to get AP info");
+                    LOG_W(TAG, "Failed to get AP info");
                 }
                 break;
             }
             
             case IP_EVENT_STA_LOST_IP:
-                ESP_LOGW(TAG, "Lost IP address");
+                LOG_W(TAG, "Lost IP address");
                 if (ctx->state != WIFI_MANAGER_STATE_STA_AP_MODE) {
                     safe_wifi_clear_bits(ctx, WIFI_CONNECTED_BIT);
                 }
                 break;
                 
             default:
-                ESP_LOGD(TAG, "Unhandled IP event: %d", (int)event_id);
+                LOG_D(TAG, "Unhandled IP event: %d", (int)event_id);
                 break;
         }
     }
@@ -303,11 +303,11 @@ esp_err_t wifi_manager_init(void)
     esp_err_t ret = ESP_OK;
     
     if (ctx->event_group != NULL) {
-        ESP_LOGW(TAG, "WiFi Manager already initialized");
+        LOG_W(TAG, "WiFi Manager already initialized");
         return ESP_ERR_INVALID_STATE;
     }
     
-    ESP_LOGI(TAG, "Initializing WiFi Manager");
+    LOG_I(TAG, "Initializing WiFi Manager");
     
     ctx->state = WIFI_MANAGER_STATE_INIT;
     ctx->scan_in_progress = false;
@@ -318,7 +318,7 @@ esp_err_t wifi_manager_init(void)
     
     ctx->event_group = xEventGroupCreate();
     if (ctx->event_group == NULL) {
-        ESP_LOGE(TAG, "Failed to create event group");
+        LOG_E(TAG, "Failed to create event group");
         return ESP_ERR_NO_MEM;
     }
     
@@ -326,26 +326,26 @@ esp_err_t wifi_manager_init(void)
     if (ctx->connection_mutex == NULL) {
         vEventGroupDelete(ctx->event_group);
         ctx->event_group = NULL;
-        ESP_LOGE(TAG, "Failed to create connection mutex");
+        LOG_E(TAG, "Failed to create connection mutex");
         return ESP_ERR_NO_MEM;
     }
     
     ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_LOGW(TAG, "NVS needs to be erased");
+        LOG_W(TAG, "NVS needs to be erased");
         ESP_ERROR_CHECK(nvs_flash_erase());
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
     
-    ESP_LOGI(TAG, "Initializing TCP/IP stack");
+    LOG_I(TAG, "Initializing TCP/IP stack");
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     
-    ESP_LOGI(TAG, "Creating WiFi station netif");
+    LOG_I(TAG, "Creating WiFi station netif");
     ctx->sta_netif = esp_netif_create_default_wifi_sta();
     if (ctx->sta_netif == NULL) {
-        ESP_LOGE(TAG, "Failed to create station netif");
+        LOG_E(TAG, "Failed to create station netif");
         vSemaphoreDelete(ctx->connection_mutex);
         vEventGroupDelete(ctx->event_group);
         ctx->connection_mutex = NULL;
@@ -353,10 +353,10 @@ esp_err_t wifi_manager_init(void)
         return ESP_FAIL;
     }
     
-    ESP_LOGI(TAG, "Creating WiFi AP netif");
+    LOG_I(TAG, "Creating WiFi AP netif");
     ctx->ap_netif = esp_netif_create_default_wifi_ap();
     if (ctx->ap_netif == NULL) {
-        ESP_LOGE(TAG, "Failed to create AP netif");
+        LOG_E(TAG, "Failed to create AP netif");
         esp_netif_destroy(ctx->sta_netif);
         vSemaphoreDelete(ctx->connection_mutex);
         vEventGroupDelete(ctx->event_group);
@@ -368,13 +368,13 @@ esp_err_t wifi_manager_init(void)
     wifi_init_config_t wifi_init_config = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&wifi_init_config));
     
-    ESP_LOGI(TAG, "Registering event handlers");
+    LOG_I(TAG, "Registering event handlers");
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
                                                        &wifi_event_handler, NULL, NULL));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, ESP_EVENT_ANY_ID,
                                                        &wifi_event_handler, NULL, NULL));
     
-    ESP_LOGI(TAG, "Setting WiFi to station mode");
+    LOG_I(TAG, "Setting WiFi to station mode");
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_start());
     
@@ -382,7 +382,7 @@ esp_err_t wifi_manager_init(void)
     if (ret == ESP_OK) {
         ret = config_manager_get_str("wifi_password", ctx->password, sizeof(ctx->password));
         if (ret == ESP_OK) {
-            ESP_LOGI(TAG, "Found saved WiFi credentials for SSID: %s", ctx->ssid);
+            LOG_I(TAG, "Found saved WiFi credentials for SSID: %s", ctx->ssid);
             ctx->credentials_saved = true;
         } else {
             ctx->credentials_saved = false;
@@ -400,7 +400,7 @@ esp_err_t wifi_manager_init(void)
     ctx->state = WIFI_MANAGER_STATE_DISCONNECTED;
     safe_wifi_set_bits(ctx, WIFI_DISCONNECTED_BIT);
     
-    ESP_LOGI(TAG, "WiFi Manager initialized successfully");
+    LOG_I(TAG, "WiFi Manager initialized successfully");
     return ESP_OK;
 }
 
@@ -409,35 +409,35 @@ esp_err_t wifi_manager_connect(const char *ssid, const char *password, bool save
     wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
     
     if (ctx->event_group == NULL || ctx->connection_mutex == NULL) {
-        ESP_LOGE(TAG, "WiFi Manager not initialized");
+        LOG_E(TAG, "WiFi Manager not initialized");
         return ESP_ERR_INVALID_STATE;
     }
     
     if (ssid == NULL) {
-        ESP_LOGE(TAG, "SSID is NULL");
+        LOG_E(TAG, "SSID is NULL");
         return ESP_ERR_INVALID_ARG;
     }
     
     if (strlen(ssid) > 32) {
-        ESP_LOGE(TAG, "SSID too long");
+        LOG_E(TAG, "SSID too long");
         return ESP_ERR_INVALID_ARG;
     }
     
     if (password != NULL && strlen(password) > 64) {
-        ESP_LOGE(TAG, "Password too long");
+        LOG_E(TAG, "Password too long");
         return ESP_ERR_INVALID_ARG;
     }
     
     if (xSemaphoreTake(ctx->connection_mutex, pdMS_TO_TICKS(5000)) != pdTRUE) {
-        ESP_LOGE(TAG, "Could not acquire connection mutex");
+        LOG_E(TAG, "Could not acquire connection mutex");
         return ESP_ERR_TIMEOUT;
     }
     
-    ESP_LOGI(TAG, "Connecting to WiFi network: %s", ssid);
+    LOG_I(TAG, "Connecting to WiFi network: %s", ssid);
     
     esp_err_t disconnect_ret = esp_wifi_disconnect();
     if (disconnect_ret != ESP_OK && disconnect_ret != ESP_ERR_WIFI_NOT_CONNECT) {
-        ESP_LOGW(TAG, "Disconnect failed: %s", esp_err_to_name(disconnect_ret));
+        LOG_W(TAG, "Disconnect failed: %s", esp_err_to_name(disconnect_ret));
     }
     
     ctx->connection_in_progress = false;
@@ -455,7 +455,7 @@ esp_err_t wifi_manager_connect(const char *ssid, const char *password, bool save
     }
     
     if (save) {
-        ESP_LOGI(TAG, "Saving WiFi credentials");
+        LOG_I(TAG, "Saving WiFi credentials");
         ESP_ERROR_CHECK(config_manager_set_str("wifi_ssid", ctx->ssid));
         ESP_ERROR_CHECK(config_manager_set_str("wifi_password", ctx->password));
         ctx->credentials_saved = true;
@@ -476,11 +476,11 @@ esp_err_t wifi_manager_connect(const char *ssid, const char *password, bool save
     ESP_ERROR_CHECK(esp_wifi_get_mode(&current_mode));
     
     if (current_mode == WIFI_MODE_AP) {
-        ESP_LOGI(TAG, "Changing from AP to STA+AP mode");
+        LOG_I(TAG, "Changing from AP to STA+AP mode");
         ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
         ctx->state = WIFI_MANAGER_STATE_STA_AP_MODE;
     } else if (current_mode == WIFI_MODE_APSTA) {
-        ESP_LOGI(TAG, "Updating STA configuration in STA+AP mode");
+        LOG_I(TAG, "Updating STA configuration in STA+AP mode");
     } else {
         ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     }
@@ -500,7 +500,7 @@ esp_err_t wifi_manager_connect(const char *ssid, const char *password, bool save
     xSemaphoreGive(ctx->connection_mutex);
     
     if (connect_result != ESP_OK) {
-        ESP_LOGW(TAG, "Initial connection attempt failed: %s", esp_err_to_name(connect_result));
+        LOG_W(TAG, "Initial connection attempt failed: %s", esp_err_to_name(connect_result));
     }
     
     EventBits_t bits = xEventGroupWaitBits(ctx->event_group,
@@ -508,10 +508,10 @@ esp_err_t wifi_manager_connect(const char *ssid, const char *password, bool save
                                           pdFALSE, pdFALSE, pdMS_TO_TICKS(WIFI_CONNECT_TIMEOUT_MS));
     
     if (bits & WIFI_CONNECTED_BIT) {
-        ESP_LOGI(TAG, "Successfully connected to WiFi network");
+        LOG_I(TAG, "Successfully connected to WiFi network");
         return ESP_OK;
     } else if (bits & WIFI_CONNECT_FAIL_BIT) {
-        ESP_LOGE(TAG, "Failed to connect to WiFi network");
+        LOG_E(TAG, "Failed to connect to WiFi network");
         if (ctx->state != WIFI_MANAGER_STATE_STA_AP_MODE) {
             ctx->state = WIFI_MANAGER_STATE_ERROR;
             if (ctx->state_callback) {
@@ -520,7 +520,7 @@ esp_err_t wifi_manager_connect(const char *ssid, const char *password, bool save
         }
         return ESP_FAIL;
     } else {
-        ESP_LOGW(TAG, "Connection attempt timed out");
+        LOG_W(TAG, "Connection attempt timed out");
         if (ctx->state != WIFI_MANAGER_STATE_STA_AP_MODE) {
             ctx->state = WIFI_MANAGER_STATE_ERROR;
             if (ctx->state_callback) {
@@ -536,16 +536,16 @@ esp_err_t wifi_manager_connect_saved(void)
     wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
     
     if (ctx->event_group == NULL) {
-        ESP_LOGE(TAG, "WiFi Manager not initialized");
+        LOG_E(TAG, "WiFi Manager not initialized");
         return ESP_ERR_INVALID_STATE;
     }
     
     if (!ctx->credentials_saved) {
-        ESP_LOGW(TAG, "No saved WiFi credentials");
+        LOG_W(TAG, "No saved WiFi credentials");
         return ESP_ERR_NOT_FOUND;
     }
     
-    ESP_LOGI(TAG, "Connecting with saved credentials, SSID: %s", ctx->ssid);
+    LOG_I(TAG, "Connecting with saved credentials, SSID: %s", ctx->ssid);
     return wifi_manager_connect(ctx->ssid, ctx->password, false);
 }
 
@@ -554,22 +554,22 @@ esp_err_t wifi_manager_disconnect(void)
     wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
     
     if (ctx->event_group == NULL) {
-        ESP_LOGE(TAG, "WiFi Manager not initialized");
+        LOG_E(TAG, "WiFi Manager not initialized");
         return ESP_ERR_INVALID_STATE;
     }
     
     if (ctx->state != WIFI_MANAGER_STATE_CONNECTED && 
         ctx->state != WIFI_MANAGER_STATE_CONNECTING &&
         ctx->state != WIFI_MANAGER_STATE_STA_AP_MODE) {
-        ESP_LOGW(TAG, "Not connected to WiFi");
+        LOG_W(TAG, "Not connected to WiFi");
         return ESP_ERR_INVALID_STATE;
     }
     
-    ESP_LOGI(TAG, "Disconnecting from WiFi network: %s", ctx->ssid);
+    LOG_I(TAG, "Disconnecting from WiFi network: %s", ctx->ssid);
     ESP_ERROR_CHECK(esp_wifi_disconnect());
     
     if (ctx->state == WIFI_MANAGER_STATE_STA_AP_MODE) {
-        ESP_LOGI(TAG, "Remaining in AP mode after STA disconnection");
+        LOG_I(TAG, "Remaining in AP mode after STA disconnection");
         ctx->state = WIFI_MANAGER_STATE_AP_MODE;
         if (ctx->state_callback) {
             ctx->state_callback(ctx->state, ctx->user_data);
@@ -582,10 +582,10 @@ esp_err_t wifi_manager_disconnect(void)
                                           pdFALSE, pdFALSE, pdMS_TO_TICKS(5000));
     
     if (bits & WIFI_DISCONNECTED_BIT) {
-        ESP_LOGI(TAG, "Successfully disconnected from WiFi");
+        LOG_I(TAG, "Successfully disconnected from WiFi");
         return ESP_OK;
     } else {
-        ESP_LOGW(TAG, "Timeout waiting for disconnection");
+        LOG_W(TAG, "Timeout waiting for disconnection");
         return ESP_ERR_TIMEOUT;
     }
 }
@@ -595,37 +595,37 @@ esp_err_t wifi_manager_start_ap_mode(const char *ap_ssid, const char *ap_passwor
     wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
     
     if (ctx->event_group == NULL) {
-        ESP_LOGE(TAG, "WiFi Manager not initialized");
+        LOG_E(TAG, "WiFi Manager not initialized");
         return ESP_ERR_INVALID_STATE;
     }
     
     if (ap_ssid == NULL) {
-        ESP_LOGE(TAG, "AP SSID is NULL");
+        LOG_E(TAG, "AP SSID is NULL");
         return ESP_ERR_INVALID_ARG;
     }
     
     if (strlen(ap_ssid) > 32) {
-        ESP_LOGE(TAG, "AP SSID too long");
+        LOG_E(TAG, "AP SSID too long");
         return ESP_ERR_INVALID_ARG;
     }
     
     if (ap_password != NULL && strlen(ap_password) > 64) {
-        ESP_LOGE(TAG, "AP Password too long");
+        LOG_E(TAG, "AP Password too long");
         return ESP_ERR_INVALID_ARG;
     }
     
-    ESP_LOGI(TAG, "Starting WiFi Access Point: %s", ap_ssid);
+    LOG_I(TAG, "Starting WiFi Access Point: %s", ap_ssid);
     
     if (ctx->state == WIFI_MANAGER_STATE_CONNECTED || 
         ctx->state == WIFI_MANAGER_STATE_CONNECTING) {
-        ESP_LOGI(TAG, "Disconnecting from current network before starting AP");
+        LOG_I(TAG, "Disconnecting from current network before starting AP");
         ESP_ERROR_CHECK(esp_wifi_disconnect());
         
         EventBits_t bits = xEventGroupWaitBits(ctx->event_group,
                                               WIFI_DISCONNECTED_BIT,
                                               pdFALSE, pdFALSE, pdMS_TO_TICKS(5000));
         if ((bits & WIFI_DISCONNECTED_BIT) == 0) {
-            ESP_LOGW(TAG, "Timeout waiting for disconnection");
+            LOG_W(TAG, "Timeout waiting for disconnection");
         }
     }
     
@@ -661,10 +661,10 @@ esp_err_t wifi_manager_start_ap_mode(const char *ap_ssid, const char *ap_passwor
                                           pdFALSE, pdFALSE, pdMS_TO_TICKS(5000));
     
     if (bits & WIFI_AP_STARTED_BIT) {
-        ESP_LOGI(TAG, "WiFi Access Point started successfully");
+        LOG_I(TAG, "WiFi Access Point started successfully");
         return ESP_OK;
     } else {
-        ESP_LOGW(TAG, "Timeout waiting for AP to start");
+        LOG_W(TAG, "Timeout waiting for AP to start");
         return ESP_ERR_TIMEOUT;
     }
 }
@@ -674,26 +674,26 @@ esp_err_t wifi_manager_start_sta_ap_mode(const char *ap_ssid, const char *ap_pas
     wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
     
     if (ctx->event_group == NULL) {
-        ESP_LOGE(TAG, "WiFi Manager not initialized");
+        LOG_E(TAG, "WiFi Manager not initialized");
         return ESP_ERR_INVALID_STATE;
     }
     
     if (ap_ssid == NULL) {
-        ESP_LOGE(TAG, "AP SSID is NULL");
+        LOG_E(TAG, "AP SSID is NULL");
         return ESP_ERR_INVALID_ARG;
     }
     
     if (strlen(ap_ssid) > 32) {
-        ESP_LOGE(TAG, "AP SSID too long");
+        LOG_E(TAG, "AP SSID too long");
         return ESP_ERR_INVALID_ARG;
     }
     
     if (ap_password != NULL && strlen(ap_password) > 64) {
-        ESP_LOGE(TAG, "AP Password too long");
+        LOG_E(TAG, "AP Password too long");
         return ESP_ERR_INVALID_ARG;
     }
     
-    ESP_LOGI(TAG, "Starting WiFi STA+AP mode with AP: %s", ap_ssid);
+    LOG_I(TAG, "Starting WiFi STA+AP mode with AP: %s", ap_ssid);
     
     strncpy(ctx->ap_ssid, ap_ssid, sizeof(ctx->ap_ssid) - 1);
     ctx->ap_ssid[sizeof(ctx->ap_ssid) - 1] = '\0';
@@ -731,10 +731,10 @@ esp_err_t wifi_manager_start_sta_ap_mode(const char *ap_ssid, const char *ap_pas
         if (ctx->state_callback) {
             ctx->state_callback(ctx->state, ctx->user_data);
         }
-        ESP_LOGI(TAG, "WiFi STA+AP mode started successfully");
+        LOG_I(TAG, "WiFi STA+AP mode started successfully");
         return ESP_OK;
     } else {
-        ESP_LOGW(TAG, "Timeout waiting for AP to start in STA+AP mode");
+        LOG_W(TAG, "Timeout waiting for AP to start in STA+AP mode");
         return ESP_ERR_TIMEOUT;
     }
 }
@@ -744,25 +744,25 @@ esp_err_t wifi_manager_stop_ap_mode(void)
     wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
     
     if (ctx->event_group == NULL) {
-        ESP_LOGE(TAG, "WiFi Manager not initialized");
+        LOG_E(TAG, "WiFi Manager not initialized");
         return ESP_ERR_INVALID_STATE;
     }
     
     if (ctx->state != WIFI_MANAGER_STATE_AP_MODE && 
         ctx->state != WIFI_MANAGER_STATE_STA_AP_MODE) {
-        ESP_LOGW(TAG, "Not in AP or STA+AP mode");
+        LOG_W(TAG, "Not in AP or STA+AP mode");
         return ESP_ERR_INVALID_STATE;
     }
     
-    ESP_LOGI(TAG, "Stopping WiFi Access Point");
+    LOG_I(TAG, "Stopping WiFi Access Point");
     
     if (ctx->state == WIFI_MANAGER_STATE_STA_AP_MODE && 
         (xEventGroupGetBits(ctx->event_group) & WIFI_CONNECTED_BIT)) {
-        ESP_LOGI(TAG, "Switching from STA+AP to STA mode");
+        LOG_I(TAG, "Switching from STA+AP to STA mode");
         ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
         ctx->state = WIFI_MANAGER_STATE_CONNECTED;
     } else {
-        ESP_LOGI(TAG, "Switching to STA mode (disconnected)");
+        LOG_I(TAG, "Switching to STA mode (disconnected)");
         ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
         ctx->state = WIFI_MANAGER_STATE_DISCONNECTED;
     }
@@ -777,29 +777,29 @@ esp_err_t wifi_manager_stop_ap_mode(void)
 esp_err_t wifi_manager_set_sta_mode(void) {
     wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
     
-    ESP_LOGI(TAG, "Switching to station-only mode");
+    LOG_I(TAG, "Switching to station-only mode");
     
     if (ctx->event_group == NULL) {
-        ESP_LOGE(TAG, "WiFi Manager not initialized");
+        LOG_E(TAG, "WiFi Manager not initialized");
         return ESP_ERR_INVALID_STATE;
     }
     
     wifi_mode_t current_mode;
     esp_err_t ret = esp_wifi_get_mode(&current_mode);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to get WiFi mode: %s", esp_err_to_name(ret));
+        LOG_E(TAG, "Failed to get WiFi mode: %s", esp_err_to_name(ret));
         return ret;
     }
     
     if (current_mode == WIFI_MODE_STA) {
-        ESP_LOGI(TAG, "Already in STA mode");
+        LOG_I(TAG, "Already in STA mode");
         return ESP_OK;
     }
     
     if (current_mode == WIFI_MODE_APSTA) {
         ret = esp_wifi_set_mode(WIFI_MODE_STA);
         if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to set WiFi mode: %s", esp_err_to_name(ret));
+            LOG_E(TAG, "Failed to set WiFi mode: %s", esp_err_to_name(ret));
             return ret;
         }
         
@@ -834,17 +834,17 @@ esp_err_t wifi_manager_get_ip(char *ip, size_t max_len)
     wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
     
     if (ctx->event_group == NULL) {
-        ESP_LOGE(TAG, "WiFi Manager not initialized");
+        LOG_E(TAG, "WiFi Manager not initialized");
         return ESP_ERR_INVALID_STATE;
     }
     
     if (ip == NULL || max_len < 16) {
-        ESP_LOGE(TAG, "Invalid buffer for IP address");
+        LOG_E(TAG, "Invalid buffer for IP address");
         return ESP_ERR_INVALID_ARG;
     }
     
     if (!wifi_manager_is_connected()) {
-        ESP_LOGW(TAG, "Not connected to WiFi");
+        LOG_W(TAG, "Not connected to WiFi");
         strncpy(ip, "0.0.0.0", max_len);
         return ESP_ERR_INVALID_STATE;
     }
@@ -861,18 +861,18 @@ esp_err_t wifi_manager_get_ap_ip(char *ip, size_t max_len)
     wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
     
     if (ctx->event_group == NULL) {
-        ESP_LOGE(TAG, "WiFi Manager not initialized");
+        LOG_E(TAG, "WiFi Manager not initialized");
         return ESP_ERR_INVALID_STATE;
     }
     
     if (ip == NULL || max_len < 16) {
-        ESP_LOGE(TAG, "Invalid buffer for IP address");
+        LOG_E(TAG, "Invalid buffer for IP address");
         return ESP_ERR_INVALID_ARG;
     }
     
     if (ctx->state != WIFI_MANAGER_STATE_AP_MODE && 
         ctx->state != WIFI_MANAGER_STATE_STA_AP_MODE) {
-        ESP_LOGW(TAG, "Not in AP or STA+AP mode");
+        LOG_W(TAG, "Not in AP or STA+AP mode");
         strncpy(ip, "0.0.0.0", max_len);
         return ESP_ERR_INVALID_STATE;
     }
@@ -889,23 +889,23 @@ esp_err_t wifi_manager_get_rssi(int8_t *rssi)
     wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
     
     if (ctx->event_group == NULL) {
-        ESP_LOGE(TAG, "WiFi Manager not initialized");
+        LOG_E(TAG, "WiFi Manager not initialized");
         return ESP_ERR_INVALID_STATE;
     }
     
     if (rssi == NULL) {
-        ESP_LOGE(TAG, "RSSI pointer is NULL");
+        LOG_E(TAG, "RSSI pointer is NULL");
         return ESP_ERR_INVALID_ARG;
     }
     
     if (!wifi_manager_is_connected()) {
-        ESP_LOGW(TAG, "Not connected to WiFi");
+        LOG_W(TAG, "Not connected to WiFi");
         *rssi = -127;
         return ESP_ERR_INVALID_STATE;
     }
     
     if (esp_wifi_sta_get_ap_info(&ctx->ap_info) != ESP_OK) {
-        ESP_LOGW(TAG, "Failed to get AP info");
+        LOG_W(TAG, "Failed to get AP info");
         *rssi = -127;
         return ESP_FAIL;
     }
@@ -930,17 +930,17 @@ esp_err_t wifi_manager_get_configured_ssid(char *ssid, size_t max_len)
     wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
     
     if (ctx->event_group == NULL) {
-        ESP_LOGE(TAG, "WiFi Manager not initialized");
+        LOG_E(TAG, "WiFi Manager not initialized");
         return ESP_ERR_INVALID_STATE;
     }
     
     if (ssid == NULL || max_len < 1) {
-        ESP_LOGE(TAG, "Invalid buffer for SSID");
+        LOG_E(TAG, "Invalid buffer for SSID");
         return ESP_ERR_INVALID_ARG;
     }
     
     if (!ctx->credentials_saved) {
-        ESP_LOGW(TAG, "No saved WiFi credentials");
+        LOG_W(TAG, "No saved WiFi credentials");
         ssid[0] = '\0';
         return ESP_ERR_NOT_FOUND;
     }
@@ -956,22 +956,22 @@ esp_err_t wifi_manager_forget_network(void)
     wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
     
     if (ctx->event_group == NULL) {
-        ESP_LOGE(TAG, "WiFi Manager not initialized");
+        LOG_E(TAG, "WiFi Manager not initialized");
         return ESP_ERR_INVALID_STATE;
     }
     
-    ESP_LOGI(TAG, "Forgetting saved WiFi network");
+    LOG_I(TAG, "Forgetting saved WiFi network");
     
     if (ctx->state == WIFI_MANAGER_STATE_CONNECTED || 
         ctx->state == WIFI_MANAGER_STATE_CONNECTING) {
-        ESP_LOGI(TAG, "Disconnecting from current network");
+        LOG_I(TAG, "Disconnecting from current network");
         ESP_ERROR_CHECK(esp_wifi_disconnect());
         
         EventBits_t bits = xEventGroupWaitBits(ctx->event_group,
                                               WIFI_DISCONNECTED_BIT,
                                               pdFALSE, pdFALSE, pdMS_TO_TICKS(5000));
         if ((bits & WIFI_DISCONNECTED_BIT) == 0) {
-            ESP_LOGW(TAG, "Timeout waiting for disconnection");
+            LOG_W(TAG, "Timeout waiting for disconnection");
         }
     }
     
@@ -1000,29 +1000,29 @@ esp_err_t wifi_manager_start_scan(void)
     wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
     
     if (ctx->event_group == NULL) {
-        ESP_LOGE(TAG, "WiFi Manager not initialized");
+        LOG_E(TAG, "WiFi Manager not initialized");
         return ESP_ERR_INVALID_STATE;
     }
     
-    ESP_LOGI(TAG, "Starting WiFi scan");
+    LOG_I(TAG, "Starting WiFi scan");
     
     if (ctx->scan_in_progress) {
-        ESP_LOGW(TAG, "Scan already in progress");
+        LOG_W(TAG, "Scan already in progress");
         return ESP_ERR_INVALID_STATE;
     }
     
     wifi_mode_t current_mode;
     esp_err_t ret = esp_wifi_get_mode(&current_mode);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to get WiFi mode: %s", esp_err_to_name(ret));
+        LOG_E(TAG, "Failed to get WiFi mode: %s", esp_err_to_name(ret));
         return ret;
     }
     
     if (current_mode == WIFI_MODE_AP) {
-        ESP_LOGI(TAG, "Switching from AP to AP+STA mode for scanning");
+        LOG_I(TAG, "Switching from AP to AP+STA mode for scanning");
         ret = esp_wifi_set_mode(WIFI_MODE_APSTA);
         if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to switch to AP+STA mode: %s", esp_err_to_name(ret));
+            LOG_E(TAG, "Failed to switch to AP+STA mode: %s", esp_err_to_name(ret));
             return ret;
         }
         
@@ -1039,22 +1039,22 @@ esp_err_t wifi_manager_start_scan(void)
     
     ret = esp_wifi_scan_start(&ctx->scan_config, false);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to start WiFi scan: %s", esp_err_to_name(ret));
+        LOG_E(TAG, "Failed to start WiFi scan: %s", esp_err_to_name(ret));
         ctx->scan_in_progress = false;
         
         if (ctx->temporary_apsta_mode) {
-            ESP_LOGW(TAG, "Reverting to AP mode after scan failure");
+            LOG_W(TAG, "Reverting to AP mode after scan failure");
             ctx->temporary_apsta_mode = false;
             esp_err_t revert_ret = esp_wifi_set_mode(WIFI_MODE_AP);
             if (revert_ret != ESP_OK) {
-                ESP_LOGE(TAG, "Failed to revert to AP mode: %s", esp_err_to_name(revert_ret));
+                LOG_E(TAG, "Failed to revert to AP mode: %s", esp_err_to_name(revert_ret));
             }
         }
         
         return ret;
     }
     
-    ESP_LOGI(TAG, "WiFi scan started successfully");
+    LOG_I(TAG, "WiFi scan started successfully");
     return ESP_OK;
 }
 
@@ -1063,30 +1063,30 @@ esp_err_t wifi_manager_get_scan_results(wifi_scan_result_t *results, size_t max_
     wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
     
     if (ctx->event_group == NULL) {
-        ESP_LOGE(TAG, "WiFi Manager not initialized");
+        LOG_E(TAG, "WiFi Manager not initialized");
         return ESP_ERR_INVALID_STATE;
     }
     
     if (results == NULL || num_networks == NULL) {
-        ESP_LOGE(TAG, "Invalid output parameters");
+        LOG_E(TAG, "Invalid output parameters");
         return ESP_ERR_INVALID_ARG;
     }
     
     if (ctx->scan_in_progress) {
-        ESP_LOGI(TAG, "Waiting for scan to complete");
+        LOG_I(TAG, "Waiting for scan to complete");
         
         EventBits_t bits = xEventGroupWaitBits(ctx->event_group,
                                               WIFI_SCAN_DONE_BIT,
                                               pdFALSE, pdFALSE, pdMS_TO_TICKS(10000));
         
         if ((bits & WIFI_SCAN_DONE_BIT) == 0) {
-            ESP_LOGW(TAG, "Timeout waiting for scan to complete");
+            LOG_W(TAG, "Timeout waiting for scan to complete");
             return ESP_ERR_TIMEOUT;
         }
     }
     
     if (ctx->scan_ap_list == NULL || ctx->scan_ap_count == 0) {
-        ESP_LOGW(TAG, "No scan results available");
+        LOG_W(TAG, "No scan results available");
         *num_networks = 0;
         return ESP_ERR_NOT_FOUND;
     }
@@ -1100,7 +1100,7 @@ esp_err_t wifi_manager_get_scan_results(wifi_scan_result_t *results, size_t max_
     }
     
     *num_networks = count;
-    ESP_LOGI(TAG, "Returning %zu scan results", count);
+    LOG_I(TAG, "Returning %zu scan results", count);
     return ESP_OK;
 }
 
@@ -1109,7 +1109,7 @@ esp_err_t wifi_manager_set_state_callback(void (*callback)(wifi_manager_state_t 
     wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
     
     if (ctx->event_group == NULL) {
-        ESP_LOGE(TAG, "WiFi Manager not initialized");
+        LOG_E(TAG, "WiFi Manager not initialized");
         return ESP_ERR_INVALID_STATE;
     }
     
@@ -1148,18 +1148,18 @@ esp_err_t wifi_manager_handle_disconnection(const char *ap_ssid_prefix, const ch
                 char ap_ssid[33];
                 esp_err_t ap_ret = wifi_manager_generate_ap_ssid(ap_ssid, sizeof(ap_ssid), ap_ssid_prefix);
                 if (ap_ret != ESP_OK) {
-                    ESP_LOGE(TAG, "Failed to generate AP SSID");
+                    LOG_E(TAG, "Failed to generate AP SSID");
                     return ESP_FAIL;
                 }
                 
-                ESP_LOGI(TAG, "No credentials - starting AP+STA with SSID: %s", ap_ssid);
+                LOG_I(TAG, "No credentials - starting AP+STA with SSID: %s", ap_ssid);
                 
                 ap_ret = wifi_manager_start_sta_ap_mode(ap_ssid, ap_password);
                 if (ap_ret == ESP_OK) {
                     ap_mode_active = true;
                     reconnect_attempts = 0;
                 } else {
-                    ESP_LOGE(TAG, "Failed to start AP+STA mode");
+                    LOG_E(TAG, "Failed to start AP+STA mode");
                 }
             }
             return ESP_OK;
@@ -1169,23 +1169,23 @@ esp_err_t wifi_manager_handle_disconnection(const char *ap_ssid_prefix, const ch
         netif_cleanup_cycle++;
         
         if (netif_cleanup_cycle >= NETIF_CLEANUP_THRESHOLD) {
-            ESP_LOGI(TAG, "Performing netif cleanup after %d reconnections", netif_cleanup_cycle);
+            LOG_I(TAG, "Performing netif cleanup after %d reconnections", netif_cleanup_cycle);
             
             esp_wifi_stop();
             vTaskDelay(pdMS_TO_TICKS(500));
             
             if (cleanup_and_recreate_netifs(ctx) == ESP_OK) {
-                ESP_LOGI(TAG, "Netifs recreated successfully");
+                LOG_I(TAG, "Netifs recreated successfully");
                 netif_cleanup_cycle = 0;
             } else {
-                ESP_LOGE(TAG, "Failed to recreate netifs");
+                LOG_E(TAG, "Failed to recreate netifs");
             }
             
             esp_wifi_start();
             vTaskDelay(pdMS_TO_TICKS(1000));
         }
         
-        ESP_LOGI(TAG, "WiFi recovery cycle %d, reconnection attempt %d (cleanup cycle: %d)", 
+        LOG_I(TAG, "WiFi recovery cycle %d, reconnection attempt %d (cleanup cycle: %d)", 
                  recovery_cycle + 1, reconnect_attempts, netif_cleanup_cycle);
         
         if (reconnect_attempts % 5 == 0 && netif_cleanup_cycle < NETIF_CLEANUP_THRESHOLD) {
@@ -1199,23 +1199,23 @@ esp_err_t wifi_manager_handle_disconnection(const char *ap_ssid_prefix, const ch
             char ap_ssid[33];
             esp_err_t ap_ret = wifi_manager_generate_ap_ssid(ap_ssid, sizeof(ap_ssid), ap_ssid_prefix);
             if (ap_ret != ESP_OK) {
-                ESP_LOGE(TAG, "Failed to generate AP SSID");
+                LOG_E(TAG, "Failed to generate AP SSID");
                 return ESP_FAIL;
             }
             
-            ESP_LOGI(TAG, "Starting AP+STA with SSID: %s while continuing reconnection attempts", ap_ssid);
+            LOG_I(TAG, "Starting AP+STA with SSID: %s while continuing reconnection attempts", ap_ssid);
             
             ap_ret = wifi_manager_start_sta_ap_mode(ap_ssid, ap_password);
             if (ap_ret == ESP_OK) {
                 ap_mode_active = true;
             } else {
-                ESP_LOGE(TAG, "Failed to start AP+STA mode");
+                LOG_E(TAG, "Failed to start AP+STA mode");
             }
         }
         
         esp_err_t ret = wifi_manager_connect_saved();
         if (ret != ESP_OK) {
-            ESP_LOGW(TAG, "Connection attempt failed: %s", esp_err_to_name(ret));
+            LOG_W(TAG, "Connection attempt failed: %s", esp_err_to_name(ret));
         }
     }
     
@@ -1225,14 +1225,14 @@ esp_err_t wifi_manager_handle_disconnection(const char *ap_ssid_prefix, const ch
 esp_err_t wifi_manager_generate_ap_ssid(char *ap_ssid, size_t max_len, const char *prefix)
 {
     if (ap_ssid == NULL || max_len < 8 || prefix == NULL) {
-        ESP_LOGE(TAG, "Invalid parameters for AP SSID generation");
+        LOG_E(TAG, "Invalid parameters for AP SSID generation");
         return ESP_ERR_INVALID_ARG;
     }
     
     char esp32_id[ESP32_ID_LENGTH + 1];
     esp_err_t ret = esp32_id_manager_get_id(esp32_id, sizeof(esp32_id));
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to get ESP32 ID");
+        LOG_E(TAG, "Failed to get ESP32 ID");
         return ret;
     }
     
@@ -1240,12 +1240,12 @@ esp_err_t wifi_manager_generate_ap_ssid(char *ap_ssid, size_t max_len, const cha
     size_t prefix_len = strlen(prefix);
     
     if (id_len < 6 || prefix_len + 7 > max_len) {
-        ESP_LOGE(TAG, "ID too short or buffer too small");
+        LOG_E(TAG, "ID too short or buffer too small");
         return ESP_ERR_INVALID_ARG;
     }
     
     snprintf(ap_ssid, max_len, "%s_%s", prefix, &esp32_id[id_len - 6]);
     
-    ESP_LOGI(TAG, "Generated AP SSID: %s", ap_ssid);
+    LOG_I(TAG, "Generated AP SSID: %s", ap_ssid);
     return ESP_OK;
 }

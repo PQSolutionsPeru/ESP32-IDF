@@ -9,7 +9,6 @@
 #include "freertos/semphr.h"
 #include "esp_netif.h"
 #include "wifi_manager.h"
-#include "mqtt_manager.h"
 #include <string.h>
 
 static const char *TAG = "TIME_MGR";

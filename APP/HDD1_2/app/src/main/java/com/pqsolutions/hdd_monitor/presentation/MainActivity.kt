@@ -1,12 +1,8 @@
 package com.pqsolutions.hdd_monitor.presentation
 
 import android.app.AlertDialog
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -25,15 +21,13 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
+import com.pqsolutions.hdd_monitor.data.util.SmartReminderManager
 import com.pqsolutions.hdd_monitor.presentation.navigation.AppNavigation
 import com.pqsolutions.hdd_monitor.presentation.theme.HDD1_2Theme
 import com.pqsolutions.hdd_monitor.presentation.viewmodel.MainViewModel
@@ -43,15 +37,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
+    @Inject
+    lateinit var smartReminderManager: SmartReminderManager
+
     companion object {
         private const val TAG = "MainActivity"
         private const val NOTIFICATION_PERMISSION_REQUEST_CODE = 123
-        private const val BATTERY_REMINDER_INTERVAL = 3600000L
         const val CHANNEL_ID_RELAY = "relay_status"
         const val CHANNEL_ID_EVENT = "event_notifications"
     }
@@ -134,231 +131,73 @@ class MainActivity : ComponentActivity() {
             val powerManager = getSystemService(POWER_SERVICE) as PowerManager
             if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
                 lifecycleScope.launch {
-                    delay(2000)
+                    delay(3000)
                     if (!isFinishing && !isDestroyed) {
-                        showImprovedBatteryOptimizationDialog()
+                        scheduleSmartReminder()
                     }
                 }
             }
         }
     }
 
-    private fun showImprovedBatteryOptimizationDialog() {
-        if (!isFinishing && !isDestroyed) {
-            try {
-                AlertDialog.Builder(this)
-                    .setTitle("⚠️ CONFIGURACIÓN CRÍTICA REQUERIDA")
-                    .setMessage(getDetailedBatteryMessage())
-                    .setPositiveButton("Configurar Ahora") { _, _ ->
-                        requestBatteryOptimizationExemption()
-                    }
-                    .setNeutralButton("Ir a Configuración") { _, _ ->
-                        openBatteryOptimizationSettings()
-                    }
-                    .setNegativeButton("Recordar en 1 hora") { _, _ ->
-                        scheduleReminderForBatteryOptimization()
-                    }
-                    .setCancelable(false)
-                    .show()
-            } catch (e: Exception) {
-                Log.e(TAG, "Error mostrando diálogo de batería mejorado", e)
-            }
-        }
-    }
-
-    private fun getDetailedBatteryMessage(): String {
-        return """
-🔥 SISTEMA DE MONITOREO DE INCENDIOS 🔥
-
-Esta aplicación monitorea paneles de incendio 24/7/365.
-
-⚠️ SIN ESTA CONFIGURACIÓN:
-• Las notificaciones de emergencia pueden NO llegar
-• Los alertas de incendio pueden perderse
-• El sistema puede dejar de funcionar en segundo plano
-• Podría NO recibir avisos críticos de seguridad
-
-📱 ANDROID OPTIMIZA AUTOMÁTICAMENTE:
-Android cierra apps en segundo plano para ahorrar batería, pero esto interfiere con sistemas de seguridad críticos.
-
-✅ LA SOLUCIÓN ES SIMPLE:
-Agregue esta app a la lista de "No optimizar" en configuración de batería. Solo toma 30 segundos.
-
-🛡️ RESPONSABILIDAD:
-Para garantizar que reciba todas las alertas de seguridad, debe configurar esta exención.
-        """.trimIndent()
-    }
-
-    private fun scheduleReminderForBatteryOptimization() {
+    private fun scheduleSmartReminder() {
         lifecycleScope.launch {
-            delay(BATTERY_REMINDER_INTERVAL)
+            while (!smartReminderManager.shouldShowReminder()) {
+                delay(60 * 60 * 1000L)
+                if (isFinishing || isDestroyed) return@launch
+            }
 
             if (!isFinishing && !isDestroyed) {
                 val powerManager = getSystemService(POWER_SERVICE) as PowerManager
                 if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
-                    showImprovedBatteryOptimizationDialog()
+                    showSmartBatteryDialog()
                 }
             }
         }
     }
 
-    private fun openBatteryOptimizationSettings() {
+    private fun showSmartBatteryDialog() {
+        val reminderCount = smartReminderManager.getReminderCount()
+        val isLastReminder = smartReminderManager.isLastReminder()
+
         try {
-            val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-            startActivity(intent)
-            showBatterySettingsInstructions()
-        } catch (e: Exception) {
-            Log.e(TAG, "No se pudo abrir configuración de optimización", e)
-            try {
-                val batteryIntent = Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)
-                startActivity(batteryIntent)
-                showBatterySettingsInstructions()
-            } catch (e2: Exception) {
-                Log.e(TAG, "No se pudo abrir configuración de batería", e2)
-                openAppSpecificSettings()
-            }
-        }
-    }
-
-    private fun showBatterySettingsInstructions() {
-        lifecycleScope.launch {
-            delay(1000)
-
-            if (!isFinishing && !isDestroyed) {
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("📱 Instrucciones")
-                    .setMessage("""
-PASOS A SEGUIR:
-
-1️⃣ Busque "HDD Monitor" en la lista
-2️⃣ Toque en "HDD Monitor"
-3️⃣ Seleccione "No optimizar"
-4️⃣ Confirme la selección
-
-💡 Si no ve la opción, busque:
-• "Optimización de batería"
-• "Administración de energía"
-• "Apps no optimizadas"
-
-🔄 Regrese a la app cuando termine
-                    """.trimIndent())
-                    .setPositiveButton("Entendido") { dialog, _ ->
-                        dialog.dismiss()
+            AlertDialog.Builder(this)
+                .setTitle("🔥 Configuración Pendiente")
+                .setMessage(smartReminderManager.getReminderMessage(reminderCount))
+                .setPositiveButton("Configurar") { _, _ ->
+                    requestBatteryOptimizationExemption()
+                    smartReminderManager.resetReminders()
+                }
+                .setNegativeButton(if (isLastReminder) "No volver a preguntar" else "Más tarde") { _, _ ->
+                    if (isLastReminder) {
+                        smartReminderManager.userDismissedPermanently()
+                    } else {
+                        smartReminderManager.recordReminderShown()
+                        scheduleSmartReminder()
                     }
-                    .show()
-            }
-        }
-    }
-
-    private fun openAppSpecificSettings() {
-        try {
-            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                data = Uri.fromParts("package", packageName, null)
-            }
-            startActivity(intent)
-            showAppSettingsInstructions()
+                }
+                .setCancelable(false)
+                .show()
         } catch (e: Exception) {
-            Log.e(TAG, "No se pudo abrir configuración de la aplicación", e)
-            showManualInstructions()
+            Log.e(TAG, "Error mostrando diálogo de batería", e)
         }
-    }
-
-    private fun showAppSettingsInstructions() {
-        lifecycleScope.launch {
-            delay(1000)
-
-            if (!isFinishing && !isDestroyed) {
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("⚙️ Configuración de App")
-                    .setMessage("""
-PASOS EN CONFIGURACIÓN DE APP:
-
-1️⃣ Busque "Batería" o "Battery"
-2️⃣ Toque en "Optimización de batería"
-3️⃣ Cambie a "No optimizar"
-4️⃣ Confirme los cambios
-
-O también:
-• "Administración de energía"
-• "Uso de batería"
-• "Optimización automática"
-
-✅ El objetivo: Permitir que la app funcione en segundo plano
-                    """.trimIndent())
-                    .setPositiveButton("Entendido") { dialog, _ ->
-                        dialog.dismiss()
-                    }
-                    .show()
-            }
-        }
-    }
-
-    private fun showManualInstructions() {
-        AlertDialog.Builder(this)
-            .setTitle("📖 Instrucciones Manuales")
-            .setMessage("""
-CONFIGURACIÓN MANUAL:
-
-📱 Vaya a Configuración de Android:
-1️⃣ Configuración → Apps
-2️⃣ Busque "HDD Monitor"
-3️⃣ Toque en "Batería"
-4️⃣ Seleccione "No optimizar"
-
-📱 O también:
-1️⃣ Configuración → Batería
-2️⃣ Optimización de batería
-3️⃣ Busque "HDD Monitor"
-4️⃣ Cambie a "No optimizar"
-
-⚠️ IMPORTANTE:
-Sin esta configuración, las alertas de incendio pueden no llegar.
-            """.trimIndent())
-            .setPositiveButton("Entendido") { dialog, _ ->
-                dialog.dismiss()
-            }
-            .show()
     }
 
     private fun requestBatteryOptimizationExemption() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val powerManager = getSystemService(POWER_SERVICE) as PowerManager
-            if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
-                try {
-                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                        data = Uri.parse("package:$packageName")
-                    }
-                    startActivity(intent)
-                    showQuickInstructions()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error con solicitud directa, usando método alternativo", e)
-                    openBatteryOptimizationSettings()
+            try {
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
                 }
-            }
-        }
-    }
-
-    private fun showQuickInstructions() {
-        lifecycleScope.launch {
-            delay(500)
-
-            if (!isFinishing && !isDestroyed) {
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("✅ Último Paso")
-                    .setMessage("""
-¡Perfecto! Solo confirme:
-
-🔘 Seleccione "Permitir" o "Sí"
-🔘 Confirme la excepción
-
-⏱️ ¡Son solo 5 segundos más!
-
-🛡️ Con esto garantiza recibir todas las alertas de incendio 24/7.
-                    """.trimIndent())
-                    .setPositiveButton("Entendido") { dialog, _ ->
-                        dialog.dismiss()
-                    }
-                    .show()
+                startActivity(intent)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error solicitando exención de batería", e)
+                try {
+                    val fallbackIntent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                    startActivity(fallbackIntent)
+                } catch (e2: Exception) {
+                    Log.e(TAG, "Error abriendo configuración de batería", e2)
+                }
             }
         }
     }
@@ -401,17 +240,6 @@ Sin esta configuración, las alertas de incendio pueden no llegar.
             if (!MonitoringService.isRunning()) {
                 Log.e(TAG, "CRÍTICO: No se pudo iniciar el servicio de monitoreo después de $maxAttempts intentos")
             }
-        }
-    }
-
-    private fun showAppSettings() {
-        try {
-            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                data = Uri.fromParts("package", packageName, null)
-            }
-            startActivity(intent)
-        } catch (e: Exception) {
-            Log.e(TAG, "No se pudo abrir la configuración de la aplicación", e)
         }
     }
 

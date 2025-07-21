@@ -41,7 +41,7 @@ fun OnboardingScreen(
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        permissionsViewModel.checkPermissions()
+        permissionsViewModel.handlePermissionResult(permissions)
         if (permissions.containsValue(false)) {
             coroutineScope.launch {
                 snackbarHostState.showSnackbar(
@@ -92,12 +92,16 @@ fun OnboardingScreen(
                 if (result == SnackbarResult.ActionPerformed) {
                     when (val state = permissionsState) {
                         is PermissionsState.NeedsPermissions -> {
-                            if (state.permissions.isNotEmpty()) {
-                                permissionLauncher.launch(state.permissions.toTypedArray())
-                            }
-                            if (state.needsBatteryOptimization) {
-                                context.startActivity(permissionsViewModel.getBatteryOptimizationIntent())
-                            }
+                            handleAllPermissions(
+                                permissions = state.permissions,
+                                needsBattery = state.needsBatteryOptimization,
+                                onRequestPermissions = { permissions ->
+                                    permissionLauncher.launch(permissions.toTypedArray())
+                                },
+                                onRequestBatteryOptimization = {
+                                    context.startActivity(permissionsViewModel.getBatteryOptimizationIntent())
+                                }
+                            )
                         }
                         else -> {}
                     }
@@ -164,12 +168,21 @@ fun OnboardingScreen(
                             pagerState.animateScrollToPage(pagerState.currentPage + 1)
                         }
                     } else {
-                        when (permissionsState) {
+                        when (val state = permissionsState) {
                             is PermissionsState.AllGranted -> {
                                 onFinish()
                             }
                             is PermissionsState.NeedsPermissions -> {
-                                showPermissionsSnackbar = true
+                                handleAllPermissions(
+                                    permissions = state.permissions,
+                                    needsBattery = state.needsBatteryOptimization,
+                                    onRequestPermissions = { permissions ->
+                                        permissionLauncher.launch(permissions.toTypedArray())
+                                    },
+                                    onRequestBatteryOptimization = {
+                                        context.startActivity(permissionsViewModel.getBatteryOptimizationIntent())
+                                    }
+                                )
                             }
                             else -> {}
                         }
@@ -178,7 +191,7 @@ fun OnboardingScreen(
                 text = when {
                     pagerState.currentPage == pages.lastIndex &&
                             permissionsState is PermissionsState.AllGranted -> "Empezar"
-                    pagerState.currentPage == pages.lastIndex -> "Conceder Permisos"
+                    pagerState.currentPage == pages.lastIndex -> "Configurar Todo"
                     else -> "Siguiente"
                 },
                 modifier = Modifier
@@ -186,6 +199,19 @@ fun OnboardingScreen(
                     .fillMaxWidth()
             )
         }
+    }
+}
+
+private fun handleAllPermissions(
+    permissions: List<String>,
+    needsBattery: Boolean,
+    onRequestPermissions: (List<String>) -> Unit,
+    onRequestBatteryOptimization: () -> Unit
+) {
+    if (permissions.isNotEmpty()) {
+        onRequestPermissions(permissions)
+    } else if (needsBattery) {
+        onRequestBatteryOptimization()
     }
 }
 
@@ -211,7 +237,7 @@ private fun PermissionsPageContent(
         Spacer(modifier = Modifier.height(Dimensions.spacingLarge))
 
         Text(
-            text = "Permisos Necesarios",
+            text = "Últimos Pasos",
             style = MaterialTheme.typography.headlineMedium,
             textAlign = TextAlign.Center
         )
@@ -220,30 +246,61 @@ private fun PermissionsPageContent(
 
         when (permissionsState) {
             is PermissionsState.NeedsPermissions -> {
-                if (permissionsState.permissions.isNotEmpty()) {
-                    Button(
-                        onClick = { onRequestPermissions(permissionsState.permissions) }
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp)
                     ) {
-                        Text("Conceder Permisos de Sistema")
-                    }
-                }
+                        Text(
+                            text = "🔧 Configuración Final",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
 
-                if (permissionsState.needsBatteryOptimization) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(
-                        onClick = onRequestBatteryOptimization
-                    ) {
-                        Text("Desactivar Optimización de Batería")
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = "🔥 Para recibir alertas de incendio 24/7\n⚠️ Se requieren algunos permisos",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
                     }
                 }
             }
+
             is PermissionsState.AllGranted -> {
-                Text(
-                    text = "¡Todos los permisos están configurados!",
-                    style = MaterialTheme.typography.bodyLarge,
-                    textAlign = TextAlign.Center
-                )
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "✅ ¡Configuración Completa!",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = "El sistema está listo para alertas 24/7",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
             }
+
             PermissionsState.Loading -> {
                 CircularProgressIndicator()
             }

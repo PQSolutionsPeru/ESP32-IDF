@@ -10,6 +10,7 @@ idf_component_register(
         esp_hw_support
         wifi_manager
         mqtt_manager
+        custom_logging
     PRIV_REQUIRES
         heap
 )

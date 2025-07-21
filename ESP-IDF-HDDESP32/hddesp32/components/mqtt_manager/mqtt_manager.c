@@ -14,7 +14,7 @@
 #include "freertos/event_groups.h"
 #include "freertos/semphr.h"
 #include "freertos/queue.h"
-#include "esp_log.h"
+#include "custom_logging.h"
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "mqtt_client.h"
@@ -102,7 +102,7 @@ static esp_err_t recreate_mqtt_event_group(mqtt_manager_context_t *ctx) {
     ctx->event_group = xEventGroupCreate();
     
     if (ctx->event_group == NULL) {
-        ESP_LOGE(TAG, "Failed to recreate MQTT event group");
+        LOG_E(TAG, "Failed to recreate MQTT event group");
         return ESP_ERR_NO_MEM;
     }
     
@@ -111,14 +111,14 @@ static esp_err_t recreate_mqtt_event_group(mqtt_manager_context_t *ctx) {
     }
     
     ctx->event_group_operations = 0;
-    ESP_LOGI(TAG, "MQTT event group recreated");
+    LOG_I(TAG, "MQTT event group recreated");
     return ESP_OK;
 }
 
 static void safe_mqtt_set_bits(mqtt_manager_context_t *ctx, EventBits_t bits) {
     ctx->event_group_operations++;
     
-    if (ctx->event_group_operations >= 1000000) {
+    if (ctx->event_group_operations >= 50000) {
         recreate_mqtt_event_group(ctx);
     }
     
@@ -128,7 +128,7 @@ static void safe_mqtt_set_bits(mqtt_manager_context_t *ctx, EventBits_t bits) {
 static void safe_mqtt_clear_bits(mqtt_manager_context_t *ctx, EventBits_t bits) {
     ctx->event_group_operations++;
     
-    if (ctx->event_group_operations >= 1000000) {
+    if (ctx->event_group_operations >= 50000) {
         recreate_mqtt_event_group(ctx);
     }
     
@@ -149,7 +149,7 @@ static char* mqtt_get_buffer(mqtt_manager_context_t *ctx) {
         
         size_t free_heap = esp_get_free_heap_size();
         if (free_heap < 50000) {
-            ESP_LOGW(TAG, "Low memory during buffer allocation: %zu bytes", free_heap);
+            LOG_W(TAG, "Low memory during buffer allocation: %zu bytes", free_heap);
             mqtt_manager_emergency_memory_cleanup();
         }
     }
@@ -170,20 +170,20 @@ static void mqtt_release_buffer(mqtt_manager_context_t *ctx, char *buffer) {
 
 static esp_err_t validate_esp32_id(const char *esp32_id) {
     if (esp32_id == NULL) {
-        ESP_LOGE(TAG, "ESP32 ID is NULL");
+        LOG_E(TAG, "ESP32 ID is NULL");
         return ESP_ERR_INVALID_ARG;
     }
     
     size_t len = strlen(esp32_id);
     if (len == 0 || len > ESP32_ID_LENGTH) {
-        ESP_LOGE(TAG, "ESP32 ID invalid length: %zu", len);
+        LOG_E(TAG, "ESP32 ID invalid length: %zu", len);
         return ESP_ERR_INVALID_ARG;
     }
     
     for (size_t i = 0; i < len; i++) {
         char c = esp32_id[i];
         if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'))) {
-            ESP_LOGE(TAG, "ESP32 ID contains invalid character: '%c'", c);
+            LOG_E(TAG, "ESP32 ID contains invalid character: '%c'", c);
             return ESP_ERR_INVALID_ARG;
         }
     }
@@ -211,7 +211,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     
     switch (event->event_id) {
         case MQTT_EVENT_CONNECTED:
-            ESP_LOGI(TAG, "MQTT connected");
+            LOG_I(TAG, "MQTT connected");
             
             if (xSemaphoreTake(ctx->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
                 ctx->state = MQTT_MANAGER_STATE_CONNECTED;
@@ -241,7 +241,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             
             mqtt_pending_message_t pending_msg;
             int pending_count = 0;
-            while (xQueueReceive(ctx->pending_messages, &pending_msg, 0) == pdTRUE && pending_count < 5) {
+            while (xQueueReceive(ctx->pending_messages, &pending_msg, 0) == pdTRUE && pending_count < 20) {
                 esp_mqtt_client_publish(event->client, pending_msg.topic, pending_msg.data, 
                                         pending_msg.data_len, pending_msg.qos, pending_msg.retain);
                 pending_count++;
@@ -250,7 +250,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             break;
             
         case MQTT_EVENT_DISCONNECTED:
-            ESP_LOGW(TAG, "MQTT disconnected");
+            LOG_W(TAG, "MQTT disconnected");
             
             if (xSemaphoreTake(ctx->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
                 ctx->state = MQTT_MANAGER_STATE_RECONNECTING;
@@ -267,7 +267,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             break;
             
         case MQTT_EVENT_SUBSCRIBED:
-            ESP_LOGI(TAG, "MQTT subscribed, msg_id=%d", event->msg_id);
+            LOG_I(TAG, "MQTT subscribed, msg_id=%d", event->msg_id);
             break;
             
         case MQTT_EVENT_PUBLISHED:
@@ -279,7 +279,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 event->data_len > 0 && event->data_len < MAX_MESSAGE_LENGTH) {
                 
                 if (!should_process_message(current_time)) {
-                    ESP_LOGD(TAG, "Message rate limited, skipping");
+                    LOG_D(TAG, "Message rate limited, skipping");
                     break;
                 }
                 
@@ -302,7 +302,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             break;
             
         case MQTT_EVENT_ERROR:
-            ESP_LOGE(TAG, "MQTT error");
+            LOG_E(TAG, "MQTT error");
             
             if (xSemaphoreTake(ctx->mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
                 ctx->state = MQTT_MANAGER_STATE_RECONNECTING;
@@ -327,11 +327,11 @@ esp_err_t mqtt_manager_init(void) {
     mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
     
     if (ctx->event_group != NULL) {
-        ESP_LOGW(TAG, "Already initialized");
+        LOG_W(TAG, "Already initialized");
         return ESP_ERR_INVALID_STATE;
     }
     
-    ESP_LOGI(TAG, "Initializing MQTT Manager");
+    LOG_I(TAG, "Initializing MQTT Manager");
     
     memset(ctx, 0, sizeof(mqtt_manager_context_t));
     
@@ -339,7 +339,7 @@ esp_err_t mqtt_manager_init(void) {
     
     ctx->event_group = xEventGroupCreate();
     if (ctx->event_group == NULL) {
-        ESP_LOGE(TAG, "Failed to create event group");
+        LOG_E(TAG, "Failed to create event group");
         return ESP_ERR_NO_MEM;
     }
     
@@ -347,7 +347,7 @@ esp_err_t mqtt_manager_init(void) {
     if (ctx->mutex == NULL) {
         vEventGroupDelete(ctx->event_group);
         ctx->event_group = NULL;
-        ESP_LOGE(TAG, "Failed to create mutex");
+        LOG_E(TAG, "Failed to create mutex");
         return ESP_ERR_NO_MEM;
     }
     
@@ -357,7 +357,7 @@ esp_err_t mqtt_manager_init(void) {
         vEventGroupDelete(ctx->event_group);
         ctx->mutex = NULL;
         ctx->event_group = NULL;
-        ESP_LOGE(TAG, "Failed to create buffer mutex");
+        LOG_E(TAG, "Failed to create buffer mutex");
         return ESP_ERR_NO_MEM;
     }
     
@@ -385,7 +385,7 @@ esp_err_t mqtt_manager_init(void) {
         vEventGroupDelete(ctx->event_group);
         ctx->mutex = NULL;
         ctx->event_group = NULL;
-        ESP_LOGE(TAG, "Failed to create message queue");
+        LOG_E(TAG, "Failed to create message queue");
         return ESP_ERR_NO_MEM;
     }
     
@@ -399,7 +399,7 @@ esp_err_t mqtt_manager_init(void) {
     ctx->state = MQTT_MANAGER_STATE_DISCONNECTED;
     safe_mqtt_set_bits(ctx, MQTT_DISCONNECTED_BIT);
     
-    ESP_LOGI(TAG, "MQTT Manager initialized");
+    LOG_I(TAG, "MQTT Manager initialized");
     return ESP_OK;
 }
 
@@ -407,7 +407,7 @@ esp_err_t mqtt_manager_set_esp32_id(const char *esp32_id) {
     mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
     
     if (ctx->event_group == NULL) {
-        ESP_LOGE(TAG, "Not initialized");
+        LOG_E(TAG, "Not initialized");
         return ESP_ERR_INVALID_STATE;
     }
     
@@ -416,7 +416,7 @@ esp_err_t mqtt_manager_set_esp32_id(const char *esp32_id) {
         return validation_result;
     }
     
-    ESP_LOGI(TAG, "Setting credentials for ESP32 ID: %s", esp32_id);
+    LOG_I(TAG, "Setting credentials for ESP32 ID: %s", esp32_id);
     
     if (xSemaphoreTake(ctx->mutex, portMAX_DELAY) == pdTRUE) {
         strncpy(ctx->esp32_id, esp32_id, sizeof(ctx->esp32_id) - 1);
@@ -449,7 +449,7 @@ esp_err_t mqtt_manager_set_esp32_id(const char *esp32_id) {
         xSemaphoreGive(ctx->mutex);
     }
     
-    ESP_LOGI(TAG, "Credentials configured");
+    LOG_I(TAG, "Credentials configured");
     return ESP_OK;
 }
 
@@ -458,26 +458,26 @@ esp_err_t mqtt_manager_connect(void) {
     char temp_buffer[MQTT_BROKER_MAX_LENGTH + 32];
     
     if (ctx->event_group == NULL) {
-        ESP_LOGE(TAG, "Not initialized");
+        LOG_E(TAG, "Not initialized");
         return ESP_ERR_INVALID_STATE;
     }
     
     if (strlen(ctx->esp32_id) == 0) {
-        ESP_LOGE(TAG, "ESP32 ID not set");
+        LOG_E(TAG, "ESP32 ID not set");
         return ESP_ERR_INVALID_STATE;
     }
     
     if (mqtt_manager_is_connected() || ctx->state == MQTT_MANAGER_STATE_CONNECTING) {
-        ESP_LOGW(TAG, "Already connected or connecting");
+        LOG_W(TAG, "Already connected or connecting");
         return ESP_OK;
     }
     
     if (!wifi_manager_is_connected()) {
-        ESP_LOGE(TAG, "WiFi not connected");
+        LOG_E(TAG, "WiFi not connected");
         return ESP_ERR_INVALID_STATE;
     }
     
-    ESP_LOGI(TAG, "Connecting to MQTT broker");
+    LOG_I(TAG, "Connecting to MQTT broker");
     
     if (xSemaphoreTake(ctx->mutex, portMAX_DELAY) == pdTRUE) {
         ctx->state = MQTT_MANAGER_STATE_CONNECTING;
@@ -504,7 +504,7 @@ esp_err_t mqtt_manager_connect(void) {
         }
         
         if (strlen(clean_start) == 0) {
-            ESP_LOGE(TAG, "Broker URL is empty");
+            LOG_E(TAG, "Broker URL is empty");
             ctx->state = MQTT_MANAGER_STATE_ERROR;
             safe_mqtt_set_bits(ctx, MQTT_ERROR_BIT);
             xSemaphoreGive(ctx->mutex);
@@ -516,23 +516,23 @@ esp_err_t mqtt_manager_connect(void) {
         hints.ai_family = AF_INET;
         hints.ai_socktype = SOCK_STREAM;
         
-        ESP_LOGI(TAG, "Testing DNS resolution for: %s", clean_start);
+        LOG_I(TAG, "Testing DNS resolution for: %s", clean_start);
         int dns_result = getaddrinfo(clean_start, NULL, &hints, &result);
         if (dns_result != 0) {
-            ESP_LOGE(TAG, "DNS resolution failed for %s", clean_start);
+            LOG_E(TAG, "DNS resolution failed for %s", clean_start);
             ctx->state = MQTT_MANAGER_STATE_ERROR;
             safe_mqtt_set_bits(ctx, MQTT_ERROR_BIT);
             xSemaphoreGive(ctx->mutex);
             return ESP_FAIL;
         } else {
-            ESP_LOGI(TAG, "DNS resolution successful for %s", clean_start);
+            LOG_I(TAG, "DNS resolution successful for %s", clean_start);
             freeaddrinfo(result);
         }
         
         snprintf(temp_buffer, sizeof(temp_buffer), "%s://%s:%d", 
                 ctx->use_ssl ? "mqtts" : "mqtt", clean_start, ctx->port);
         
-        ESP_LOGI(TAG, "Connecting to URI: %s", temp_buffer);
+        LOG_I(TAG, "Connecting to URI: %s", temp_buffer);
         
         esp_mqtt_client_config_t mqtt_cfg = {0};
         mqtt_cfg.broker.address.uri = temp_buffer;
@@ -568,7 +568,7 @@ esp_err_t mqtt_manager_connect(void) {
                 ctx->state = MQTT_MANAGER_STATE_ERROR;
                 safe_mqtt_set_bits(ctx, MQTT_ERROR_BIT);
                 xSemaphoreGive(ctx->mutex);
-                ESP_LOGE(TAG, "SSL config failed");
+                LOG_E(TAG, "SSL config failed");
                 return ssl_ret;
             }
         }
@@ -578,7 +578,7 @@ esp_err_t mqtt_manager_connect(void) {
             ctx->state = MQTT_MANAGER_STATE_ERROR;
             safe_mqtt_set_bits(ctx, MQTT_ERROR_BIT);
             xSemaphoreGive(ctx->mutex);
-            ESP_LOGE(TAG, "Failed to create MQTT client");
+            LOG_E(TAG, "Failed to create MQTT client");
             return ESP_FAIL;
         }
         
@@ -586,7 +586,7 @@ esp_err_t mqtt_manager_connect(void) {
         
         esp_err_t ret = esp_mqtt_client_start(ctx->client);
         if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to start MQTT client");
+            LOG_E(TAG, "Failed to start MQTT client");
             esp_mqtt_client_destroy(ctx->client);
             ctx->client = NULL;
             ctx->state = MQTT_MANAGER_STATE_ERROR;
@@ -607,13 +607,13 @@ esp_err_t mqtt_manager_connect(void) {
                                           pdFALSE, pdFALSE, pdMS_TO_TICKS(60000));
     
     if (bits & MQTT_CONNECTED_BIT) {
-        ESP_LOGI(TAG, "MQTT connected successfully");
+        LOG_I(TAG, "MQTT connected successfully");
         return ESP_OK;
     } else if (bits & MQTT_ERROR_BIT) {
-        ESP_LOGE(TAG, "MQTT connection error");
+        LOG_E(TAG, "MQTT connection error");
         return ESP_FAIL;
     } else {
-        ESP_LOGW(TAG, "MQTT connection timeout");
+        LOG_W(TAG, "MQTT connection timeout");
         return ESP_ERR_TIMEOUT;
     }
 }
@@ -629,7 +629,7 @@ esp_err_t mqtt_manager_disconnect(void) {
         return ESP_OK;
     }
     
-    ESP_LOGI(TAG, "Disconnecting from MQTT");
+    LOG_I(TAG, "Disconnecting from MQTT");
     
     if (xSemaphoreTake(ctx->mutex, portMAX_DELAY) == pdTRUE) {
         esp_err_t ret = esp_mqtt_client_stop(ctx->client);
@@ -702,7 +702,7 @@ esp_err_t mqtt_manager_publish(const char *topic, const char *data, int data_len
     }
     
     if (data_len > DEFAULT_BUFFER_SIZE) {
-        ESP_LOGE(TAG, "Message too large: %d bytes (max %d)", data_len, DEFAULT_BUFFER_SIZE);
+        LOG_E(TAG, "Message too large: %d bytes (max %d)", data_len, DEFAULT_BUFFER_SIZE);
         return ESP_ERR_INVALID_SIZE;
     }
     
@@ -714,7 +714,7 @@ esp_err_t mqtt_manager_publish(const char *topic, const char *data, int data_len
         mqtt_pending_message_t pending_msg;
         size_t topic_len = strlen(topic);
         if (topic_len >= sizeof(pending_msg.topic)) {
-            ESP_LOGE(TAG, "Topic too long: %zu", topic_len);
+            LOG_E(TAG, "Topic too long: %zu", topic_len);
             return ESP_ERR_INVALID_SIZE;
         }
         
@@ -735,7 +735,7 @@ esp_err_t mqtt_manager_publish(const char *topic, const char *data, int data_len
             mqtt_pending_message_t dummy;
             xQueueReceive(ctx->pending_messages, &dummy, 0);
             if (xQueueSend(ctx->pending_messages, &pending_msg, 0) != pdTRUE) {
-                ESP_LOGE(TAG, "Message queue full, dropping message");
+                LOG_E(TAG, "Message queue full, dropping message");
                 return ESP_ERR_NO_MEM;
             }
         }
@@ -744,7 +744,7 @@ esp_err_t mqtt_manager_publish(const char *topic, const char *data, int data_len
     
     int msg_id = esp_mqtt_client_publish(ctx->client, topic, data, data_len, qos, retain);
     if (msg_id < 0) {
-        ESP_LOGE(TAG, "Failed to publish to: %s", topic);
+        LOG_E(TAG, "Failed to publish to: %s", topic);
         return ESP_FAIL;
     }
     
@@ -775,7 +775,7 @@ esp_err_t mqtt_manager_loop(int timeout_ms) {
         ctx->last_reconnect_time = current_time;
         
         if (wifi_manager_is_connected()) {
-            ESP_LOGI(TAG, "MQTT reconnect attempt %d (infinite retries enabled)", ctx->reconnect_attempts);
+            LOG_I(TAG, "MQTT reconnect attempt %d (infinite retries enabled)", ctx->reconnect_attempts);
             mqtt_manager_connect();
         }
     }
@@ -916,18 +916,18 @@ esp_err_t mqtt_manager_send_network_info(void) {
         network_info_buffer[len + 1] = '\0';
         len++;
     } else {
-        ESP_LOGE(TAG, "Network info buffer overflow, len=%d", len);
+        LOG_E(TAG, "Network info buffer overflow, len=%d", len);
         xSemaphoreGive(network_buffer_mutex);
         return ESP_ERR_NO_MEM;
     }
     
     if (len <= 2) {
-        ESP_LOGE(TAG, "Invalid JSON length: %d", len);
+        LOG_E(TAG, "Invalid JSON length: %d", len);
         xSemaphoreGive(network_buffer_mutex);
         return ESP_ERR_INVALID_ARG;
     }
     
-    ESP_LOGI(TAG, "Sending network info to esp32/network_info (len=%d)", len);
+    LOG_I(TAG, "Sending network info to esp32/network_info (len=%d)", len);
     
     esp_err_t result = mqtt_manager_publish("esp32/network_info", network_info_buffer, len, 1, false);
     
@@ -952,7 +952,7 @@ esp_err_t mqtt_manager_set_panel_config(const char *client_id, const char *panel
         
         xSemaphoreGive(ctx->mutex);
         
-        ESP_LOGI(TAG, "Panel config set: client=%s, panel=%s", client_id, panel_id);
+        LOG_I(TAG, "Panel config set: client=%s, panel=%s", client_id, panel_id);
         return ESP_OK;
     }
     
@@ -1006,7 +1006,7 @@ esp_err_t mqtt_manager_clear_panel_config(void) {
         
         xSemaphoreGive(ctx->mutex);
         
-        ESP_LOGI(TAG, "Panel configuration cleared");
+        LOG_I(TAG, "Panel configuration cleared");
         return ESP_OK;
     }
     
@@ -1020,28 +1020,28 @@ esp_err_t mqtt_manager_emergency_memory_cleanup(void) {
         return ESP_ERR_INVALID_STATE;
     }
     
-    ESP_LOGW(TAG, "Performing emergency memory cleanup");
+    LOG_W(TAG, "Performing emergency memory cleanup");
     
     if (ctx->pending_messages) {
         mqtt_pending_message_t dummy_msg;
         int cleared = 0;
-        while (xQueueReceive(ctx->pending_messages, &dummy_msg, 0) == pdTRUE && cleared < 10) {
+        while (xQueueReceive(ctx->pending_messages, &dummy_msg, 0) == pdTRUE && cleared < 5) {
             cleared++;
         }
         if (cleared > 0) {
-            ESP_LOGI(TAG, "Cleared %d pending messages", cleared);
+            LOG_I(TAG, "Cleared %d pending messages", cleared);
         }
     }
     
     for (int i = 0; i < 3; i++) {
         if (ctx->buffer_in_use[i]) {
-            ESP_LOGW(TAG, "Force releasing buffer %d", i);
+            LOG_W(TAG, "Force releasing buffer %d", i);
             ctx->buffer_in_use[i] = false;
         }
     }
     
     size_t free_after = esp_get_free_heap_size();
-    ESP_LOGI(TAG, "Memory cleanup completed, free heap: %zu", free_after);
+    LOG_I(TAG, "Memory cleanup completed, free heap: %zu", free_after);
     
     return ESP_OK;
 }

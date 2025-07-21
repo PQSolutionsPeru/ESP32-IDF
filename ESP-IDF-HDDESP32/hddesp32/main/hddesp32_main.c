@@ -4,7 +4,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_system.h"
-#include "esp_log.h"
+#include "custom_logging.h"
 #include "nvs_flash.h"
 #include "config_manager.h"
 #include "esp32_id_manager.h"
@@ -88,7 +88,7 @@ static void print_memory_info_simple(void) {
     size_t free_heap = esp_get_free_heap_size();
     size_t min_heap = esp_get_minimum_free_heap_size();
     
-    ESP_LOGI(TAG, "Memory: free=%zu min=%zu", free_heap, min_heap);
+    LOG_I(TAG, "Memory: free=%zu min=%zu", free_heap, min_heap);
     
     if (g_watchdog_available) {
         watchdog_manager_report_activity(WATCHDOG_CHECK_MEMORY);
@@ -157,28 +157,28 @@ static void watchdog_event_callback(watchdog_health_status_t status, watchdog_ch
         case WATCHDOG_CHECK_TASKS: check_str = "TASKS"; break;
     }
     
-    ESP_LOGW(TAG, "Watchdog event: %s - %s", check_str, status_str);
+    LOG_W(TAG, "Watchdog event: %s - %s", check_str, status_str);
     
     if (status == WATCHDOG_HEALTH_CRITICAL) {
         switch (check_type) {
             case WATCHDOG_CHECK_MEMORY:
-                ESP_LOGE(TAG, "Critical memory situation detected");
+                LOG_E(TAG, "Critical memory situation detected");
                 break;
                 
             case WATCHDOG_CHECK_WIFI:
-                ESP_LOGE(TAG, "Critical WiFi failure detected");
+                LOG_E(TAG, "Critical WiFi failure detected");
                 if (!wifi_manager_is_connected()) {
                     char ap_ssid[33];
                     esp_err_t ret = wifi_manager_generate_ap_ssid(ap_ssid, sizeof(ap_ssid), "FirePanel");
                     if (ret == ESP_OK) {
-                        ESP_LOGI(TAG, "Starting emergency AP mode: %s", ap_ssid);
+                        LOG_I(TAG, "Starting emergency AP mode: %s", ap_ssid);
                         wifi_manager_start_ap_mode(ap_ssid, "firepanel");
                     }
                 }
                 break;
                 
             case WATCHDOG_CHECK_MQTT:
-                ESP_LOGE(TAG, "Critical MQTT failure detected");
+                LOG_E(TAG, "Critical MQTT failure detected");
                 if (esp32_id_manager_get_id(g_esp32_id_buffer, sizeof(g_esp32_id_buffer)) == ESP_OK) {
                     mqtt_manager_set_esp32_id(g_esp32_id_buffer);
                     mqtt_manager_connect();
@@ -186,11 +186,11 @@ static void watchdog_event_callback(watchdog_health_status_t status, watchdog_ch
                 break;
                 
             case WATCHDOG_CHECK_TASKS:
-                ESP_LOGE(TAG, "Critical task failure detected");
+                LOG_E(TAG, "Critical task failure detected");
                 break;
         }
     } else if (status == WATCHDOG_HEALTH_WARNING) {
-        ESP_LOGW(TAG, "System degradation detected in %s subsystem", check_str);
+        LOG_W(TAG, "System degradation detected in %s subsystem", check_str);
     }
 }
 
@@ -200,7 +200,7 @@ static void relay_state_change_callback(const relay_event_t *event, void *user_d
     }
 
     if (xSemaphoreTake(g_callback_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
-        ESP_LOGW(TAG, "Could not take callback mutex");
+        LOG_W(TAG, "Could not take callback mutex");
         return;
     }
     
@@ -209,7 +209,7 @@ static void relay_state_change_callback(const relay_event_t *event, void *user_d
     }
     
     if (esp32_id_manager_get_id(g_esp32_id_buffer, sizeof(g_esp32_id_buffer)) != ESP_OK) {
-        ESP_LOGE(TAG, "Could not get ESP32 ID for relay event");
+        LOG_E(TAG, "Could not get ESP32 ID for relay event");
         xSemaphoreGive(g_callback_mutex);
         return;
     }
@@ -217,7 +217,7 @@ static void relay_state_change_callback(const relay_event_t *event, void *user_d
     size_t json_size = 300 + strlen(event->relay_id) + strlen(event->name);
     
     if (esp_get_free_heap_size() < json_size + 8000) {
-        ESP_LOGW(TAG, "Insufficient memory for relay event, using static fallback");
+        LOG_W(TAG, "Insufficient memory for relay event, using static fallback");
         
         int len = snprintf(g_relay_json_buffer, sizeof(g_relay_json_buffer),
                           "{"
@@ -251,7 +251,7 @@ static void relay_state_change_callback(const relay_event_t *event, void *user_d
     
     char *relay_json_buffer = malloc(json_size);
     if (!relay_json_buffer) {
-        ESP_LOGE(TAG, "Failed to allocate relay JSON buffer");
+        LOG_E(TAG, "Failed to allocate relay JSON buffer");
         xSemaphoreGive(g_callback_mutex);
         return;
     }
@@ -279,7 +279,7 @@ static void relay_state_change_callback(const relay_event_t *event, void *user_d
         if (topic_ret == ESP_OK) {
             esp_err_t ret = mqtt_manager_publish_json(relay_topic, relay_json_buffer, 1, false);
             if (ret == ESP_OK) {
-                ESP_LOGI(TAG, "Relay %s state change published: %s -> %s", 
+                LOG_I(TAG, "Relay %s state change published: %s -> %s", 
                         event->relay_id,
                         (event->old_state == RELAY_STATE_OK) ? "OK" : "DISC",
                         (event->new_state == RELAY_STATE_OK) ? "OK" : "DISC");
@@ -295,7 +295,7 @@ static void relay_state_change_callback(const relay_event_t *event, void *user_d
 }
 
 static esp_err_t relay_mqtt_command_callback(const char *topic, const char *command_json, void *user_data) {
-    ESP_LOGI(TAG, "Processing relay MQTT command from topic: %s", topic);
+    LOG_I(TAG, "Processing relay MQTT command from topic: %s", topic);
     
     if (g_watchdog_available) {
         watchdog_manager_report_activity(WATCHDOG_CHECK_MQTT);
@@ -307,20 +307,20 @@ static esp_err_t relay_mqtt_command_callback(const char *topic, const char *comm
 static void mqtt_state_callback(mqtt_manager_state_t state, void *user_data) {
     switch (state) {
         case MQTT_MANAGER_STATE_CONNECTED:
-            ESP_LOGI(TAG, "MQTT connected");
+            LOG_I(TAG, "MQTT connected");
             set_mqtt_connected(true);
             
             if (!get_relay_manager_initialized()) {
-                ESP_LOGI(TAG, "Initializing Relay Manager after MQTT connection");
+                LOG_I(TAG, "Initializing Relay Manager after MQTT connection");
                 esp_err_t ret = relay_manager_init();
                 if (ret == ESP_OK) {
                     relay_manager_set_state_callback(relay_state_change_callback, NULL);
                     relay_manager_set_mqtt_callback(relay_mqtt_command_callback, NULL);
                     relay_manager_check_all_states(true);
                     set_relay_manager_initialized(true);
-                    ESP_LOGI(TAG, "Relay Manager initialized successfully");
+                    LOG_I(TAG, "Relay Manager initialized successfully");
                 } else {
-                    ESP_LOGE(TAG, "Failed to initialize Relay Manager: %s", esp_err_to_name(ret));
+                    LOG_E(TAG, "Failed to initialize Relay Manager: %s", esp_err_to_name(ret));
                 }
             }
             
@@ -328,7 +328,18 @@ static void mqtt_state_callback(mqtt_manager_state_t state, void *user_data) {
                 watchdog_manager_report_activity(WATCHDOG_CHECK_MQTT);
                 
                 if (get_wifi_connected() && get_mqtt_connected()) {
-                    watchdog_manager_set_mode(WATCHDOG_MODE_RUNNING);
+                    static bool watchdog_configured = false;
+                    if (!watchdog_configured) {
+                        vTaskDelay(pdMS_TO_TICKS(5000));
+                        
+                        if (get_relay_manager_initialized()) {
+                            esp_err_t result = watchdog_manager_set_mode(WATCHDOG_MODE_RUNNING);
+                            if (result == ESP_OK) {
+                                watchdog_configured = true;
+                                LOG_I(TAG, "Watchdog safely transitioned to running mode");
+                            }
+                        }
+                    }
                 }
             }
             
@@ -339,26 +350,26 @@ static void mqtt_state_callback(mqtt_manager_state_t state, void *user_data) {
                 vTaskDelay(pdMS_TO_TICKS(5000));
                 
                 if (wifi_manager_is_connected() && mqtt_manager_is_connected()) {
-                    ESP_LOGI(TAG, "WiFi and MQTT stable - switching to STA mode only");
+                    LOG_I(TAG, "WiFi and MQTT stable - switching to STA mode only");
                     wifi_manager_set_sta_mode();
                 }
             }
             break;
             
         case MQTT_MANAGER_STATE_DISCONNECTED:
-            ESP_LOGI(TAG, "MQTT disconnected");
+            LOG_I(TAG, "MQTT disconnected");
             set_mqtt_connected(false);
             
             if (g_watchdog_available) {
                 esp_err_t ret = watchdog_manager_set_mode(WATCHDOG_MODE_CONFIG);
                 if (ret != ESP_OK) {
-                    ESP_LOGD(TAG, "Could not set watchdog to config mode");
+                    LOG_D(TAG, "Could not set watchdog to config mode");
                 }
             }
             break;
             
         case MQTT_MANAGER_STATE_ERROR:
-            ESP_LOGW(TAG, "MQTT error");
+            LOG_W(TAG, "MQTT error");
             set_mqtt_connected(false);
             break;
             
@@ -368,10 +379,10 @@ static void mqtt_state_callback(mqtt_manager_state_t state, void *user_data) {
 }
 
 static void mqtt_message_callback(const char *topic, const char *data, int data_len, void *user_data) {
-    ESP_LOGI(TAG, "MQTT message: %s (%d bytes)", topic ? topic : "NULL", data_len);
+    LOG_I(TAG, "MQTT message: %s (%d bytes)", topic ? topic : "NULL", data_len);
     
     if (!topic || !data || data_len <= 0) {
-        ESP_LOGE(TAG, "Invalid MQTT message");
+        LOG_E(TAG, "Invalid MQTT message");
         return;
     }
     
@@ -384,13 +395,13 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
     
     if (data_len > sizeof(g_mqtt_temp_data) - 1) {
         if (esp_get_free_heap_size() < data_len + 8000) {
-            ESP_LOGW(TAG, "Message too large and insufficient memory: %d bytes", data_len);
+            LOG_W(TAG, "Message too large and insufficient memory: %d bytes", data_len);
             return;
         }
         
         mqtt_temp_data = malloc(data_len + 1);
         if (!mqtt_temp_data) {
-            ESP_LOGE(TAG, "Failed to allocate message buffer");
+            LOG_E(TAG, "Failed to allocate message buffer");
             return;
         }
         use_dynamic = true;
@@ -402,7 +413,7 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
     mqtt_temp_data[data_len] = '\0';
     
     if (esp32_id_manager_get_id(g_esp32_id_buffer, sizeof(g_esp32_id_buffer)) != ESP_OK) {
-        ESP_LOGE(TAG, "Could not get ESP32 ID");
+        LOG_E(TAG, "Could not get ESP32 ID");
         if (use_dynamic) free(mqtt_temp_data);
         return;
     }
@@ -410,7 +421,7 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
     snprintf(g_mqtt_temp_topic, sizeof(g_mqtt_temp_topic), "esp32/notify/%s/deleted", g_esp32_id_buffer);
     
     if (strcmp(topic, g_mqtt_temp_topic) == 0) {
-        ESP_LOGW(TAG, "Deletion notification received");
+        LOG_W(TAG, "Deletion notification received");
         
         config_manager_erase_key("client_id");
         config_manager_erase_key("panel_id");
@@ -439,16 +450,16 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
     snprintf(g_mqtt_temp_topic, sizeof(g_mqtt_temp_topic), "esp32/config/%s", g_esp32_id_buffer);
     
     if (strcmp(topic, g_mqtt_temp_topic) == 0) {
-        ESP_LOGI(TAG, "Configuration message received");
+        LOG_I(TAG, "Configuration message received");
         
         esp_err_t ret = process_esp32_configuration(mqtt_temp_data);
         
         if (ret == ESP_OK) {
-            ESP_LOGI(TAG, "Configuration accepted");
+            LOG_I(TAG, "Configuration accepted");
             
             if (!get_relay_manager_initialized()) {
                 vTaskDelay(pdMS_TO_TICKS(500));
-                ESP_LOGI(TAG, "Initializing Relay Manager");
+                LOG_I(TAG, "Initializing Relay Manager");
                 ret = relay_manager_init();
                 if (ret == ESP_OK) {
                     relay_manager_set_state_callback(relay_state_change_callback, NULL);
@@ -464,7 +475,7 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
     
     if (strstr(topic, "/relay_config") && get_relay_manager_initialized()) {
         if (data_len > 2000) {
-            ESP_LOGW(TAG, "Relay config message too large, ignoring");
+            LOG_W(TAG, "Relay config message too large, ignoring");
             if (use_dynamic) free(mqtt_temp_data);
             return;
         }
@@ -479,19 +490,19 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
             if (find_json_value(mqtt_temp_data, "is_active", is_active_val, sizeof(is_active_val))) {
                 bool is_active = parse_json_bool(mqtt_temp_data, "is_active");
                 relay_manager_set_active(relay_id_val, is_active);
-                ESP_LOGI(TAG, "Relay %s %s", relay_id_val, is_active ? "ACTIVATED" : "DEACTIVATED");
+                LOG_I(TAG, "Relay %s %s", relay_id_val, is_active ? "ACTIVATED" : "DEACTIVATED");
                 
                 if (find_json_value(mqtt_temp_data, "contact_type", contact_type_val, sizeof(contact_type_val))) {
                     relay_contact_type_t type = (strcmp(contact_type_val, "NC") == 0) ? 
                                               RELAY_CONTACT_NC : RELAY_CONTACT_NO;
                     relay_manager_set_contact_type(relay_id_val, type);
-                    ESP_LOGI(TAG, "Relay %s contact type set to %s", relay_id_val, contact_type_val);
+                    LOG_I(TAG, "Relay %s contact type set to %s", relay_id_val, contact_type_val);
                 }
                 
                 if (find_json_value(mqtt_temp_data, "custom_name", custom_name_val, sizeof(custom_name_val))) {
                     if (strlen(custom_name_val) > 0 && strlen(custom_name_val) < 32) {
                         relay_manager_set_name(relay_id_val, custom_name_val);
-                        ESP_LOGI(TAG, "Relay %s custom name set to '%.30s'", relay_id_val, custom_name_val);
+                        LOG_I(TAG, "Relay %s custom name set to '%.30s'", relay_id_val, custom_name_val);
                     }
                 }
                 
@@ -509,7 +520,7 @@ static void mqtt_message_callback(const char *topic, const char *data, int data_
 static void wifi_state_callback(wifi_manager_state_t state, void *user_data) {
     switch (state) {
         case WIFI_MANAGER_STATE_CONNECTED:
-            ESP_LOGI(TAG, "WiFi connected");
+            LOG_I(TAG, "WiFi connected");
             set_wifi_connected(true);
             
             if (g_watchdog_available) {
@@ -526,26 +537,26 @@ static void wifi_state_callback(wifi_manager_state_t state, void *user_data) {
             break;
             
         case WIFI_MANAGER_STATE_DISCONNECTED:
-            ESP_LOGI(TAG, "WiFi disconnected");
+            LOG_I(TAG, "WiFi disconnected");
             set_wifi_connected(false);
             set_mqtt_connected(false);
             
             if (g_watchdog_available) {
                 esp_err_t ret = watchdog_manager_set_mode(WATCHDOG_MODE_CONFIG);
                 if (ret != ESP_OK) {
-                    ESP_LOGD(TAG, "Could not set watchdog to config mode");
+                    LOG_D(TAG, "Could not set watchdog to config mode");
                 }
             }
             break;
             
         case WIFI_MANAGER_STATE_AP_MODE:
-            ESP_LOGI(TAG, "WiFi AP mode active");
+            LOG_I(TAG, "WiFi AP mode active");
             set_wifi_connected(false);
             
             if (g_watchdog_available) {
                 esp_err_t ret = watchdog_manager_set_mode(WATCHDOG_MODE_CONFIG);
                 if (ret != ESP_OK) {
-                    ESP_LOGD(TAG, "Could not set watchdog to config mode");
+                    LOG_D(TAG, "Could not set watchdog to config mode");
                 }
             }
             break;
@@ -556,11 +567,11 @@ static void wifi_state_callback(wifi_manager_state_t state, void *user_data) {
 }
 
 static void on_wifi_connect_callback(void *user_data) {
-    ESP_LOGI(TAG, "WiFi configured via captive portal");
+    LOG_I(TAG, "WiFi configured via captive portal");
 }
 
 static void system_monitor_task(void *pvParameters) {
-    ESP_LOGI(TAG, "System monitor task started");
+    LOG_I(TAG, "System monitor task started");
     
     bool task_registered = false;
     int registration_attempts = 0;
@@ -571,7 +582,7 @@ static void system_monitor_task(void *pvParameters) {
         if (g_watchdog_available) {
             esp_err_t wd_ret = watchdog_manager_register_task(NULL, "sys_monitor");
             if (wd_ret == ESP_OK) {
-                ESP_LOGI(TAG, "System monitor task registered in watchdog manager");
+                LOG_I(TAG, "System monitor task registered in watchdog manager");
                 task_registered = true;
                 break;
             }
@@ -590,7 +601,7 @@ static void system_monitor_task(void *pvParameters) {
         if (task_registered) {
             esp_err_t feed_ret = watchdog_manager_feed();
             if (feed_ret != ESP_OK) {
-                ESP_LOGD(TAG, "Watchdog feed failed: %s", esp_err_to_name(feed_ret));
+                LOG_D(TAG, "Watchdog feed failed: %s", esp_err_to_name(feed_ret));
             }
         }
         
@@ -601,7 +612,7 @@ static void system_monitor_task(void *pvParameters) {
         }
         
         if (time_manager_should_send_network_info() || g_need_reregister) {
-            ESP_LOGI(TAG, "Sending network info");
+            LOG_I(TAG, "Sending network info");
             esp_err_t ret = mqtt_manager_send_network_info();
             if (ret == ESP_OK) {
                 time_manager_mark_network_info_sent();
@@ -630,17 +641,17 @@ static void system_monitor_task(void *pvParameters) {
                 if (mqtt_connected && time_synced && !portal_config_verified) {
                     if (connection_stable_start == 0) {
                         connection_stable_start = esp_timer_get_time() / 1000;
-                        ESP_LOGI(TAG, "Full connectivity detected, starting verification timer");
+                        LOG_I(TAG, "Full connectivity detected, starting verification timer");
                     } else {
                         int64_t elapsed = (esp_timer_get_time() / 1000) - connection_stable_start;
                         if (elapsed >= VERIFICATION_DELAY_MS) {
-                            ESP_LOGI(TAG, "Configuration complete - restarting to STA mode");
+                            LOG_I(TAG, "Configuration complete - restarting to STA mode");
                             vTaskDelay(pdMS_TO_TICKS(2000));
                             esp_restart();
                         } else {
                             int64_t remaining = (VERIFICATION_DELAY_MS - elapsed) / 1000;
                             if (cycle_count % 12 == 0) {
-                                ESP_LOGI(TAG, "Restart in %lld seconds", remaining);
+                                LOG_I(TAG, "Restart in %lld seconds", remaining);
                             }
                         }
                     }
@@ -653,7 +664,7 @@ static void system_monitor_task(void *pvParameters) {
                 time_manager_check_sync();
             }
             
-            mqtt_manager_loop(0);
+            mqtt_manager_loop(100);
             
             if (mqtt_connected) {
                 if (g_watchdog_available) {
@@ -661,11 +672,11 @@ static void system_monitor_task(void *pvParameters) {
                 }
                 
                 if (cycle_count % 24 == 0) {
-                    ESP_LOGI(TAG, "System OK - WiFi+MQTT connected");
+                    LOG_I(TAG, "System OK - WiFi+MQTT connected");
                 }
             } else {
                 if (cycle_count % 24 == 0) {
-                    ESP_LOGI(TAG, "Retrying MQTT connection");
+                    LOG_I(TAG, "Retrying MQTT connection");
                     if (esp32_id_manager_get_id(g_esp32_id_buffer, sizeof(g_esp32_id_buffer)) == ESP_OK) {
                         mqtt_manager_set_esp32_id(g_esp32_id_buffer);
                         mqtt_manager_connect();
@@ -676,7 +687,7 @@ static void system_monitor_task(void *pvParameters) {
             connection_stable_start = 0;
             
             if (cycle_count % 6 == 0) {
-                ESP_LOGI(TAG, "WiFi disconnected - running recovery cycle");
+                LOG_I(TAG, "WiFi disconnected - running recovery cycle");
                 wifi_manager_handle_disconnection("FirePanel", "firepanel", 10);
             }
         }
@@ -684,7 +695,7 @@ static void system_monitor_task(void *pvParameters) {
         if (g_watchdog_available && cycle_count % 60 == 0) {
             watchdog_health_status_t health = watchdog_manager_check_system_health();
             if (health > WATCHDOG_HEALTH_WARNING) {
-                ESP_LOGW(TAG, "System health degraded: %d", health);
+                LOG_W(TAG, "System health degraded: %d", health);
             }
         }
         
@@ -694,30 +705,30 @@ static void system_monitor_task(void *pvParameters) {
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "Starting HDD ESP32 Monitor v2.0 (ESP-IDF v5.4.1)");
+    LOG_I(TAG, "Starting HDD ESP32 Monitor v2.0 (ESP-IDF v5.4.1)");
 
-    ESP_LOGI(TAG, "Phase 1: Basic initialization");
+    LOG_I(TAG, "Phase 1: Basic initialization");
 
     g_callback_mutex = xSemaphoreCreateMutex();
     g_global_state_mutex = xSemaphoreCreateMutex();
     
     esp_err_t watchdog_ret = watchdog_manager_init();
     if (watchdog_ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to initialize watchdog manager: %s", esp_err_to_name(watchdog_ret));
+        LOG_E(TAG, "Failed to initialize watchdog manager: %s", esp_err_to_name(watchdog_ret));
         
-        ESP_LOGW(TAG, "Retrying watchdog initialization after delay...");
+        LOG_W(TAG, "Retrying watchdog initialization after delay...");
         vTaskDelay(pdMS_TO_TICKS(3000));
         
         watchdog_ret = watchdog_manager_init();
         if (watchdog_ret != ESP_OK) {
-            ESP_LOGE(TAG, "Watchdog initialization failed twice: %s", esp_err_to_name(watchdog_ret));
-            ESP_LOGE(TAG, "CRITICAL: System cannot function safely without watchdog");
+            LOG_E(TAG, "Watchdog initialization failed twice: %s", esp_err_to_name(watchdog_ret));
+            LOG_E(TAG, "CRITICAL: System cannot function safely without watchdog");
             vTaskDelay(pdMS_TO_TICKS(5000));
             esp_restart();
         }
     }
     
-    ESP_LOGI(TAG, "Watchdog manager initialized successfully");
+    LOG_I(TAG, "Watchdog manager initialized successfully");
     g_watchdog_available = true;
     
     watchdog_manager_set_event_callback(watchdog_event_callback, NULL);
@@ -729,10 +740,10 @@ void app_main(void)
     while (!main_task_registered && main_reg_attempts < 5) {
         esp_err_t reg_ret = watchdog_manager_register_task(NULL, "app_main");
         if (reg_ret == ESP_OK) {
-            ESP_LOGI(TAG, "Main task registered in watchdog manager");
+            LOG_I(TAG, "Main task registered in watchdog manager");
             main_task_registered = true;
         } else {
-            ESP_LOGW(TAG, "Main task registration attempt %d failed: %s", 
+            LOG_W(TAG, "Main task registration attempt %d failed: %s", 
                     main_reg_attempts + 1, esp_err_to_name(reg_ret));
             main_reg_attempts++;
             vTaskDelay(pdMS_TO_TICKS(1000));
@@ -740,7 +751,7 @@ void app_main(void)
     }
     
     if (!main_task_registered) {
-        ESP_LOGE(TAG, "CRITICAL: Could not register main task in watchdog");
+        LOG_E(TAG, "CRITICAL: Could not register main task in watchdog");
         esp_restart();
     }
     
@@ -748,7 +759,7 @@ void app_main(void)
     if (main_task_registered) {
         esp_err_t feed_ret = watchdog_manager_feed();
         if (feed_ret != ESP_OK) {
-            ESP_LOGW(TAG, "Initial watchdog feed failed: %s", esp_err_to_name(feed_ret));
+            LOG_W(TAG, "Initial watchdog feed failed: %s", esp_err_to_name(feed_ret));
         }
     }
     
@@ -758,17 +769,17 @@ void app_main(void)
     }
     
     ESP_ERROR_CHECK(esp32_id_manager_get_id(g_esp32_id_buffer, sizeof(g_esp32_id_buffer)));
-    ESP_LOGI(TAG, "ESP32 ID: %s", g_esp32_id_buffer);
+    LOG_I(TAG, "ESP32 ID: %s", g_esp32_id_buffer);
     
     char mac_address[ESP32_MAC_STR_LENGTH + 1];
     ESP_ERROR_CHECK(esp32_id_manager_get_mac(mac_address, sizeof(mac_address)));
-    ESP_LOGI(TAG, "MAC: %s", mac_address);
+    LOG_I(TAG, "MAC: %s", mac_address);
     
     if (main_task_registered) {
         watchdog_manager_feed();
     }
     
-    ESP_LOGI(TAG, "Phase 2: Manager initialization");
+    LOG_I(TAG, "Phase 2: Manager initialization");
     
     ESP_ERROR_CHECK(wifi_manager_init());
     if (main_task_registered) {
@@ -785,7 +796,7 @@ void app_main(void)
         watchdog_manager_feed();
     }
     
-    ESP_LOGI(TAG, "Phase 3: Callback configuration");
+    LOG_I(TAG, "Phase 3: Callback configuration");
     
     ESP_ERROR_CHECK(wifi_manager_set_state_callback(wifi_state_callback, NULL));
     ESP_ERROR_CHECK(mqtt_manager_set_state_callback(mqtt_state_callback, NULL));
@@ -803,18 +814,18 @@ void app_main(void)
         config_manager_get_str("panel_id", saved_panel_id, sizeof(saved_panel_id)) == ESP_OK &&
         strlen(saved_client_id) > 0 && strlen(saved_panel_id) > 0) {
         
-        ESP_LOGI(TAG, "Found saved configuration: client=%s, panel=%s", saved_client_id, saved_panel_id);
+        LOG_I(TAG, "Found saved configuration: client=%s, panel=%s", saved_client_id, saved_panel_id);
         mqtt_manager_set_panel_config(saved_client_id, saved_panel_id);
     }
     
-    ESP_LOGI(TAG, "Phase 4: WiFi connection");
+    LOG_I(TAG, "Phase 4: WiFi connection");
 
     esp_err_t wifi_ret = wifi_manager_connect_saved();
     if (wifi_ret != ESP_OK) {
         char ap_ssid[33];
         ESP_ERROR_CHECK(wifi_manager_generate_ap_ssid(ap_ssid, sizeof(ap_ssid), "FirePanel"));
         
-        ESP_LOGI(TAG, "No saved credentials - starting captive portal: %s", ap_ssid);
+        LOG_I(TAG, "No saved credentials - starting captive portal: %s", ap_ssid);
         ESP_ERROR_CHECK(wifi_captive_portal_start(ap_ssid, "firepanel"));
         ESP_ERROR_CHECK(wifi_captive_portal_set_on_connect_callback(on_wifi_connect_callback, NULL));
         
@@ -822,10 +833,10 @@ void app_main(void)
             watchdog_manager_set_mode(WATCHDOG_MODE_CONFIG);
         }
     } else {
-        ESP_LOGI(TAG, "WiFi connection initiated - will connect in background");
+        LOG_I(TAG, "WiFi connection initiated - will connect in background");
     }
     
-    ESP_LOGI(TAG, "Phase 5: Creating system monitor task");
+    LOG_I(TAG, "Phase 5: Creating system monitor task");
     
     TaskHandle_t monitor_task_handle = NULL;
     BaseType_t xReturned = xTaskCreate(
@@ -838,8 +849,8 @@ void app_main(void)
     );
     
     if (xReturned != pdPASS || monitor_task_handle == NULL) {
-        ESP_LOGE(TAG, "Failed to create system monitor task");
-        ESP_LOGE(TAG, "CRITICAL: System cannot function without monitor task");
+        LOG_E(TAG, "Failed to create system monitor task");
+        LOG_E(TAG, "CRITICAL: System cannot function without monitor task");
         
         if (g_watchdog_available) {
             watchdog_manager_force_reset("monitor_task_creation_failed");
@@ -851,7 +862,7 @@ void app_main(void)
     vTaskDelay(pdMS_TO_TICKS(2000));
     
     g_system_initialized = true;
-    ESP_LOGI(TAG, "System initialization completed successfully");
+    LOG_I(TAG, "System initialization completed successfully");
     
     uint32_t main_cycle = 0;
     uint32_t main_feed_errors = 0;
@@ -861,20 +872,20 @@ void app_main(void)
             esp_err_t feed_ret = watchdog_manager_feed();
             if (feed_ret != ESP_OK) {
                 main_feed_errors++;
-                ESP_LOGW(TAG, "Main task watchdog feed failed: %s (count: %lu)", 
+                LOG_W(TAG, "Main task watchdog feed failed: %s (count: %lu)", 
                         esp_err_to_name(feed_ret), main_feed_errors);
                 
                 if (main_feed_errors >= 30) {
-                    ESP_LOGE(TAG, "Too many main feed failures, attempting re-registration");
+                    LOG_E(TAG, "Too many main feed failures, attempting re-registration");
                     watchdog_manager_unregister_task(NULL);
                     vTaskDelay(pdMS_TO_TICKS(1000));
                     
                     esp_err_t reg_ret = watchdog_manager_register_task(NULL, "app_main");
                     if (reg_ret == ESP_OK) {
-                        ESP_LOGI(TAG, "Main task re-registered successfully");
+                        LOG_I(TAG, "Main task re-registered successfully");
                         main_feed_errors = 0;
                     } else {
-                        ESP_LOGE(TAG, "CRITICAL: Cannot re-register main task");
+                        LOG_E(TAG, "CRITICAL: Cannot re-register main task");
                         esp_restart();
                     }
                 }
@@ -894,14 +905,14 @@ void app_main(void)
                 
                 if (watchdog_manager_get_stats(&feed_count, &error_count, &last_reset_reason) == ESP_OK) {
                     if (error_count > 100) {
-                        ESP_LOGW(TAG, "High watchdog error count: %lu (feeds: %lu, last reset: %s)", 
+                        LOG_W(TAG, "High watchdog error count: %lu (feeds: %lu, last reset: %s)", 
                                 error_count, feed_count, last_reset_reason ? last_reset_reason : "none");
                     }
                 }
                 
                 watchdog_mode_t current_mode = watchdog_manager_get_mode();
                 if (current_mode == WATCHDOG_MODE_CRITICAL) {
-                    ESP_LOGW(TAG, "System running in CRITICAL mode");
+                    LOG_W(TAG, "System running in CRITICAL mode");
                 }
             }
         }
@@ -909,14 +920,14 @@ void app_main(void)
         if (main_cycle % 60 == 0) {
             size_t free_heap = esp_get_free_heap_size();
             size_t min_heap = esp_get_minimum_free_heap_size();
-            ESP_LOGI(TAG, "Main task: heap free=%zu min=%zu", free_heap, min_heap);
+            LOG_I(TAG, "Main task: heap free=%zu min=%zu", free_heap, min_heap);
         }
         
         vTaskDelay(pdMS_TO_TICKS(5000));
     }
     
     if (get_relay_manager_initialized()) {
-        ESP_LOGI(TAG, "Cleaning up Relay Manager");
+        LOG_I(TAG, "Cleaning up Relay Manager");
         relay_manager_deinit();
         set_relay_manager_initialized(false);
     }
