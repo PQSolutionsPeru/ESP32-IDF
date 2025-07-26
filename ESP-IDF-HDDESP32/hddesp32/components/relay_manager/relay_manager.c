@@ -180,11 +180,18 @@ static void schedule_config_save(void) {
     relay_manager_context_t *ctx = &s_relay_ctx;
     
     if (!ctx->config_save_timer || !ctx->initialized) {
+        LOG_W(TAG, "Cannot schedule save - timer or manager not ready");
         return;
     }
     
     ctx->config_save_pending = true;
-    xTimerReset(ctx->config_save_timer, pdMS_TO_TICKS(200));
+    BaseType_t timer_result = xTimerReset(ctx->config_save_timer, pdMS_TO_TICKS(200));
+    
+    if (timer_result == pdPASS) {
+        LOG_I(TAG, "Config save scheduled successfully");
+    } else {
+        LOG_E(TAG, "Failed to schedule config save timer");
+    }
 }
 
 relay_mgr_state_t relay_manager_get_mgr_state(void) {
@@ -909,7 +916,7 @@ esp_err_t relay_manager_report_initial_states(void) {
                 ctx->state_callback(&event, ctx->state_callback_user_data);
             }
             
-            vTaskDelay(pdMS_TO_TICKS(50));
+            vTaskDelay(pdMS_TO_TICKS(150));
         }
     }
     
@@ -1487,7 +1494,6 @@ static esp_err_t load_relay_config(void) {
 
 static esp_err_t save_relay_config_immediate(void) {
     relay_manager_context_t *ctx = &s_relay_ctx;
-    esp_err_t ret;
     
     LOG_I(TAG, "Saving relay config to NVS...");
     
@@ -1502,6 +1508,8 @@ static esp_err_t save_relay_config_immediate(void) {
     if (!any_active) {
         LOG_W(TAG, "Warning: No active relays to save!");
     }
+    
+    esp_err_t ret;
     
     bool active_states[RELAY_MANAGER_MAX_RELAYS];
     for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
@@ -1534,7 +1542,6 @@ static esp_err_t save_relay_config_immediate(void) {
         return ret;
     }
     
-    LOG_I(TAG, "Relay configuration saved successfully");
     return ESP_OK;
 }
 

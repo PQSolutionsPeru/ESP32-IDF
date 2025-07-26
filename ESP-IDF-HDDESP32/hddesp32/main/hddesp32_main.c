@@ -316,7 +316,7 @@ static void relay_state_change_callback(const relay_event_t *event, void *user_d
         watchdog_manager_report_activity(WATCHDOG_CHECK_TASKS);
     }
     
-    char simple_json[256];
+    char simple_json[120];
     int len = snprintf(simple_json, sizeof(simple_json),
                       "{"
                       "\"relay\":\"%s\","
@@ -332,7 +332,7 @@ static void relay_state_change_callback(const relay_event_t *event, void *user_d
                       (event->old_state == RELAY_STATE_OK) ? "OK" : "DISC");
     
     if (len > 0 && len < sizeof(simple_json)) {
-        char relay_topic[MQTT_TOPIC_MAX_LENGTH];
+        char relay_topic[88];
         esp_err_t topic_ret = mqtt_manager_get_panel_topic(relay_topic, sizeof(relay_topic), "relays");
         
         if (topic_ret == ESP_OK) {
