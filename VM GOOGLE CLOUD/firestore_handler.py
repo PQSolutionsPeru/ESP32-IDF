@@ -448,41 +448,76 @@ class FirestoreHandler:
                                     panel_ref = self.db.document(f'hdd-monitor/accounts/clients/{client_id}/panels/{panel_id}')
                                     panel_doc = panel_ref.get()
                                     
-                                    if panel_doc.exists:
-                                        panel_data = panel_doc.to_dict()
-                                        esp32_id = panel_data.get('esp32_id')
-                                        
-                                        if esp32_id:
-                                            command = {
-                                                'command': 'update_config',
-                                                'relay_id': relay_id,
-                                                'is_active': new_data.get('isActive', True),
-                                                'contact_type': new_data.get('contactType', 'NO'),
-                                                'timestamp': int(time.time() * 1000)
-                                            }
-                                            
-                                            custom_name = new_data.get('customName')
-                                            if custom_name and custom_name.strip():
-                                                command['custom_name'] = custom_name.strip()
-                                            
-                                            topic = f"clients/{client_id}/panels/{panel_id}/relay_config"
-                                            
-                                            try:
-                                                if self.mqtt_client and self.mqtt_client.connected:
-                                                    result = self.mqtt_client.client.publish(
-                                                        topic,
-                                                        json.dumps(command),
-                                                        qos=2
-                                                    )
-                                                    if result.rc == mqtt.MQTT_ERR_SUCCESS:
-                                                        logging.info(f"Configuración enviada para {relay_id}")
-                                            except Exception as e:
-                                                logging.error(f"Error publicando MQTT: {e}")
+                                    if not panel_doc.exists:
+                                        logging.warning(f"Panel {panel_id} no existe, ignorando configuración")
+                                        continue
+                                    
+                                    panel_data = panel_doc.to_dict()
+                                    esp32_id = panel_data.get('esp32_id')
+                                    
+                                    if not esp32_id:
+                                        logging.warning(f"Panel {panel_id} no tiene ESP32 asignado, ignorando configuración")
+                                        continue
+                                    
+                                    esp32_ref = self.db.document(f'hdd-monitor/esp32/registered/{esp32_id}')
+                                    esp32_doc = esp32_ref.get()
+                                    
+                                    if not esp32_doc.exists:
+                                        logging.warning(f"ESP32 {esp32_id} no existe en registered, ignorando configuración")
+                                        continue
+                                    
+                                    esp32_data = esp32_doc.to_dict()
+                                    esp32_status = esp32_data.get('status')
+                                    esp32_client = esp32_data.get('client_id')
+                                    esp32_panel = esp32_data.get('panel_id')
+                                    
+                                    if esp32_client != client_id or esp32_panel != panel_id:
+                                        logging.error(f"MISMATCH: ESP32 {esp32_id} asignado a {esp32_client}/{esp32_panel} "
+                                                    f"pero configuración es para {client_id}/{panel_id}")
+                                        continue
+                                    
+                                    if esp32_status not in ['ONLINE', 'AWAITING_CONFIG']:
+                                        logging.warning(f"ESP32 {esp32_id} no está online (status: {esp32_status}), "
+                                                    f"ignorando configuración para {relay_id}")
+                                        continue
+                                    
+                                    command = {
+                                        'command': 'update_config',
+                                        'relay_id': relay_id,
+                                        'is_active': new_data.get('isActive', True),
+                                        'contact_type': new_data.get('contactType', 'NO'),
+                                        'timestamp': int(time.time() * 1000),
+                                        'esp32_id': esp32_id,
+                                        'client_id': client_id,
+                                        'panel_id': panel_id
+                                    }
+                                    
+                                    custom_name = new_data.get('customName')
+                                    if custom_name and custom_name.strip():
+                                        command['custom_name'] = custom_name.strip()
+                                    
+                                    topic = f"clients/{client_id}/panels/{panel_id}/relay_config"
+                                    
+                                    try:
+                                        if self.mqtt_client and self.mqtt_client.connected:
+                                            result = self.mqtt_client.client.publish(
+                                                topic,
+                                                json.dumps(command),
+                                                qos=2
+                                            )
+                                            if result.rc == mqtt.MQTT_ERR_SUCCESS:
+                                                logging.info(f"Configuración enviada a ESP32 {esp32_id} "
+                                                        f"para {relay_id} en topic {topic}")
+                                            else:
+                                                logging.error(f"Error publicando MQTT (rc: {result.rc}) "
+                                                            f"para {relay_id} a ESP32 {esp32_id}")
+                                    except Exception as e:
+                                        logging.error(f"Error publicando MQTT para {relay_id}: {e}")
                                 
                                 self._relay_configs[doc_path] = new_data
                     
                     except Exception as e:
-                        logging.error(f"Error procesando cambio: {e}", exc_info=True)
+                        logging.error(f"Error procesando cambio de configuración: {e}", exc_info=True)
             
             query = self.db.collection_group('relays')
             watch = query.on_snapshot(on_relay_config_change)

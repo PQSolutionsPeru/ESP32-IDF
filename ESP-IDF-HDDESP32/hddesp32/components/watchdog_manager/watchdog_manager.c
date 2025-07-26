@@ -16,19 +16,19 @@
 
 #define TAG "WATCHDOG_MGR"
 
-#define CONFIG_MODE_TIMEOUT_MS          15000
-#define CONFIG_MODE_FEED_INTERVAL_MS    5000
-#define CONFIG_MODE_HEALTH_CHECK_MS     15000
+#define CONFIG_MODE_TIMEOUT_MS          25000
+#define CONFIG_MODE_FEED_INTERVAL_MS    8000
+#define CONFIG_MODE_HEALTH_CHECK_MS     20000
 
-#define RUNNING_MODE_TIMEOUT_MS         8000
-#define RUNNING_MODE_FEED_INTERVAL_MS   3000
-#define RUNNING_MODE_HEALTH_CHECK_MS    10000
+#define RUNNING_MODE_TIMEOUT_MS         15000
+#define RUNNING_MODE_FEED_INTERVAL_MS   5000
+#define RUNNING_MODE_HEALTH_CHECK_MS    12000
 
-#define CRITICAL_MODE_TIMEOUT_MS        5000
-#define CRITICAL_MODE_FEED_INTERVAL_MS  2000
-#define CRITICAL_MODE_HEALTH_CHECK_MS   5000
+#define CRITICAL_MODE_TIMEOUT_MS        8000
+#define CRITICAL_MODE_FEED_INTERVAL_MS  3000
+#define CRITICAL_MODE_HEALTH_CHECK_MS   6000
 
-#define DEFAULT_MEMORY_THRESHOLD        50000
+#define DEFAULT_MEMORY_THRESHOLD        30000
 #define MAX_REGISTERED_TASKS            10
 #define MAX_RESET_REASON_LENGTH         64
 
@@ -80,10 +80,10 @@ static void init_default_configs(void) {
     watchdog_manager_context_t *ctx = &s_watchdog_ctx;
     
     ctx->configs[WATCHDOG_MODE_CONFIG] = (watchdog_config_t) {
-        .timeout_ms = 20000,
-        .feed_interval_ms = 5000,
-        .health_check_interval_ms = 8000,
-        .memory_threshold_bytes = 40000,
+        .timeout_ms = 25000,
+        .feed_interval_ms = 8000,
+        .health_check_interval_ms = 12000,
+        .memory_threshold_bytes = 30000,
         .enable_memory_check = true,
         .enable_wifi_check = false,
         .enable_mqtt_check = false,
@@ -91,10 +91,10 @@ static void init_default_configs(void) {
     };
     
     ctx->configs[WATCHDOG_MODE_RUNNING] = (watchdog_config_t) {
-        .timeout_ms = 12000,
-        .feed_interval_ms = 3000,
-        .health_check_interval_ms = 5000,
-        .memory_threshold_bytes = 35000,
+        .timeout_ms = 15000,
+        .feed_interval_ms = 5000,
+        .health_check_interval_ms = 8000,
+        .memory_threshold_bytes = 25000,
         .enable_memory_check = true,
         .enable_wifi_check = true,
         .enable_mqtt_check = true,
@@ -102,17 +102,17 @@ static void init_default_configs(void) {
     };
     
     ctx->configs[WATCHDOG_MODE_CRITICAL] = (watchdog_config_t) {
-        .timeout_ms = 6000,
-        .feed_interval_ms = 2000,
-        .health_check_interval_ms = 3000,
-        .memory_threshold_bytes = 30000,
+        .timeout_ms = 8000,
+        .feed_interval_ms = 3000,
+        .health_check_interval_ms = 5000,
+        .memory_threshold_bytes = 20000,
         .enable_memory_check = true,
         .enable_wifi_check = true,
         .enable_mqtt_check = true,
         .enable_task_monitoring = true
     };
     
-    LOG_I(TAG, "Aggressive watchdog configurations initialized");
+    LOG_I(TAG, "Watchdog configurations initialized");
 }
 
 static void health_check_timer_callback(TimerHandle_t xTimer) {
@@ -125,7 +125,7 @@ static void health_check_timer_callback(TimerHandle_t xTimer) {
     size_t current_free = esp_get_free_heap_size();
     static size_t last_free = 0;
     
-    if (last_free > 0 && last_free > current_free && (last_free - current_free) > 5000) {
+    if (last_free > 0 && last_free > current_free && (last_free - current_free) > 8000) {
         LOG_W(TAG, "Significant memory decrease detected: %zu -> %zu", last_free, current_free);
         mqtt_manager_emergency_memory_cleanup();
     }
@@ -140,7 +140,16 @@ static void health_check_timer_callback(TimerHandle_t xTimer) {
         LOG_I(TAG, "System health changed: %d -> %d", old_status, status);
         
         if (ctx->event_callback) {
-            ctx->event_callback(status, WATCHDOG_CHECK_TASKS, ctx->event_user_data);
+            watchdog_event_context_t event_ctx = {
+                .status = status,
+                .check_type = WATCHDOG_CHECK_TASKS,
+                .current_memory = esp_get_free_heap_size(),
+                .min_memory = esp_get_minimum_free_heap_size(),
+                .feed_failures = ctx->error_count,
+                .last_feed_time = ctx->last_feed_time,
+                .additional_info = "Health status change detected"
+            };
+            ctx->event_callback(&event_ctx, ctx->event_user_data);
         }
         
         if (status == WATCHDOG_HEALTH_CRITICAL) {
@@ -151,7 +160,7 @@ static void health_check_timer_callback(TimerHandle_t xTimer) {
             }
             
             size_t free_heap = esp_get_free_heap_size();
-            if (free_heap < 20000) {
+            if (free_heap < 15000) {
                 LOG_E(TAG, "Critical memory situation, forcing system reset");
                 watchdog_manager_force_reset("critical_memory_shortage");
             }
@@ -178,7 +187,7 @@ static void feed_timer_callback(TimerHandle_t xTimer) {
         if (ctx->registered_tasks[i].is_active) {
             int64_t time_since_feed = current_time - ctx->registered_tasks[i].last_feed_time;
             
-            if (time_since_feed < (ctx->configs[ctx->current_mode].feed_interval_ms * 2)) {
+            if (time_since_feed < (ctx->configs[ctx->current_mode].feed_interval_ms * 3)) {
                 any_task_fed = true;
                 break;
             }
@@ -189,11 +198,20 @@ static void feed_timer_callback(TimerHandle_t xTimer) {
         LOG_W(TAG, "No tasks have fed watchdog recently");
         ctx->error_count++;
         
-        if (ctx->error_count > 10) {
+        if (ctx->error_count > 20) {
             LOG_E(TAG, "All tasks appear to be starved");
             
             if (ctx->event_callback) {
-                ctx->event_callback(WATCHDOG_HEALTH_CRITICAL, WATCHDOG_CHECK_TASKS, ctx->event_user_data);
+                watchdog_event_context_t event_ctx = {
+                    .status = WATCHDOG_HEALTH_CRITICAL,
+                    .check_type = WATCHDOG_CHECK_TASKS,
+                    .current_memory = esp_get_free_heap_size(),
+                    .min_memory = esp_get_minimum_free_heap_size(),
+                    .feed_failures = ctx->error_count,
+                    .last_feed_time = ctx->last_feed_time,
+                    .additional_info = "All tasks appear to be starved"
+                };
+                ctx->event_callback(&event_ctx, ctx->event_user_data);
             }
         }
     } else if (ctx->error_count > 0) {
@@ -228,20 +246,20 @@ static watchdog_health_status_t check_memory_health(void) {
     size_t free_heap = esp_get_free_heap_size();
     size_t min_free = esp_get_minimum_free_heap_size();
     
-    uint32_t critical_threshold = 25000;
-    uint32_t warning_threshold = 40000;
+    uint32_t critical_threshold = 15000;
+    uint32_t warning_threshold = 30000;
     
     static int critical_count = 0;
     static int warning_count = 0;
     
     if (free_heap < critical_threshold || min_free < critical_threshold) {
         critical_count++;
-        if (critical_count >= 3) {
+        if (critical_count >= 5) {
             LOG_E(TAG, "CRITICAL memory confirmed: free=%zu min=%zu threshold=%" PRIu32 " (count=%d)", 
                     free_heap, min_free, critical_threshold, critical_count);
             return WATCHDOG_HEALTH_CRITICAL;
         } else {
-            LOG_W(TAG, "Critical memory detected but not confirmed: count=%d/3", critical_count);
+            LOG_W(TAG, "Critical memory detected but not confirmed: count=%d/5", critical_count);
             return WATCHDOG_HEALTH_WARNING;
         }
     } else {
@@ -250,7 +268,7 @@ static watchdog_health_status_t check_memory_health(void) {
     
     if (free_heap < warning_threshold || min_free < warning_threshold) {
         warning_count++;
-        if (warning_count >= 5) {
+        if (warning_count >= 8) {
             LOG_W(TAG, "Low memory confirmed: free=%zu min=%zu threshold=%" PRIu32,
                     free_heap, min_free, warning_threshold);
             return WATCHDOG_HEALTH_WARNING;
@@ -271,7 +289,7 @@ static watchdog_health_status_t check_tasks_health(void) {
     }
     
     int64_t current_time = esp_timer_get_time() / 1000;
-    uint32_t max_timeout = config->timeout_ms * 2;
+    uint32_t max_timeout = config->timeout_ms * 3;
     
     for (int i = 0; i < ctx->registered_task_count; i++) {
         if (ctx->registered_tasks[i].is_active) {

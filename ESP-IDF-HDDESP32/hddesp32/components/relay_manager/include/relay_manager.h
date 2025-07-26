@@ -17,10 +17,10 @@ extern "C" {
 
 #define RELAY_MANAGER_DEBOUNCE_TIME_MS 500
 #define RELAY_MANAGER_MIN_REPORT_INTERVAL_MS 750
-#define RELAY_MANAGER_STABLE_READINGS 20
-#define RELAY_MANAGER_READING_DELAY_MS 8
-#define RELAY_MANAGER_FAST_READINGS 6
-#define RELAY_MANAGER_AUTO_CHECK_INTERVAL_MS 2000
+#define RELAY_MANAGER_STABLE_READINGS 10
+#define RELAY_MANAGER_READING_DELAY_MS 5
+#define RELAY_MANAGER_FAST_READINGS 3
+#define RELAY_MANAGER_AUTO_CHECK_INTERVAL_MS 5000
 
 typedef enum {
     RELAY_STATE_OK = 0,
@@ -32,6 +32,12 @@ typedef enum {
     RELAY_CONTACT_NO = 0,
     RELAY_CONTACT_NC
 } relay_contact_type_t;
+
+typedef enum {
+    RELAY_READING_FAST = 0,
+    RELAY_READING_STABLE,
+    RELAY_READING_EMERGENCY
+} relay_reading_mode_t;
 
 typedef struct {
     gpio_num_t gpio_pin;
@@ -62,7 +68,8 @@ typedef enum {
     RELAY_MGR_STATE_UNINITIALIZED = 0,
     RELAY_MGR_STATE_INITIALIZING,
     RELAY_MGR_STATE_RUNNING,
-    RELAY_MGR_STATE_DEINITIALIZING
+    RELAY_MGR_STATE_DEINITIALIZING,
+    RELAY_MGR_STATE_DEGRADED
 } relay_mgr_state_t;
 
 relay_mgr_state_t relay_manager_get_mgr_state(void);
@@ -79,8 +86,18 @@ esp_err_t relay_manager_process_mqtt_command(const char *command_json);
 esp_err_t relay_manager_get_config_json(char *json_buffer, size_t buffer_size);
 esp_err_t relay_manager_check_all_states(bool force_report);
 esp_err_t relay_manager_get_diagnostics_json(char *json_buffer, size_t buffer_size);
+esp_err_t relay_manager_verify_all_states(void);
 esp_err_t relay_manager_deinit(void);
 int relay_manager_read_stable_gpio(gpio_num_t gpio_pin);
+int relay_manager_read_gpio_adaptive(gpio_num_t gpio_pin, relay_reading_mode_t mode);
+esp_err_t relay_manager_save_current_states(void);
+esp_err_t relay_manager_load_and_compare_states(void);
+esp_err_t relay_manager_detect_post_restart_changes(void);
+esp_err_t relay_manager_verify_and_repair_interrupts(void);
+esp_err_t relay_manager_get_interrupt_stats(uint32_t *total_interrupts, uint32_t *processed_interrupts, int64_t *last_interrupt_time);
+esp_err_t relay_manager_cleanup_interrupt_diagnostics(void);
+esp_err_t relay_manager_verify_interrupts_after_config(void);
+esp_err_t relay_manager_force_reconfigure_interrupts(void);
 
 #ifdef __cplusplus
 }

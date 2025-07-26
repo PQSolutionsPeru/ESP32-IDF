@@ -28,13 +28,24 @@ static bool g_watchdog_available = false;
 static bool g_relay_manager_initialized = false;
 static bool g_need_reregister = false;
 
-static char g_relay_json_buffer[256];
 static char g_mqtt_temp_topic[128];
-static char g_mqtt_temp_data[400];
 static char g_esp32_id_buffer[ESP32_ID_LENGTH + 1];
+
+static char g_pending_relay_configs[5][400];
+static int g_pending_config_count = 0;
+static bool g_system_ready_for_relays = false;
 
 static SemaphoreHandle_t g_callback_mutex = NULL;
 static SemaphoreHandle_t g_global_state_mutex = NULL;
+
+typedef struct {
+    char topic[128];
+    char data[1024];
+    int data_len;
+    bool pending;
+} deferred_mqtt_message_t;
+
+static QueueHandle_t g_mqtt_message_queue = NULL;
 
 static bool get_wifi_connected(void) {
     bool result = false;
@@ -139,7 +150,88 @@ static bool parse_json_bool(const char *json, const char *key) {
     return (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
 }
 
-static void watchdog_event_callback(watchdog_health_status_t status, watchdog_check_type_t check_type, void *user_data) {
+static void process_pending_relay_configs(void) {
+    if (g_pending_config_count == 0 || !get_relay_manager_initialized()) {
+        return;
+    }
+    
+    LOG_I(TAG, "Processing %d pending relay configurations", g_pending_config_count);
+    
+    bool relay_processed[RELAY_MANAGER_MAX_RELAYS] = {false};
+    
+    for (int i = 0; i < g_pending_config_count; i++) {
+        if (g_watchdog_available) {
+            watchdog_manager_feed();
+        }
+        
+        char command_val[32], relay_id_val[32];
+        
+        if (find_json_value(g_pending_relay_configs[i], "command", command_val, sizeof(command_val)) &&
+            find_json_value(g_pending_relay_configs[i], "relay_id", relay_id_val, sizeof(relay_id_val)) &&
+            strcmp(command_val, "update_config") == 0) {
+            
+            int relay_num = -1;
+            if (sscanf(relay_id_val, "relay_%d", &relay_num) == 1 && 
+                relay_num >= 1 && relay_num <= RELAY_MANAGER_MAX_RELAYS) {
+                
+                int relay_index = relay_num - 1;
+                
+                if (relay_processed[relay_index]) {
+                    LOG_W(TAG, "Relay %s already processed - skipping", relay_id_val);
+                    continue;
+                }
+                
+                relay_processed[relay_index] = true;
+            }
+            
+            bool is_active = parse_json_bool(g_pending_relay_configs[i], "is_active");
+            esp_err_t ret = relay_manager_set_active(relay_id_val, is_active);
+            if (ret == ESP_OK) {
+                LOG_I(TAG, "Relay %s %s", relay_id_val, is_active ? "ACTIVATED" : "DEACTIVATED");
+                vTaskDelay(pdMS_TO_TICKS(50));
+                
+                char contact_type_val[16];
+                if (find_json_value(g_pending_relay_configs[i], "contact_type", contact_type_val, sizeof(contact_type_val))) {
+                    relay_contact_type_t type = (strcmp(contact_type_val, "NC") == 0) ? 
+                                              RELAY_CONTACT_NC : RELAY_CONTACT_NO;
+                    relay_manager_set_contact_type(relay_id_val, type);
+                    LOG_I(TAG, "Relay %s contact type: %s", relay_id_val, contact_type_val);
+                }
+            } else {
+                LOG_E(TAG, "Failed to activate relay %s", relay_id_val);
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+    
+    g_pending_config_count = 0;
+    
+    vTaskDelay(pdMS_TO_TICKS(200));
+    
+    LOG_I(TAG, "Force reconfiguring interrupts after all relay activations");
+    esp_err_t force_result = relay_manager_force_reconfigure_interrupts();
+    if (force_result != ESP_OK) {
+        LOG_W(TAG, "Force reconfiguration failed, but continuing...");
+    }
+    
+    vTaskDelay(pdMS_TO_TICKS(100));
+    relay_manager_report_initial_states();
+    
+    LOG_I(TAG, "Pending configurations processed");
+    
+    uint32_t total_interrupts = 0;
+    relay_manager_get_interrupt_stats(&total_interrupts, NULL, NULL);
+    LOG_I(TAG, "Total interrupts received after config: %lu", total_interrupts);
+}
+
+static void watchdog_event_callback(const watchdog_event_context_t *context, void *user_data) {
+    if (!context) {
+        return;
+    }
+    
+    watchdog_health_status_t status = context->status;
+    watchdog_check_type_t check_type = context->check_type;
+    
     const char* status_str = "UNKNOWN";
     const char* check_str = "UNKNOWN";
     
@@ -148,6 +240,7 @@ static void watchdog_event_callback(watchdog_health_status_t status, watchdog_ch
         case WATCHDOG_HEALTH_WARNING: status_str = "WARNING"; break;
         case WATCHDOG_HEALTH_CRITICAL: status_str = "CRITICAL"; break;
         case WATCHDOG_HEALTH_ERROR: status_str = "ERROR"; break;
+        case WATCHDOG_HEALTH_EMERGENCY: status_str = "EMERGENCY"; break;
     }
     
     switch (check_type) {
@@ -155,11 +248,23 @@ static void watchdog_event_callback(watchdog_health_status_t status, watchdog_ch
         case WATCHDOG_CHECK_WIFI: check_str = "WIFI"; break;
         case WATCHDOG_CHECK_MQTT: check_str = "MQTT"; break;
         case WATCHDOG_CHECK_TASKS: check_str = "TASKS"; break;
+        case WATCHDOG_CHECK_SYSTEM: check_str = "SYSTEM"; break;
     }
     
-    LOG_W(TAG, "Watchdog event: %s - %s", check_str, status_str);
+    LOG_W(TAG, "Watchdog event: %s - %s (mem: %lu, feeds: %lu)", 
+          check_str, status_str, context->current_memory, context->feed_failures);
     
-    if (status == WATCHDOG_HEALTH_CRITICAL) {
+    if (context->additional_info) {
+        LOG_I(TAG, "Additional info: %s", context->additional_info);
+    }
+    
+    if (status == WATCHDOG_HEALTH_CRITICAL || status == WATCHDOG_HEALTH_EMERGENCY) {
+        if (get_relay_manager_initialized()) {
+            LOG_I(TAG, "Saving relay states before potential system restart");
+            relay_manager_save_current_states();
+            config_manager_force_commit();
+        }
+        
         switch (check_type) {
             case WATCHDOG_CHECK_MEMORY:
                 LOG_E(TAG, "Critical memory situation detected");
@@ -188,6 +293,10 @@ static void watchdog_event_callback(watchdog_health_status_t status, watchdog_ch
             case WATCHDOG_CHECK_TASKS:
                 LOG_E(TAG, "Critical task failure detected");
                 break;
+                
+            case WATCHDOG_CHECK_SYSTEM:
+                LOG_E(TAG, "Critical system failure detected");
+                break;
         }
     } else if (status == WATCHDOG_HEALTH_WARNING) {
         LOG_W(TAG, "System degradation detected in %s subsystem", check_str);
@@ -195,12 +304,11 @@ static void watchdog_event_callback(watchdog_health_status_t status, watchdog_ch
 }
 
 static void relay_state_change_callback(const relay_event_t *event, void *user_data) {
-    if (!get_mqtt_connected() || !event || !g_callback_mutex) {
+    if (!get_mqtt_connected() || !event) {
         return;
     }
 
-    if (xSemaphoreTake(g_callback_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
-        LOG_W(TAG, "Could not take callback mutex");
+    if (xSemaphoreTake(g_callback_mutex, pdMS_TO_TICKS(50)) != pdTRUE) {
         return;
     }
     
@@ -208,89 +316,34 @@ static void relay_state_change_callback(const relay_event_t *event, void *user_d
         watchdog_manager_report_activity(WATCHDOG_CHECK_TASKS);
     }
     
-    if (esp32_id_manager_get_id(g_esp32_id_buffer, sizeof(g_esp32_id_buffer)) != ESP_OK) {
-        LOG_E(TAG, "Could not get ESP32 ID for relay event");
-        xSemaphoreGive(g_callback_mutex);
-        return;
-    }
-    
-    size_t json_size = 300 + strlen(event->relay_id) + strlen(event->name);
-    
-    if (esp_get_free_heap_size() < json_size + 8000) {
-        LOG_W(TAG, "Insufficient memory for relay event, using static fallback");
-        
-        int len = snprintf(g_relay_json_buffer, sizeof(g_relay_json_buffer),
-                          "{"
-                          "\"relay\":\"%.16s\","
-                          "\"status\":\"%s\","
-                          "\"timestamp\":%lld,"
-                          "\"contact_type\":\"%s\","
-                          "\"old_status\":\"%s\""
-                          "}",
-                          event->relay_id,
-                          (event->new_state == RELAY_STATE_OK) ? "OK" : "DISC",
-                          (long long)event->timestamp,
-                          (event->contact_type == RELAY_CONTACT_NC) ? "NC" : "NO",
-                          (event->old_state == RELAY_STATE_OK) ? "OK" : "DISC");
-        
-        if (len > 0 && len < sizeof(g_relay_json_buffer)) {
-            char relay_topic[MQTT_TOPIC_MAX_LENGTH];
-            esp_err_t topic_ret = mqtt_manager_get_panel_topic(relay_topic, sizeof(relay_topic), "relays");
-            
-            if (topic_ret == ESP_OK) {
-                mqtt_manager_publish_json(relay_topic, g_relay_json_buffer, 1, false);
-            } else {
-                snprintf(relay_topic, sizeof(relay_topic), "esp32/%.8s/relays", g_esp32_id_buffer);
-                mqtt_manager_publish_json(relay_topic, g_relay_json_buffer, 1, false);
-            }
-        }
-        
-        xSemaphoreGive(g_callback_mutex);
-        return;
-    }
-    
-    char *relay_json_buffer = malloc(json_size);
-    if (!relay_json_buffer) {
-        LOG_E(TAG, "Failed to allocate relay JSON buffer");
-        xSemaphoreGive(g_callback_mutex);
-        return;
-    }
-    
-    int len = snprintf(relay_json_buffer, json_size,
+    char simple_json[256];
+    int len = snprintf(simple_json, sizeof(simple_json),
                       "{"
                       "\"relay\":\"%s\","
                       "\"status\":\"%s\","
                       "\"timestamp\":%lld,"
                       "\"contact_type\":\"%s\","
-                      "\"old_status\":\"%s\","
-                      "\"name\":\"%s\""
+                      "\"old_status\":\"%s\""
                       "}",
                       event->relay_id,
                       (event->new_state == RELAY_STATE_OK) ? "OK" : "DISC",
                       (long long)event->timestamp,
                       (event->contact_type == RELAY_CONTACT_NC) ? "NC" : "NO",
-                      (event->old_state == RELAY_STATE_OK) ? "OK" : "DISC",
-                      event->name);
+                      (event->old_state == RELAY_STATE_OK) ? "OK" : "DISC");
     
-    if (len > 0 && len < json_size) {
+    if (len > 0 && len < sizeof(simple_json)) {
         char relay_topic[MQTT_TOPIC_MAX_LENGTH];
         esp_err_t topic_ret = mqtt_manager_get_panel_topic(relay_topic, sizeof(relay_topic), "relays");
         
         if (topic_ret == ESP_OK) {
-            esp_err_t ret = mqtt_manager_publish_json(relay_topic, relay_json_buffer, 1, false);
-            if (ret == ESP_OK) {
-                LOG_I(TAG, "Relay %s state change published: %s -> %s", 
-                        event->relay_id,
-                        (event->old_state == RELAY_STATE_OK) ? "OK" : "DISC",
-                        (event->new_state == RELAY_STATE_OK) ? "OK" : "DISC");
-            }
-        } else {
-            snprintf(relay_topic, sizeof(relay_topic), "esp32/%.8s/relays", g_esp32_id_buffer);
-            mqtt_manager_publish_json(relay_topic, relay_json_buffer, 1, false);
+            mqtt_manager_publish_json(relay_topic, simple_json, 1, false);
+            LOG_I(TAG, "Relay %s state: %s -> %s", 
+                  event->relay_id,
+                  (event->old_state == RELAY_STATE_OK) ? "OK" : "DISC",
+                  (event->new_state == RELAY_STATE_OK) ? "OK" : "DISC");
         }
     }
     
-    free(relay_json_buffer);
     xSemaphoreGive(g_callback_mutex);
 }
 
@@ -302,6 +355,205 @@ static esp_err_t relay_mqtt_command_callback(const char *topic, const char *comm
     }
     
     return ESP_OK;
+}
+
+static void process_deferred_mqtt_message(const char *topic, const char *data, int data_len) {
+    if (esp32_id_manager_get_id(g_esp32_id_buffer, sizeof(g_esp32_id_buffer)) != ESP_OK) {
+        LOG_E(TAG, "Could not get ESP32 ID");
+        return;
+    }
+    
+    snprintf(g_mqtt_temp_topic, sizeof(g_mqtt_temp_topic), "esp32/notify/%s/deleted", g_esp32_id_buffer);
+    
+    if (strcmp(topic, g_mqtt_temp_topic) == 0) {
+        LOG_W(TAG, "Deletion notification received");
+        
+        config_manager_erase_key("client_id");
+        config_manager_erase_key("panel_id");
+        config_manager_erase_key("panel_name");
+        config_manager_erase_key("location");
+        mqtt_manager_clear_panel_config();
+        mqtt_manager_cleanup_panel_subscriptions();
+        
+        if (get_relay_manager_initialized()) {
+            relay_mgr_state_t state = relay_manager_get_mgr_state();
+            if (state == RELAY_MGR_STATE_RUNNING) {
+                relay_manager_deinit();
+                set_relay_manager_initialized(false);
+                vTaskDelay(pdMS_TO_TICKS(1000));
+            }
+        }
+        
+        time_manager_reset_network_info_sent();
+        g_need_reregister = true;
+        vTaskDelay(pdMS_TO_TICKS(500));
+        mqtt_manager_send_network_info();
+        return;
+    }
+    
+    snprintf(g_mqtt_temp_topic, sizeof(g_mqtt_temp_topic), "esp32/config/%s", g_esp32_id_buffer);
+    
+    if (strcmp(topic, g_mqtt_temp_topic) == 0) {
+        LOG_I(TAG, "Configuration message received");
+        
+        esp_err_t ret = process_esp32_configuration(data);
+        
+        if (ret == ESP_OK) {
+            LOG_I(TAG, "Configuration accepted");
+            
+            if (!get_relay_manager_initialized()) {
+                vTaskDelay(pdMS_TO_TICKS(200));
+                LOG_I(TAG, "Initializing Relay Manager");
+                ret = relay_manager_init();
+                if (ret == ESP_OK) {
+                    relay_manager_set_state_callback(relay_state_change_callback, NULL);
+                    relay_manager_set_mqtt_callback(relay_mqtt_command_callback, NULL);
+                    set_relay_manager_initialized(true);
+                }
+            }
+        }
+        return;
+    }
+    
+    if (strstr(topic, "/relay_config")) {
+        char expected_topic[MQTT_TOPIC_MAX_LENGTH];
+        esp_err_t topic_ret = mqtt_manager_get_panel_topic(expected_topic, sizeof(expected_topic), "relay_config");
+        
+        if (topic_ret != ESP_OK || strcmp(topic, expected_topic) != 0) {
+            LOG_W(TAG, "Relay config not for our panel - ignoring. Expected: %s, Got: %s", 
+                  (topic_ret == ESP_OK) ? expected_topic : "UNKNOWN", topic);
+            return;
+        }
+        
+        static char last_relay_config[400] = {0};
+        static int64_t last_relay_config_time = 0;
+        int64_t current_time = esp_timer_get_time() / 1000;
+        
+        if (data_len < 400 && 
+            strcmp(data, last_relay_config) == 0 && 
+            (current_time - last_relay_config_time) < 2000) {
+            LOG_W(TAG, "Duplicate relay config detected - ignoring");
+            return;
+        }
+        
+        if (data_len < 400) {
+            memcpy(last_relay_config, data, data_len);
+            last_relay_config[data_len] = '\0';
+            last_relay_config_time = current_time;
+        }
+        
+        if (!get_relay_manager_initialized() || !g_system_ready_for_relays) {
+            LOG_W(TAG, "Relay config received but system not ready - queuing for later");
+            
+            if (g_pending_config_count < 5 && data_len < 400) {
+                memcpy(g_pending_relay_configs[g_pending_config_count], data, data_len);
+                g_pending_relay_configs[g_pending_config_count][data_len] = '\0';
+                g_pending_config_count++;
+                LOG_I(TAG, "Queued relay config %d/5", g_pending_config_count);
+            } else {
+                LOG_W(TAG, "Config queue full or message too large, dropping");
+            }
+            return;
+        }
+        
+        relay_mgr_state_t mgr_state = relay_manager_get_mgr_state();
+        if (mgr_state != RELAY_MGR_STATE_RUNNING) {
+            LOG_W(TAG, "Relay manager not in running state (%d), delaying config", mgr_state);
+            vTaskDelay(pdMS_TO_TICKS(500));
+            
+            if (relay_manager_get_mgr_state() != RELAY_MGR_STATE_RUNNING) {
+                LOG_E(TAG, "Relay manager still not ready, ignoring config");
+                return;
+            }
+        }
+        
+        if (data_len > 2000) {
+            LOG_W(TAG, "Relay config message too large, ignoring");
+            return;
+        }
+        
+        char command_val[32], relay_id_val[32], is_active_val[16];
+        char contact_type_val[16], custom_name_val[64];
+        
+        if (find_json_value(data, "command", command_val, sizeof(command_val)) &&
+            find_json_value(data, "relay_id", relay_id_val, sizeof(relay_id_val)) &&
+            strcmp(command_val, "update_config") == 0) {
+            
+            LOG_I(TAG, "Processing config for relay %s", relay_id_val);
+            
+            if (g_watchdog_available) {
+                watchdog_manager_feed();
+            }
+            
+            if (find_json_value(data, "is_active", is_active_val, sizeof(is_active_val))) {
+                bool is_active = parse_json_bool(data, "is_active");
+                
+                esp_err_t ret = relay_manager_set_active(relay_id_val, is_active);
+                if (ret == ESP_OK) {
+                    LOG_I(TAG, "Relay %s %s", relay_id_val, is_active ? "ACTIVATED" : "DEACTIVATED");
+                    vTaskDelay(pdMS_TO_TICKS(50));
+                    
+                    if (find_json_value(data, "contact_type", contact_type_val, sizeof(contact_type_val))) {
+                        relay_contact_type_t type = (strcmp(contact_type_val, "NC") == 0) ? 
+                                                  RELAY_CONTACT_NC : RELAY_CONTACT_NO;
+                        esp_err_t type_ret = relay_manager_set_contact_type(relay_id_val, type);
+                        if (type_ret == ESP_OK) {
+                            LOG_I(TAG, "Relay %s contact type set to %s", relay_id_val, contact_type_val);
+                            vTaskDelay(pdMS_TO_TICKS(50));
+                        } else {
+                            LOG_E(TAG, "Failed to set contact type for %s: %s", relay_id_val, esp_err_to_name(type_ret));
+                        }
+                    }
+                    
+                    if (find_json_value(data, "custom_name", custom_name_val, sizeof(custom_name_val))) {
+                        if (strlen(custom_name_val) > 0 && strlen(custom_name_val) < 32) {
+                            relay_manager_set_name(relay_id_val, custom_name_val);
+                            LOG_I(TAG, "Relay %s name set to '%.30s'", relay_id_val, custom_name_val);
+                        }
+                    }
+                    
+                    vTaskDelay(pdMS_TO_TICKS(100));
+                    relay_manager_report_initial_states();
+                    
+                } else {
+                    LOG_E(TAG, "Failed to set active state for relay %s: %s", relay_id_val, esp_err_to_name(ret));
+                    vTaskDelay(pdMS_TO_TICKS(500));
+                    esp_err_t retry_ret = relay_manager_set_active(relay_id_val, is_active);
+                    if (retry_ret == ESP_OK) {
+                        LOG_I(TAG, "Retry successful for relay %s", relay_id_val);
+                    } else {
+                        LOG_E(TAG, "Retry failed for relay %s", relay_id_val);
+                    }
+                }
+            }
+        }
+    }
+}
+
+static void mqtt_message_callback(const char *topic, const char *data, int data_len, void *user_data) {
+    if (!topic || !data || data_len <= 0 || data_len >= 1024) {
+        return;
+    }
+    
+    if (g_watchdog_available) {
+        watchdog_manager_report_activity(WATCHDOG_CHECK_MQTT);
+    }
+    
+    deferred_mqtt_message_t msg = {0};
+    strncpy(msg.topic, topic, sizeof(msg.topic) - 1);
+    msg.topic[sizeof(msg.topic) - 1] = '\0';
+    
+    memcpy(msg.data, data, data_len);
+    msg.data[data_len] = '\0';
+    msg.data_len = data_len;
+    msg.pending = true;
+    
+    if (xQueueSend(g_mqtt_message_queue, &msg, 0) != pdTRUE) {
+        deferred_mqtt_message_t dummy;
+        if (xQueueReceive(g_mqtt_message_queue, &dummy, 0) == pdTRUE) {
+            xQueueSend(g_mqtt_message_queue, &msg, 0);
+        }
+    }
 }
 
 static void mqtt_state_callback(mqtt_manager_state_t state, void *user_data) {
@@ -316,12 +568,23 @@ static void mqtt_state_callback(mqtt_manager_state_t state, void *user_data) {
                 if (ret == ESP_OK) {
                     relay_manager_set_state_callback(relay_state_change_callback, NULL);
                     relay_manager_set_mqtt_callback(relay_mqtt_command_callback, NULL);
-                    relay_manager_check_all_states(true);
                     set_relay_manager_initialized(true);
-                    LOG_I(TAG, "Relay Manager initialized successfully");
+                    
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                    g_system_ready_for_relays = true;
+                    
+                    process_pending_relay_configs();
+                    
+                    vTaskDelay(pdMS_TO_TICKS(500));
+                    relay_manager_detect_post_restart_changes();
+                    
+                    LOG_I(TAG, "Relay Manager initialized and ready for configurations");
                 } else {
                     LOG_E(TAG, "Failed to initialize Relay Manager: %s", esp_err_to_name(ret));
                 }
+            } else {
+                g_system_ready_for_relays = true;
+                process_pending_relay_configs();
             }
             
             if (g_watchdog_available) {
@@ -330,7 +593,7 @@ static void mqtt_state_callback(mqtt_manager_state_t state, void *user_data) {
                 if (get_wifi_connected() && get_mqtt_connected()) {
                     static bool watchdog_configured = false;
                     if (!watchdog_configured) {
-                        vTaskDelay(pdMS_TO_TICKS(5000));
+                        vTaskDelay(pdMS_TO_TICKS(3000));
                         
                         if (get_relay_manager_initialized()) {
                             esp_err_t result = watchdog_manager_set_mode(WATCHDOG_MODE_RUNNING);
@@ -341,6 +604,16 @@ static void mqtt_state_callback(mqtt_manager_state_t state, void *user_data) {
                         }
                     }
                 }
+            }
+            
+            if (strlen(g_esp32_id_buffer) > 0) {
+                snprintf(g_mqtt_temp_topic, sizeof(g_mqtt_temp_topic), "esp32/config/%s", g_esp32_id_buffer);
+                mqtt_manager_subscribe(g_mqtt_temp_topic, 2);
+                
+                snprintf(g_mqtt_temp_topic, sizeof(g_mqtt_temp_topic), "esp32/notify/%s/deleted", g_esp32_id_buffer);
+                mqtt_manager_subscribe(g_mqtt_temp_topic, 2);
+                
+                LOG_I(TAG, "Suscrito a topics generales del ESP32");
             }
             
             wifi_manager_state_t wifi_state = wifi_manager_get_state();
@@ -375,145 +648,6 @@ static void mqtt_state_callback(mqtt_manager_state_t state, void *user_data) {
             
         default:
             break;
-    }
-}
-
-static void mqtt_message_callback(const char *topic, const char *data, int data_len, void *user_data) {
-    LOG_I(TAG, "MQTT message: %s (%d bytes)", topic ? topic : "NULL", data_len);
-    
-    if (!topic || !data || data_len <= 0) {
-        LOG_E(TAG, "Invalid MQTT message");
-        return;
-    }
-    
-    if (g_watchdog_available) {
-        watchdog_manager_report_activity(WATCHDOG_CHECK_MQTT);
-    }
-    
-    char *mqtt_temp_data;
-    bool use_dynamic = false;
-    
-    if (data_len > sizeof(g_mqtt_temp_data) - 1) {
-        if (esp_get_free_heap_size() < data_len + 8000) {
-            LOG_W(TAG, "Message too large and insufficient memory: %d bytes", data_len);
-            return;
-        }
-        
-        mqtt_temp_data = malloc(data_len + 1);
-        if (!mqtt_temp_data) {
-            LOG_E(TAG, "Failed to allocate message buffer");
-            return;
-        }
-        use_dynamic = true;
-    } else {
-        mqtt_temp_data = g_mqtt_temp_data;
-    }
-    
-    memcpy(mqtt_temp_data, data, data_len);
-    mqtt_temp_data[data_len] = '\0';
-    
-    if (esp32_id_manager_get_id(g_esp32_id_buffer, sizeof(g_esp32_id_buffer)) != ESP_OK) {
-        LOG_E(TAG, "Could not get ESP32 ID");
-        if (use_dynamic) free(mqtt_temp_data);
-        return;
-    }
-    
-    snprintf(g_mqtt_temp_topic, sizeof(g_mqtt_temp_topic), "esp32/notify/%s/deleted", g_esp32_id_buffer);
-    
-    if (strcmp(topic, g_mqtt_temp_topic) == 0) {
-        LOG_W(TAG, "Deletion notification received");
-        
-        config_manager_erase_key("client_id");
-        config_manager_erase_key("panel_id");
-        config_manager_erase_key("panel_name");
-        config_manager_erase_key("location");
-        mqtt_manager_clear_panel_config();
-        
-        if (get_relay_manager_initialized()) {
-            relay_mgr_state_t state = relay_manager_get_mgr_state();
-            if (state == RELAY_MGR_STATE_RUNNING) {
-                relay_manager_deinit();
-                set_relay_manager_initialized(false);
-                vTaskDelay(pdMS_TO_TICKS(3000));
-            }
-        }
-        
-        time_manager_reset_network_info_sent();
-        g_need_reregister = true;
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        mqtt_manager_send_network_info();
-        
-        if (use_dynamic) free(mqtt_temp_data);
-        return;
-    }
-    
-    snprintf(g_mqtt_temp_topic, sizeof(g_mqtt_temp_topic), "esp32/config/%s", g_esp32_id_buffer);
-    
-    if (strcmp(topic, g_mqtt_temp_topic) == 0) {
-        LOG_I(TAG, "Configuration message received");
-        
-        esp_err_t ret = process_esp32_configuration(mqtt_temp_data);
-        
-        if (ret == ESP_OK) {
-            LOG_I(TAG, "Configuration accepted");
-            
-            if (!get_relay_manager_initialized()) {
-                vTaskDelay(pdMS_TO_TICKS(500));
-                LOG_I(TAG, "Initializing Relay Manager");
-                ret = relay_manager_init();
-                if (ret == ESP_OK) {
-                    relay_manager_set_state_callback(relay_state_change_callback, NULL);
-                    relay_manager_set_mqtt_callback(relay_mqtt_command_callback, NULL);
-                    set_relay_manager_initialized(true);
-                }
-            }
-        }
-        
-        if (use_dynamic) free(mqtt_temp_data);
-        return;
-    }
-    
-    if (strstr(topic, "/relay_config") && get_relay_manager_initialized()) {
-        if (data_len > 2000) {
-            LOG_W(TAG, "Relay config message too large, ignoring");
-            if (use_dynamic) free(mqtt_temp_data);
-            return;
-        }
-        
-        char command_val[32], relay_id_val[32], is_active_val[16];
-        char contact_type_val[16], custom_name_val[64];
-        
-        if (find_json_value(mqtt_temp_data, "command", command_val, sizeof(command_val)) &&
-            find_json_value(mqtt_temp_data, "relay_id", relay_id_val, sizeof(relay_id_val)) &&
-            strcmp(command_val, "update_config") == 0) {
-            
-            if (find_json_value(mqtt_temp_data, "is_active", is_active_val, sizeof(is_active_val))) {
-                bool is_active = parse_json_bool(mqtt_temp_data, "is_active");
-                relay_manager_set_active(relay_id_val, is_active);
-                LOG_I(TAG, "Relay %s %s", relay_id_val, is_active ? "ACTIVATED" : "DEACTIVATED");
-                
-                if (find_json_value(mqtt_temp_data, "contact_type", contact_type_val, sizeof(contact_type_val))) {
-                    relay_contact_type_t type = (strcmp(contact_type_val, "NC") == 0) ? 
-                                              RELAY_CONTACT_NC : RELAY_CONTACT_NO;
-                    relay_manager_set_contact_type(relay_id_val, type);
-                    LOG_I(TAG, "Relay %s contact type set to %s", relay_id_val, contact_type_val);
-                }
-                
-                if (find_json_value(mqtt_temp_data, "custom_name", custom_name_val, sizeof(custom_name_val))) {
-                    if (strlen(custom_name_val) > 0 && strlen(custom_name_val) < 32) {
-                        relay_manager_set_name(relay_id_val, custom_name_val);
-                        LOG_I(TAG, "Relay %s custom name set to '%.30s'", relay_id_val, custom_name_val);
-                    }
-                }
-                
-                vTaskDelay(pdMS_TO_TICKS(500));
-                relay_manager_report_initial_states();
-            }
-        }
-    }
-    
-    if (use_dynamic) {
-        free(mqtt_temp_data);
     }
 }
 
@@ -607,8 +741,38 @@ static void system_monitor_task(void *pvParameters) {
         
         cycle_count++;
         
-        if (cycle_count % 60 == 0 && get_relay_manager_initialized()) {
+        deferred_mqtt_message_t msg;
+        if (xQueueReceive(g_mqtt_message_queue, &msg, pdMS_TO_TICKS(100)) == pdTRUE) {
+            if (task_registered) {
+                watchdog_manager_feed();
+            }
+            
+            process_deferred_mqtt_message(msg.topic, msg.data, msg.data_len);
+            
+            if (task_registered) {
+                watchdog_manager_feed();
+            }
+            
+            LOG_I(TAG, "Processed 1 MQTT message from queue");
+        }
+        
+        if (cycle_count % 120 == 0 && get_relay_manager_initialized()) {
+            if (task_registered) {
+                watchdog_manager_feed();
+            }
             relay_manager_check_all_states(false);
+            if (task_registered) {
+                watchdog_manager_feed();
+            }
+            relay_manager_verify_all_states();
+        }
+        
+        if (cycle_count % 900 == 0 && get_relay_manager_initialized()) {
+            LOG_D(TAG, "Performing scheduled relay system check");
+            esp_err_t interrupt_check = relay_manager_verify_and_repair_interrupts();
+            if (interrupt_check == ESP_FAIL) {
+                LOG_W(TAG, "Relay system check reported issues");
+            }
         }
         
         if (time_manager_should_send_network_info() || g_need_reregister) {
@@ -620,7 +784,7 @@ static void system_monitor_task(void *pvParameters) {
             }
         }
         
-        if (cycle_count % 120 == 0) {
+        if (cycle_count % 180 == 0) {
             print_memory_info_simple();
         }
         
@@ -671,11 +835,11 @@ static void system_monitor_task(void *pvParameters) {
                     watchdog_manager_report_activity(WATCHDOG_CHECK_MQTT);
                 }
                 
-                if (cycle_count % 24 == 0) {
+                if (cycle_count % 36 == 0) {
                     LOG_I(TAG, "System OK - WiFi+MQTT connected");
                 }
             } else {
-                if (cycle_count % 24 == 0) {
+                if (cycle_count % 36 == 0) {
                     LOG_I(TAG, "Retrying MQTT connection");
                     if (esp32_id_manager_get_id(g_esp32_id_buffer, sizeof(g_esp32_id_buffer)) == ESP_OK) {
                         mqtt_manager_set_esp32_id(g_esp32_id_buffer);
@@ -686,20 +850,20 @@ static void system_monitor_task(void *pvParameters) {
         } else {
             connection_stable_start = 0;
             
-            if (cycle_count % 6 == 0) {
+            if (cycle_count % 10 == 0) {
                 LOG_I(TAG, "WiFi disconnected - running recovery cycle");
                 wifi_manager_handle_disconnection("FirePanel", "firepanel", 10);
             }
         }
         
-        if (g_watchdog_available && cycle_count % 60 == 0) {
+        if (g_watchdog_available && cycle_count % 90 == 0) {
             watchdog_health_status_t health = watchdog_manager_check_system_health();
             if (health > WATCHDOG_HEALTH_WARNING) {
                 LOG_W(TAG, "System health degraded: %d", health);
             }
         }
         
-        vTaskDelay(pdMS_TO_TICKS(5000));
+        vTaskDelay(pdMS_TO_TICKS(2000));
     }
 }
 
@@ -711,6 +875,12 @@ void app_main(void)
 
     g_callback_mutex = xSemaphoreCreateMutex();
     g_global_state_mutex = xSemaphoreCreateMutex();
+    
+    g_mqtt_message_queue = xQueueCreate(8, sizeof(deferred_mqtt_message_t));
+    if (g_mqtt_message_queue == NULL) {
+        LOG_E(TAG, "Failed to create MQTT message queue");
+        esp_restart();
+    }
     
     esp_err_t watchdog_ret = watchdog_manager_init();
     if (watchdog_ret != ESP_OK) {
@@ -875,7 +1045,7 @@ void app_main(void)
                 LOG_W(TAG, "Main task watchdog feed failed: %s (count: %lu)", 
                         esp_err_to_name(feed_ret), main_feed_errors);
                 
-                if (main_feed_errors >= 30) {
+                if (main_feed_errors >= 50) {
                     LOG_E(TAG, "Too many main feed failures, attempting re-registration");
                     watchdog_manager_unregister_task(NULL);
                     vTaskDelay(pdMS_TO_TICKS(1000));
@@ -898,13 +1068,13 @@ void app_main(void)
         
         main_cycle++;
         
-        if (main_cycle % 12 == 0) {
+        if (main_cycle % 20 == 0) {
             if (g_watchdog_available) {
                 uint32_t feed_count, error_count;
                 const char *last_reset_reason;
                 
                 if (watchdog_manager_get_stats(&feed_count, &error_count, &last_reset_reason) == ESP_OK) {
-                    if (error_count > 100) {
+                    if (error_count > 200) {
                         LOG_W(TAG, "High watchdog error count: %lu (feeds: %lu, last reset: %s)", 
                                 error_count, feed_count, last_reset_reason ? last_reset_reason : "none");
                     }
@@ -917,13 +1087,13 @@ void app_main(void)
             }
         }
         
-        if (main_cycle % 60 == 0) {
+        if (main_cycle % 90 == 0) {
             size_t free_heap = esp_get_free_heap_size();
             size_t min_heap = esp_get_minimum_free_heap_size();
             LOG_I(TAG, "Main task: heap free=%zu min=%zu", free_heap, min_heap);
         }
         
-        vTaskDelay(pdMS_TO_TICKS(5000));
+        vTaskDelay(pdMS_TO_TICKS(8000));
     }
     
     if (get_relay_manager_initialized()) {

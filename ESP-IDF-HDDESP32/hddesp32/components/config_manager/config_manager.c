@@ -33,7 +33,6 @@ static void delayed_commit_callback(TimerHandle_t xTimer) {
 }
 
 static esp_err_t schedule_commit(void) {
-    int64_t current_time = esp_timer_get_time() / 1000;
     
     if (!pending_commit) {
         pending_commit = true;

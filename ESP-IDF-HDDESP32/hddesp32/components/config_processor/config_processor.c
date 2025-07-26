@@ -6,6 +6,7 @@
 #include "relay_manager.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_heap_caps.h"
 
 static const char *TAG = "CONFIG_PROC";
 
@@ -59,24 +60,17 @@ static void config_response_task(void *pvParameters) {
         
         vTaskDelay(pdMS_TO_TICKS(500));
         
-        ESP_LOGI(TAG, "Subscribing to panel topics");
+        ESP_LOGI(TAG, "Setting up panel subscriptions");
         
-        char topic[MQTT_TOPIC_MAX_LENGTH];
+        mqtt_manager_cleanup_panel_subscriptions();
+        vTaskDelay(pdMS_TO_TICKS(200));
         
-        snprintf(topic, sizeof(topic), "clients/%s/panels/%s/status", 
-                 params->client_id, params->panel_id);
-        mqtt_manager_subscribe(topic, 1);
-        vTaskDelay(pdMS_TO_TICKS(100));
-        
-        snprintf(topic, sizeof(topic), "clients/%s/panels/%s/relay_config", 
-                 params->client_id, params->panel_id);
-        mqtt_manager_subscribe(topic, 1);
-        vTaskDelay(pdMS_TO_TICKS(100));
-        
-        snprintf(topic, sizeof(topic), "clients/%s/panels/%s/command", 
-                 params->client_id, params->panel_id);
-        mqtt_manager_subscribe(topic, 1);
-        vTaskDelay(pdMS_TO_TICKS(100));
+        esp_err_t sub_ret = mqtt_manager_setup_panel_subscriptions();
+        if (sub_ret == ESP_OK) {
+            ESP_LOGI(TAG, "Panel subscriptions configured successfully");
+        } else {
+            ESP_LOGW(TAG, "Panel subscriptions setup failed: %s", esp_err_to_name(sub_ret));
+        }
         
         vTaskDelay(pdMS_TO_TICKS(1000));
         
@@ -85,12 +79,15 @@ static void config_response_task(void *pvParameters) {
             relay_manager_report_initial_states();
         }
         
-        char online_json[256];
-        snprintf(online_json, sizeof(online_json),
-                 "{\"esp32_id\":\"%s\",\"status\":\"ONLINE\",\"client_id\":\"%s\",\"panel_id\":\"%s\"}",
-                 params->esp32_id, params->client_id, params->panel_id);
-        
-        mqtt_manager_publish("esp32/status", online_json, strlen(online_json), 1, false);
+        char *online_json = heap_caps_malloc(256, MALLOC_CAP_8BIT);
+        if (online_json) {
+            snprintf(online_json, 256,
+                     "{\"esp32_id\":\"%s\",\"status\":\"ONLINE\",\"client_id\":\"%s\",\"panel_id\":\"%s\"}",
+                     params->esp32_id, params->client_id, params->panel_id);
+            
+            mqtt_manager_publish("esp32/status", online_json, strlen(online_json), 1, false);
+            free(online_json);
+        }
     } else {
         mqtt_manager_send_config_response(false, "Configuration failed");
     }
@@ -109,7 +106,7 @@ esp_err_t process_esp32_configuration(const char *config_json) {
     
     ESP_LOGI(TAG, "Processing configuration: %s", config_json);
     
-    config_task_params_t *params = calloc(1, sizeof(config_task_params_t));
+    config_task_params_t *params = heap_caps_calloc(1, sizeof(config_task_params_t), MALLOC_CAP_8BIT);
     if (!params) {
         return ESP_ERR_NO_MEM;
     }
@@ -168,7 +165,7 @@ esp_err_t process_esp32_configuration(const char *config_json) {
     BaseType_t task_created = xTaskCreate(
         config_response_task,
         "cfg_resp",
-        6144,
+        8192,
         params,
         5,
         NULL
@@ -180,6 +177,6 @@ esp_err_t process_esp32_configuration(const char *config_json) {
         return ESP_FAIL;
     }
     
-    ESP_LOGI(TAG, "Config response task created with calculated stack (6144 bytes)");
+    ESP_LOGI(TAG, "Config response task created with 8KB stack");
     return ESP_OK;
 }

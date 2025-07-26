@@ -48,18 +48,30 @@ class ESP32ConfigManager:
             client_id = esp32_data.get('client_id')
             panel_id = esp32_data.get('panel_id')
             
+            logging.info(f"Verificando si enviar config a {esp32_id}:")
+            logging.info(f"  Status: {current_status}")
+            logging.info(f"  Client: {client_id}")
+            logging.info(f"  Panel: {panel_id}")
+            
             if current_status != ESP32_STATES['AWAITING_CONFIG']:
+                logging.info(f"  ✗ Status no es AWAITING_CONFIG")
                 return False
             
             if not client_id or not panel_id:
+                logging.info(f"  ✗ Sin asignación de cliente/panel")
                 return False
             
             current_time = time.time()
             last_sent = self._last_config_sent.get(esp32_id, 0)
+            time_diff = current_time - last_sent
             
-            if current_time - last_sent < 300:
+            logging.info(f"  Última config enviada hace {time_diff:.1f} segundos")
+            
+            if time_diff < 60:  # Reducir de 300 a 60 segundos
+                logging.info(f"  ✗ Config enviada recientemente")
                 return False
             
+            logging.info(f"  ✓ Puede enviar configuración")
             return True
             
         except Exception as e:
@@ -68,6 +80,7 @@ class ESP32ConfigManager:
 
     def _handle_registration(self, esp32_id: str, payload: Dict[str, Any]):
         try:
+            logging.info(f"=== PROCESANDO REGISTRO DE ESP32 {esp32_id} ===")
             esp32_ref = self.db.document(f'hdd-monitor/esp32/registered/{esp32_id}')
             esp32_doc = esp32_ref.get()
             current_time = datetime.now(pytz.UTC)
@@ -81,16 +94,27 @@ class ESP32ConfigManager:
                     'status': ESP32_STATES['AWAITING_CONFIG']
                 }
                 esp32_ref.set(esp32_data)
-                logging.info(f"Nuevo ESP32 registrado: {esp32_id} (AWAITING_CONFIG)")
+                logging.info(f"✓ Nuevo ESP32 registrado: {esp32_id} (AWAITING_CONFIG)")
                 
             else:
                 esp32_data = esp32_doc.to_dict()
                 current_status = esp32_data.get('status')
+                client_id = esp32_data.get('client_id')
+                panel_id = esp32_data.get('panel_id')
                 
-                if esp32_data.get('client_id') and esp32_data.get('panel_id'):
+                logging.info(f"ESP32 {esp32_id} existente - Status: {current_status}, Client: {client_id}, Panel: {panel_id}")
+                
+                if client_id and panel_id:
+                    logging.info(f"ESP32 {esp32_id} tiene asignación: {client_id}/{panel_id}")
+                    
                     if current_status == ESP32_STATES['AWAITING_CONFIG']:
+                        logging.info(f"ESP32 {esp32_id} en AWAITING_CONFIG, verificando si enviar config...")
                         if self._should_send_config(esp32_id, esp32_data):
+                            logging.info(f"✓ Enviando configuración a ESP32 {esp32_id}")
                             self._send_config(esp32_id, esp32_data)
+                        else:
+                            logging.warning(f"✗ No se puede enviar config a ESP32 {esp32_id}")
+                            logging.warning(f"    Razones posibles: config reciente, estado incorrecto")
                     else:
                         updates = {
                             'IP': payload.get('IP', ''),
@@ -98,18 +122,32 @@ class ESP32ConfigManager:
                             'lastNetworkUpdate': current_time
                         }
                         esp32_ref.update(updates)
-                        logging.debug(f"ESP32 {esp32_id} ya configurado, solo actualizando info de red")
+                        logging.info(f"✓ ESP32 {esp32_id} actualizado (ya configurado)")
                 else:
-                    updates = {
-                        'IP': payload.get('IP', ''),
-                        'lastUpdate': current_time,
-                        'status': ESP32_STATES['AWAITING_CONFIG']
-                    }
-                    esp32_ref.update(updates)
-                    logging.info(f"ESP32 {esp32_id} sin asignación, marcado como AWAITING_CONFIG")
+                    logging.warning(f"ESP32 {esp32_id} SIN asignación de cliente/panel")
+                    
+                    existing_panel = self._find_existing_panel_assignment(esp32_id)
+                    if existing_panel:
+                        logging.info(f"✓ Encontrada asignación existente para ESP32 {esp32_id}: {existing_panel}")
+                        esp32_data.update(existing_panel)
+                        esp32_ref.update(existing_panel)
+                        
+                        if self._should_send_config(esp32_id, esp32_data):
+                            logging.info(f"✓ Enviando configuración a ESP32 {esp32_id} con asignación recuperada")
+                            self._send_config(esp32_id, esp32_data)
+                    else:
+                        updates = {
+                            'IP': payload.get('IP', ''),
+                            'lastUpdate': current_time,
+                            'status': ESP32_STATES['AWAITING_CONFIG']
+                        }
+                        esp32_ref.update(updates)
+                        logging.warning(f"✗ ESP32 {esp32_id} sin asignación, marcado como AWAITING_CONFIG")
+
+            logging.info(f"=== FIN PROCESAMIENTO ESP32 {esp32_id} ===")
 
         except Exception as e:
-            logging.error(f"Error en registro de ESP32: {e}", exc_info=True)
+            logging.error(f"Error en registro de ESP32 {esp32_id}: {e}", exc_info=True)
 
     def _send_config(self, esp32_id: str, esp32_data: Dict[str, Any]):
         try:
@@ -379,33 +417,34 @@ class ESP32ConfigManager:
                 logging.debug(f"Ignorando mensaje retain en {msg.topic}")
                 return
 
-            import json
-            
             try:
-                payload_str = msg.payload.decode().strip('[] ')
+                payload_str = msg.payload.decode().strip()
                 payload = json.loads(payload_str)
                 
-                logging.debug(f"Mensaje recibido en {msg.topic}: {payload}")
+                logging.info(f"Mensaje recibido en {msg.topic}: {payload}")
                 
                 topic_parts = msg.topic.split('/')
 
-                if msg.topic.startswith("esp32/network_info"):
+                if msg.topic == "esp32/network_info":
                     esp32_id = payload.get('esp32_id')
                     if esp32_id:
-                        network_info = {
-                            'MAC': payload.get('MAC'),
-                            'IP': payload.get('IP'),
-                            'status': payload.get('status', 'ONLINE')
-                        }
                         logging.info(f"Procesando network_info de ESP32 {esp32_id}")
-                        self._handle_registration(esp32_id, network_info)
+                        self._handle_registration(esp32_id, payload)
+                    else:
+                        logging.warning("Mensaje network_info sin esp32_id")
                         
                 elif topic_parts[0] == "esp32":
                     if topic_parts[1] == "status" and len(topic_parts) > 2:
-                        self._handle_status_update(topic_parts[2], payload)
+                        esp32_id = topic_parts[2]
+                        logging.info(f"Procesando status update de ESP32 {esp32_id}")
+                        self._handle_status_update(esp32_id, payload)
                     elif topic_parts[1] == "config" and len(topic_parts) > 3 and topic_parts[3] == "response":
-                        self._handle_config_response(topic_parts[2], payload)
+                        esp32_id = topic_parts[2]
+                        logging.info(f"Procesando config response de ESP32 {esp32_id}")
+                        self._handle_config_response(esp32_id, payload)
 
+            except json.JSONDecodeError as e:
+                logging.error(f"Error decodificando JSON: {e}, payload: {msg.payload.decode()}")
             except Exception as e:
                 logging.error(f"Error procesando mensaje MQTT: {e}", exc_info=True)
                 

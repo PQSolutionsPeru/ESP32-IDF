@@ -16,8 +16,14 @@
 
 #define TAG "RELAY_MGR"
 #define RELAY_MANAGER_MIN_REPORT_INTERVAL_MS 750
-#define RELAY_MANAGER_AUTO_CHECK_INTERVAL_MS 2000
-#define RELAY_CONFIG_SAVE_DELAY_MS 5000
+#define RELAY_CONFIG_SAVE_DELAY_MS 8000
+
+static volatile uint32_t s_total_interrupts_received = 0;
+static volatile uint32_t s_interrupts_processed = 0;
+static volatile int64_t s_last_interrupt_time = 0;
+static volatile bool s_interrupt_system_verified = false;
+static volatile bool s_verification_in_progress = false;
+static SemaphoreHandle_t s_verification_mutex = NULL;
 
 static const gpio_num_t DEFAULT_RELAY_PINS[RELAY_MANAGER_MAX_RELAYS] = {
     GPIO_NUM_32,
@@ -81,7 +87,7 @@ static relay_manager_context_t s_relay_ctx = {0};
 static char* get_message_buffer(void) {
     relay_manager_context_t *ctx = &s_relay_ctx;
     
-    if (xSemaphoreTake(ctx->pool_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+    if (xSemaphoreTake(ctx->pool_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         for (int i = 0; i < 3; i++) {
             if (!ctx->pool_in_use[i]) {
                 ctx->pool_in_use[i] = true;
@@ -93,7 +99,7 @@ static char* get_message_buffer(void) {
         xSemaphoreGive(ctx->pool_mutex);
         
         size_t free_heap = esp_get_free_heap_size();
-        if (free_heap < 50000) {
+        if (free_heap < 40000) {
             LOG_W(TAG, "Low memory during buffer allocation: %zu bytes", free_heap);
         }
     }
@@ -103,7 +109,9 @@ static char* get_message_buffer(void) {
 static void release_message_buffer(char *buffer) {
     relay_manager_context_t *ctx = &s_relay_ctx;
     
-    if (xSemaphoreTake(ctx->pool_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+    if (!buffer) return;
+    
+    if (xSemaphoreTake(ctx->pool_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         for (int i = 0; i < 3; i++) {
             if (ctx->message_pool[i] == buffer) {
                 ctx->pool_in_use[i] = false;
@@ -127,9 +135,26 @@ static relay_contact_type_t string_to_contact_type(const char* str);
 static int find_relay_index_by_id(const char *relay_id);
 static int find_relay_index_by_gpio(gpio_num_t gpio_pin);
 
+static void debug_relay_states(const char* context) {
+    relay_manager_context_t *ctx = &s_relay_ctx;
+    
+    LOG_I(TAG, "=== RELAY DEBUG [%s] ===", context);
+    for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
+        relay_config_t *relay = &ctx->relays[i];
+        LOG_I(TAG, "Relay %s: active=%s, gpio=%d, state=%s", 
+              relay->relay_id, 
+              relay->is_active ? "YES" : "NO",
+              relay->gpio_pin,
+              relay_state_to_string(relay->current_state));
+    }
+    LOG_I(TAG, "=== END RELAY DEBUG ===");
+}
+
 static void config_save_timer_callback(TimerHandle_t xTimer) {
     relay_manager_context_t *ctx = &s_relay_ctx;
     bool should_save = false;
+    
+    LOG_I(TAG, "Config save timer callback triggered");
     
     if (xSemaphoreTake(ctx->config_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         should_save = ctx->config_save_pending;
@@ -146,19 +171,20 @@ static void config_save_timer_callback(TimerHandle_t xTimer) {
         } else {
             LOG_E(TAG, "Failed to save deferred relay configuration: %s", esp_err_to_name(ret));
         }
+    } else {
+        LOG_W(TAG, "Config save timer triggered but no save pending");
     }
 }
 
 static void schedule_config_save(void) {
     relay_manager_context_t *ctx = &s_relay_ctx;
     
-    if (ctx->config_save_timer && ctx->initialized) {
-        if (xSemaphoreTake(ctx->config_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-            ctx->config_save_pending = true;
-            xTimerReset(ctx->config_save_timer, pdMS_TO_TICKS(100));
-            xSemaphoreGive(ctx->config_mutex);
-        }
+    if (!ctx->config_save_timer || !ctx->initialized) {
+        return;
     }
+    
+    ctx->config_save_pending = true;
+    xTimerReset(ctx->config_save_timer, pdMS_TO_TICKS(200));
 }
 
 relay_mgr_state_t relay_manager_get_mgr_state(void) {
@@ -171,24 +197,401 @@ int relay_manager_read_stable_gpio(gpio_num_t gpio_pin) {
     }
     
     int fast_sum = 0;
-    for (int i = 0; i < RELAY_MANAGER_FAST_READINGS; i++) {
+    const int FAST_READINGS = 4;
+    const int FAST_DELAY_MS = 5;
+    
+    for (int i = 0; i < FAST_READINGS; i++) {
         fast_sum += gpio_get_level(gpio_pin);
-        vTaskDelay(pdMS_TO_TICKS(RELAY_MANAGER_READING_DELAY_MS));
+        vTaskDelay(pdMS_TO_TICKS(FAST_DELAY_MS));
     }
     
-    if (fast_sum == 0 || fast_sum == RELAY_MANAGER_FAST_READINGS) {
-        int level = (fast_sum > 0) ? 1 : 0;
-        return level;
+    if (fast_sum == 0 || fast_sum == FAST_READINGS) {
+        return (fast_sum > 0) ? 1 : 0;
     }
     
     int total_sum = fast_sum;
-    for (int i = RELAY_MANAGER_FAST_READINGS; i < RELAY_MANAGER_STABLE_READINGS; i++) {
+    const int TOTAL_READINGS = 8;
+    
+    for (int i = FAST_READINGS; i < TOTAL_READINGS; i++) {
         total_sum += gpio_get_level(gpio_pin);
-        vTaskDelay(pdMS_TO_TICKS(RELAY_MANAGER_READING_DELAY_MS));
+        vTaskDelay(pdMS_TO_TICKS(FAST_DELAY_MS));
     }
     
-    int stable_level = (total_sum >= 14) ? 1 : 0;
-    return stable_level;
+    return (total_sum >= (TOTAL_READINGS / 2 + 1)) ? 1 : 0;
+}
+
+static esp_err_t save_relay_states_to_nvs(void) {
+    relay_manager_context_t *ctx = &s_relay_ctx;
+    
+    if (!ctx->initialized) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    relay_state_t current_states[RELAY_MANAGER_MAX_RELAYS];
+    int64_t state_timestamps[RELAY_MANAGER_MAX_RELAYS];
+    
+    for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
+        current_states[i] = ctx->relays[i].current_state;
+        state_timestamps[i] = ctx->relays[i].last_change_time;
+    }
+    
+    esp_err_t ret = config_manager_set_blob("relay_states", current_states, sizeof(current_states));
+    if (ret != ESP_OK) {
+        LOG_E(TAG, "Failed to save relay states: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    
+    ret = config_manager_set_blob("relay_timestamps", state_timestamps, sizeof(state_timestamps));
+    if (ret != ESP_OK) {
+        LOG_E(TAG, "Failed to save relay timestamps: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    
+    int64_t system_time = esp_timer_get_time() / 1000;
+    ret = config_manager_set_blob("system_shutdown_time", &system_time, sizeof(system_time));
+    if (ret != ESP_OK) {
+        LOG_W(TAG, "Failed to save system shutdown time: %s", esp_err_to_name(ret));
+    }
+    
+    LOG_I(TAG, "Relay states saved to NVS successfully");
+    return ESP_OK;
+}
+
+esp_err_t relay_manager_detect_post_restart_changes(void) {
+    relay_manager_context_t *ctx = &s_relay_ctx;
+    
+    if (!ctx->initialized || ctx->state != RELAY_MGR_STATE_RUNNING) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    LOG_I(TAG, "Detecting post-restart relay changes");
+    
+    relay_state_t previous_states[RELAY_MANAGER_MAX_RELAYS];
+    size_t states_size = sizeof(previous_states);
+    
+    esp_err_t ret = config_manager_get_blob("relay_states", previous_states, &states_size);
+    if (ret != ESP_OK || states_size != sizeof(previous_states)) {
+        LOG_W(TAG, "No previous relay states found, assuming first boot");
+        return relay_manager_report_initial_states();
+    }
+    
+    int64_t previous_timestamps[RELAY_MANAGER_MAX_RELAYS];
+    size_t timestamps_size = sizeof(previous_timestamps);
+    
+    ret = config_manager_get_blob("relay_timestamps", previous_timestamps, &timestamps_size);
+    if (ret != ESP_OK) {
+        LOG_W(TAG, "No previous timestamps found");
+        memset(previous_timestamps, 0, sizeof(previous_timestamps));
+    }
+    
+    int64_t current_time_ms;
+    if (time_manager_is_synchronized()) {
+        current_time_ms = (int64_t)time_manager_get_time() * 1000;
+    } else {
+        current_time_ms = esp_timer_get_time() / 1000;
+    }
+    
+    int changes_detected = 0;
+    
+    for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
+        relay_config_t *relay = &ctx->relays[i];
+        
+        if (!relay->is_active || !GPIO_IS_VALID_GPIO(relay->gpio_pin)) {
+            continue;
+        }
+        
+        int stable_reading = relay_manager_read_stable_gpio(relay->gpio_pin);
+        if (stable_reading < 0) {
+            LOG_W(TAG, "Failed to read GPIO %d during post-restart check", relay->gpio_pin);
+            continue;
+        }
+        
+        relay_state_t current_physical_state = gpio_to_logical_state(stable_reading, relay->contact_type);
+        relay_state_t previous_state = previous_states[i];
+        
+        if (current_physical_state != previous_state) {
+            changes_detected++;
+            
+            LOG_I(TAG, "POST-RESTART CHANGE DETECTED - Relay %s: %s -> %s (GPIO: %d)", 
+                    relay->relay_id,
+                    relay_state_to_string(previous_state),
+                    relay_state_to_string(current_physical_state),
+                    stable_reading);
+            
+            relay->current_state = current_physical_state;
+            relay->last_change_time = current_time_ms;
+            relay->last_report_time = current_time_ms;
+            
+            if (ctx->state_callback) {
+                relay_event_t event = {
+                    .gpio_pin = relay->gpio_pin,
+                    .old_state = previous_state,
+                    .new_state = current_physical_state,
+                    .timestamp = current_time_ms,
+                    .contact_type = relay->contact_type
+                };
+                
+                strncpy(event.relay_id, relay->relay_id, sizeof(event.relay_id) - 1);
+                event.relay_id[sizeof(event.relay_id) - 1] = '\0';
+                
+                strncpy(event.name, relay->name, sizeof(event.name) - 1);
+                event.name[sizeof(event.name) - 1] = '\0';
+                
+                ctx->state_callback(&event, ctx->state_callback_user_data);
+                
+                vTaskDelay(pdMS_TO_TICKS(100));
+            }
+        } else {
+            relay->current_state = current_physical_state;
+            relay->last_change_time = current_time_ms;
+        }
+    }
+    
+    if (changes_detected > 0) {
+        LOG_I(TAG, "POST-RESTART: Detected %d relay state changes during system downtime", changes_detected);
+    } else {
+        LOG_I(TAG, "POST-RESTART: No relay state changes detected");
+    }
+    
+    save_relay_states_to_nvs();
+    
+    return ESP_OK;
+}
+
+esp_err_t relay_manager_save_current_states(void) {
+    return save_relay_states_to_nvs();
+}
+
+esp_err_t relay_manager_load_and_compare_states(void) {
+    return relay_manager_detect_post_restart_changes();
+}
+
+static esp_err_t init_interrupt_diagnostics(void) {
+    if (s_verification_mutex == NULL) {
+        s_verification_mutex = xSemaphoreCreateMutex();
+        if (s_verification_mutex == NULL) {
+            LOG_E(TAG, "Failed to create verification mutex");
+            return ESP_ERR_NO_MEM;
+        }
+    }
+    
+    s_total_interrupts_received = 0;
+    s_interrupts_processed = 0;
+    s_last_interrupt_time = 0;
+    s_interrupt_system_verified = false;
+    s_verification_in_progress = false;
+    
+    return ESP_OK;
+}
+
+static void cleanup_interrupt_diagnostics(void) {
+    if (s_verification_mutex != NULL) {
+        vSemaphoreDelete(s_verification_mutex);
+        s_verification_mutex = NULL;
+    }
+    
+    s_verification_in_progress = false;
+}
+
+static esp_err_t verify_interrupt_system_safe(void) {
+    relay_manager_context_t *ctx = &s_relay_ctx;
+    
+    LOG_I(TAG, "Verifying GPIO interrupt system (quick check)");
+    
+    int64_t current_time = esp_timer_get_time() / 1000;
+    int64_t time_since_last = current_time - s_last_interrupt_time;
+    
+    if (s_last_interrupt_time > 0 && time_since_last < 30000) {
+        s_interrupt_system_verified = true;
+        return ESP_OK;
+    }
+    
+    bool any_gpio_functional = false;
+    
+    for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS && i < 3; i++) {
+        relay_config_t *relay = &ctx->relays[i];
+        
+        if (!relay->is_active || !GPIO_IS_VALID_GPIO(relay->gpio_pin)) {
+            continue;
+        }
+        
+        int level1 = gpio_get_level(relay->gpio_pin);
+        vTaskDelay(pdMS_TO_TICKS(5));
+        int level2 = gpio_get_level(relay->gpio_pin);
+        
+        if (level1 >= 0 && level2 >= 0) {
+            any_gpio_functional = true;
+            LOG_D(TAG, "GPIO %d functional: level=%d", relay->gpio_pin, level1);
+        }
+    }
+    
+    if (any_gpio_functional) {
+        s_interrupt_system_verified = true;
+        return ESP_OK;
+    }
+    
+    LOG_W(TAG, "GPIO verification failed - may need reinitialization");
+    return ESP_FAIL;
+}
+
+static esp_err_t reinitialize_gpio_interrupts_safe(void) {
+    relay_manager_context_t *ctx = &s_relay_ctx;
+    esp_err_t ret = ESP_OK;
+    
+    LOG_I(TAG, "Performing safe GPIO interrupt reinitialization");
+    debug_relay_states("BEFORE_REPAIR");
+    
+    for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
+        relay_config_t *relay = &ctx->relays[i];
+        
+        if (!GPIO_IS_VALID_GPIO(relay->gpio_pin)) {
+            continue;
+        }
+        
+        gpio_intr_disable(relay->gpio_pin);
+        gpio_isr_handler_remove(relay->gpio_pin);
+    }
+    
+    gpio_uninstall_isr_service();
+    
+    vTaskDelay(pdMS_TO_TICKS(50));
+    
+    ret = gpio_install_isr_service(0);
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+        LOG_E(TAG, "Failed to reinstall ISR service: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    
+    int configured_count = 0;
+    
+    for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
+        relay_config_t *relay = &ctx->relays[i];
+        
+        if (!GPIO_IS_VALID_GPIO(relay->gpio_pin)) {
+            continue;
+        }
+        
+        if (relay->is_active) {
+            ret = gpio_set_intr_type(relay->gpio_pin, GPIO_INTR_ANYEDGE);
+            if (ret != ESP_OK) {
+                LOG_W(TAG, "Failed to set interrupt type for GPIO %d", relay->gpio_pin);
+                continue;
+            }
+            
+            ret = gpio_isr_handler_add(relay->gpio_pin, gpio_isr_handler, (void*)(uintptr_t)relay->gpio_pin);
+            if (ret != ESP_OK) {
+                LOG_W(TAG, "Failed to add ISR handler for GPIO %d", relay->gpio_pin);
+                continue;
+            }
+            
+            ret = gpio_intr_enable(relay->gpio_pin);
+            if (ret != ESP_OK) {
+                LOG_W(TAG, "Failed to enable interrupt for GPIO %d", relay->gpio_pin);
+                gpio_isr_handler_remove(relay->gpio_pin);
+                continue;
+            }
+            
+            configured_count++;
+            LOG_I(TAG, "Reconfigured interrupt for active relay %s (GPIO %d)", relay->relay_id, relay->gpio_pin);
+        } else {
+            ret = gpio_set_intr_type(relay->gpio_pin, GPIO_INTR_DISABLE);
+            if (ret == ESP_OK) {
+                LOG_D(TAG, "Disabled interrupt for inactive relay %s (GPIO %d)", relay->relay_id, relay->gpio_pin);
+            }
+        }
+        
+        if (i < RELAY_MANAGER_MAX_RELAYS - 1) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+    }
+    
+    LOG_I(TAG, "Reinitialized %d GPIO interrupts for active relays", configured_count);
+    debug_relay_states("AFTER_REPAIR");
+    
+    if (configured_count > 0) {
+        return ESP_OK;
+    } else {
+        LOG_W(TAG, "No active relays found for interrupt configuration");
+        return ESP_FAIL;
+    }
+}
+
+esp_err_t relay_manager_verify_and_repair_interrupts(void) {
+    relay_manager_context_t *ctx = &s_relay_ctx;
+    
+    if (!ctx->initialized || ctx->state != RELAY_MGR_STATE_RUNNING) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    if (s_verification_mutex == NULL) {
+        esp_err_t init_ret = init_interrupt_diagnostics();
+        if (init_ret != ESP_OK) {
+            return init_ret;
+        }
+    }
+    
+    if (xSemaphoreTake(s_verification_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+        LOG_W(TAG, "Verification already in progress, skipping");
+        return ESP_ERR_TIMEOUT;
+    }
+    
+    if (s_verification_in_progress) {
+        xSemaphoreGive(s_verification_mutex);
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    s_verification_in_progress = true;
+    xSemaphoreGive(s_verification_mutex);
+    
+    esp_err_t result = ESP_OK;
+    
+    esp_err_t verify_result = verify_interrupt_system_safe();
+    
+    if (verify_result == ESP_OK && s_interrupt_system_verified) {
+        LOG_D(TAG, "Interrupt system verification passed");
+        result = ESP_OK;
+    } else {
+        LOG_W(TAG, "Interrupt system needs repair");
+        
+        esp_err_t repair_result = reinitialize_gpio_interrupts_safe();
+        
+        if (repair_result == ESP_OK) {
+            LOG_I(TAG, "Interrupt system repaired successfully");
+            s_interrupt_system_verified = true;
+            result = ESP_OK;
+        } else {
+            LOG_E(TAG, "Interrupt system repair failed");
+            result = ESP_FAIL;
+        }
+    }
+    
+    if (xSemaphoreTake(s_verification_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        s_verification_in_progress = false;
+        xSemaphoreGive(s_verification_mutex);
+    }
+    
+    return result;
+}
+
+esp_err_t relay_manager_get_interrupt_stats(uint32_t *total_interrupts, uint32_t *processed_interrupts, int64_t *last_interrupt_time) {
+    if (total_interrupts) {
+        *total_interrupts = s_total_interrupts_received;
+    }
+    
+    if (processed_interrupts) {
+        *processed_interrupts = s_interrupts_processed;
+    }
+    
+    if (last_interrupt_time) {
+        *last_interrupt_time = s_last_interrupt_time;
+    }
+    
+    return ESP_OK;
+}
+
+esp_err_t relay_manager_cleanup_interrupt_diagnostics(void) {
+    cleanup_interrupt_diagnostics();
+    return ESP_OK;
 }
 
 esp_err_t relay_manager_init(void) {
@@ -246,7 +649,7 @@ esp_err_t relay_manager_init(void) {
         ctx->pool_in_use[i] = false;
     }
     
-    ctx->gpio_event_queue = xQueueCreate(100, sizeof(gpio_event_t));
+    ctx->gpio_event_queue = xQueueCreate(50, sizeof(gpio_event_t));
     if (ctx->gpio_event_queue == NULL) {
         xTimerDelete(ctx->config_save_timer, portMAX_DELAY);
         vSemaphoreDelete(ctx->pool_mutex);
@@ -310,7 +713,7 @@ esp_err_t relay_manager_init(void) {
         gpio_pullup_en(relay->gpio_pin);
         gpio_pulldown_dis(relay->gpio_pin);
         
-        vTaskDelay(pdMS_TO_TICKS(150));
+        vTaskDelay(pdMS_TO_TICKS(100));
         
         int stable_reading = relay_manager_read_stable_gpio(relay->gpio_pin);
         if (stable_reading >= 0) {
@@ -349,7 +752,7 @@ esp_err_t relay_manager_init(void) {
     
     LOG_I(TAG, "Relay event task created with 8KB stack");
     
-    vTaskDelay(pdMS_TO_TICKS(500));
+    vTaskDelay(pdMS_TO_TICKS(300));
     
     for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
         relay_config_t *relay = &ctx->relays[i];
@@ -377,9 +780,15 @@ esp_err_t relay_manager_init(void) {
         }
     }
     
-    vTaskDelay(pdMS_TO_TICKS(200));
+    vTaskDelay(pdMS_TO_TICKS(100));
     
     LOG_I(TAG, "Relay Manager initialized successfully");
+    
+    esp_err_t diag_init = init_interrupt_diagnostics();
+    if (diag_init != ESP_OK) {
+        LOG_W(TAG, "Failed to initialize interrupt diagnostics");
+    }
+    
     return ESP_OK;
     
 cleanup:
@@ -424,16 +833,24 @@ cleanup:
 static void IRAM_ATTR gpio_isr_handler(void *arg) {
     gpio_num_t gpio_pin = (gpio_num_t)(uintptr_t)arg;
     
+    s_total_interrupts_received++;
+    s_last_interrupt_time = esp_timer_get_time() / 1000;
+    
     if (!s_relay_ctx.gpio_event_queue) {
         return;
     }
     
-    gpio_event_t event = {
-        .gpio_pin = gpio_pin
-    };
+    gpio_event_t event = { .gpio_pin = gpio_pin };
     
     BaseType_t higher_priority_task_woken = pdFALSE;
-    xQueueSendFromISR(s_relay_ctx.gpio_event_queue, &event, &higher_priority_task_woken);
+    BaseType_t result = xQueueSendFromISR(s_relay_ctx.gpio_event_queue, &event, &higher_priority_task_woken);
+    
+    if (result != pdTRUE) {
+        gpio_event_t dummy;
+        if (xQueueReceiveFromISR(s_relay_ctx.gpio_event_queue, &dummy, &higher_priority_task_woken) == pdTRUE) {
+            xQueueSendFromISR(s_relay_ctx.gpio_event_queue, &event, &higher_priority_task_woken);
+        }
+    }
     
     if (higher_priority_task_woken == pdTRUE) {
         portYIELD_FROM_ISR();
@@ -491,6 +908,8 @@ esp_err_t relay_manager_report_initial_states(void) {
                 
                 ctx->state_callback(&event, ctx->state_callback_user_data);
             }
+            
+            vTaskDelay(pdMS_TO_TICKS(50));
         }
     }
     
@@ -503,10 +922,11 @@ static void relay_event_task(void *pvParameters) {
     gpio_event_t gpio_event;
     uint32_t idle_cycles = 0;
     int64_t last_auto_check = 0;
+    int64_t last_interrupt_check = 0;
     
     LOG_I(TAG, "Relay event task started");
     
-    vTaskDelay(pdMS_TO_TICKS(300));
+    vTaskDelay(pdMS_TO_TICKS(200));
     
     while (1) {
         if (ctx->state != RELAY_MGR_STATE_RUNNING) {
@@ -515,6 +935,27 @@ static void relay_event_task(void *pvParameters) {
         }
         
         int64_t current_time = esp_timer_get_time();
+        
+        if ((current_time - last_interrupt_check) > 60000000) {
+            last_interrupt_check = current_time;
+            
+            uint32_t total_interrupts = 0;
+            int64_t last_interrupt_time = 0;
+            relay_manager_get_interrupt_stats(&total_interrupts, NULL, &last_interrupt_time);
+            
+            int64_t time_since_last_interrupt = (current_time / 1000) - last_interrupt_time;
+            if (last_interrupt_time > 0 && time_since_last_interrupt > 120000) {
+                LOG_W(TAG, "No interrupts in %lld ms - performing FORCE reconfiguration", time_since_last_interrupt);
+                
+                esp_err_t force_result = relay_manager_force_reconfigure_interrupts();
+                if (force_result == ESP_OK) {
+                    LOG_I(TAG, "Force reconfiguration successful");
+                } else {
+                    LOG_E(TAG, "Force reconfiguration failed");
+                }
+            }
+        }
+        
         if ((current_time - last_auto_check) > (RELAY_MANAGER_AUTO_CHECK_INTERVAL_MS * 1000)) {
             last_auto_check = current_time;
             
@@ -570,9 +1011,10 @@ static void relay_event_task(void *pvParameters) {
             }
         }
         
-        if (xQueueReceive(ctx->gpio_event_queue, &gpio_event, pdMS_TO_TICKS(100)) == pdTRUE) {
+        if (xQueueReceive(ctx->gpio_event_queue, &gpio_event, pdMS_TO_TICKS(200)) == pdTRUE) {
             idle_cycles = 0;
             ctx->total_events_processed++;
+            s_interrupts_processed++;
             
             if (ctx->state != RELAY_MGR_STATE_RUNNING || !ctx->initialized) {
                 continue;
@@ -596,7 +1038,7 @@ static void relay_event_task(void *pvParameters) {
                 continue;
             }
             
-            vTaskDelay(pdMS_TO_TICKS(5));
+            vTaskDelay(pdMS_TO_TICKS(3));
             int quick_reading = gpio_get_level(gpio_event.gpio_pin);
             relay_state_t quick_state = gpio_to_logical_state(quick_reading, relay->contact_type);
             
@@ -611,7 +1053,7 @@ static void relay_event_task(void *pvParameters) {
                 gpio_intr_disable(gpio_event.gpio_pin);
                 gpio_isr_handler_remove(gpio_event.gpio_pin);
                 gpio_reset_pin(gpio_event.gpio_pin);
-                vTaskDelay(pdMS_TO_TICKS(100));
+                vTaskDelay(pdMS_TO_TICKS(50));
                 
                 gpio_config_t io_conf = {
                     .pin_bit_mask = (1ULL << gpio_event.gpio_pin),
@@ -678,6 +1120,8 @@ static void relay_event_task(void *pvParameters) {
                 event.name[sizeof(event.name) - 1] = '\0';
                 
                 ctx->state_callback(&event, ctx->state_callback_user_data);
+                
+                save_relay_states_to_nvs();
             }
         } else {
             idle_cycles++;
@@ -717,11 +1161,16 @@ esp_err_t relay_manager_set_active(const char *relay_id, bool active) {
         
         relay->is_active = active;
         
+        LOG_I(TAG, "Setting relay %s active=%s, scheduling config save", 
+              relay_id, active ? "true" : "false");
+        
+        schedule_config_save();
+        
         if (active && GPIO_IS_VALID_GPIO(relay->gpio_pin)) {
             LOG_I(TAG, "Re-reading state for newly activated relay %s", relay_id);
             
             gpio_intr_disable(relay->gpio_pin);
-            vTaskDelay(pdMS_TO_TICKS(50));
+            vTaskDelay(pdMS_TO_TICKS(100));
             
             int stable_reading = relay_manager_read_stable_gpio(relay->gpio_pin);
             if (stable_reading >= 0) {
@@ -741,15 +1190,27 @@ esp_err_t relay_manager_set_active(const char *relay_id, bool active) {
                 LOG_I(TAG, "Relay %s activation read: GPIO=%d, State=%s", 
                         relay_id, stable_reading, relay_state_to_string(relay->current_state));
                 
-                gpio_intr_enable(relay->gpio_pin);
+                gpio_isr_handler_remove(relay->gpio_pin);
+                esp_err_t isr_ret = gpio_isr_handler_add(relay->gpio_pin, gpio_isr_handler, 
+                                                         (void*)(uintptr_t)relay->gpio_pin);
+                if (isr_ret != ESP_OK) {
+                    LOG_E(TAG, "Failed to reinstall ISR for %s: %s", relay_id, esp_err_to_name(isr_ret));
+                } else {
+                    gpio_intr_enable(relay->gpio_pin);
+                }
+                
                 vTaskDelay(pdMS_TO_TICKS(100));
             }
         }
         
-        schedule_config_save();
         xSemaphoreGive(ctx->config_mutex);
         
         LOG_I(TAG, "Relay %s %s", relay_id, active ? "ACTIVATED" : "DEACTIVATED");
+        
+        if (active) {
+            debug_relay_states("AFTER_ACTIVATION");
+        }
+        
         return ESP_OK;
     }
     
@@ -779,7 +1240,7 @@ esp_err_t relay_manager_set_contact_type(const char *relay_id, relay_contact_typ
         if (GPIO_IS_VALID_GPIO(relay->gpio_pin)) {
             if (relay->is_active) {
                 gpio_intr_disable(relay->gpio_pin);
-                vTaskDelay(pdMS_TO_TICKS(30));
+                vTaskDelay(pdMS_TO_TICKS(20));
             }
             
             int stable_reading = relay_manager_read_stable_gpio(relay->gpio_pin);
@@ -798,8 +1259,16 @@ esp_err_t relay_manager_set_contact_type(const char *relay_id, relay_contact_typ
                     relay->last_change_time = real_timestamp_ms;
                     relay->last_report_time = real_timestamp_ms;
                     
-                    gpio_intr_enable(relay->gpio_pin);
-                    vTaskDelay(pdMS_TO_TICKS(50));
+                    gpio_isr_handler_remove(relay->gpio_pin);
+                    esp_err_t isr_ret = gpio_isr_handler_add(relay->gpio_pin, gpio_isr_handler, 
+                                                             (void*)(uintptr_t)relay->gpio_pin);
+                    if (isr_ret != ESP_OK) {
+                        LOG_E(TAG, "Failed to reinstall ISR for %s: %s", relay_id, esp_err_to_name(isr_ret));
+                    } else {
+                        gpio_intr_enable(relay->gpio_pin);
+                    }
+                    
+                    vTaskDelay(pdMS_TO_TICKS(30));
                     
                     if (new_state != old_state && ctx->state_callback) {
                         relay_event_t event = {
@@ -832,9 +1301,138 @@ esp_err_t relay_manager_set_contact_type(const char *relay_id, relay_contact_typ
     return ESP_FAIL;
 }
 
+esp_err_t relay_manager_verify_interrupts_after_config(void) {
+    relay_manager_context_t *ctx = &s_relay_ctx;
+    
+    if (!ctx->initialized || ctx->state != RELAY_MGR_STATE_RUNNING) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    LOG_I(TAG, "Verifying GPIO interrupts after configuration");
+    
+    int active_relays = 0;
+    int interrupts_ok = 0;
+    
+    for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
+        relay_config_t *relay = &ctx->relays[i];
+        
+        if (!relay->is_active || !GPIO_IS_VALID_GPIO(relay->gpio_pin)) {
+            continue;
+        }
+        
+        active_relays++;
+        
+        esp_err_t ret = gpio_isr_handler_add(relay->gpio_pin, gpio_isr_handler, (void*)(uintptr_t)relay->gpio_pin);
+        if (ret == ESP_OK) {
+            interrupts_ok++;
+            gpio_intr_enable(relay->gpio_pin);
+            LOG_D(TAG, "Interrupt verified for relay %s (GPIO %d)", relay->relay_id, relay->gpio_pin);
+        } else if (ret == ESP_ERR_INVALID_STATE) {
+            interrupts_ok++;
+            LOG_D(TAG, "Interrupt already configured for relay %s (GPIO %d)", relay->relay_id, relay->gpio_pin);
+        } else {
+            LOG_W(TAG, "Failed to verify interrupt for relay %s (GPIO %d): %s", 
+                  relay->relay_id, relay->gpio_pin, esp_err_to_name(ret));
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+    
+    LOG_I(TAG, "Interrupt verification: %d/%d active relays have working interrupts", interrupts_ok, active_relays);
+    
+    if (interrupts_ok == active_relays && active_relays > 0) {
+        return ESP_OK;
+    } else if (active_relays == 0) {
+        LOG_W(TAG, "No active relays found");
+        return ESP_FAIL;
+    } else {
+        LOG_W(TAG, "Some interrupts could not be verified");
+        return ESP_FAIL;
+    }
+}
+
+esp_err_t relay_manager_verify_all_states(void) {
+    relay_manager_context_t *ctx = &s_relay_ctx;
+    
+    if (!ctx->initialized || ctx->state != RELAY_MGR_STATE_RUNNING) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    LOG_I(TAG, "Verifying all relay states for consistency");
+    
+    int corrections_made = 0;
+    
+    for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
+        relay_config_t *relay = &ctx->relays[i];
+        
+        if (!relay->is_active || !GPIO_IS_VALID_GPIO(relay->gpio_pin)) {
+            continue;
+        }
+        
+        int stable_reading = relay_manager_read_stable_gpio(relay->gpio_pin);
+        if (stable_reading < 0) {
+            LOG_W(TAG, "Cannot read GPIO %d during verification", relay->gpio_pin);
+            continue;
+        }
+        
+        relay_state_t expected_state = gpio_to_logical_state(stable_reading, relay->contact_type);
+        
+        if (expected_state != relay->current_state) {
+            LOG_W(TAG, "State inconsistency detected for %s: expected %s, actual %s (GPIO=%d)", 
+                    relay->relay_id, 
+                    relay_state_to_string(expected_state),
+                    relay_state_to_string(relay->current_state),
+                    stable_reading);
+            
+            relay_state_t old_state = relay->current_state;
+            relay->current_state = expected_state;
+            
+            int64_t real_timestamp_ms;
+            if (time_manager_is_synchronized()) {
+                real_timestamp_ms = (int64_t)time_manager_get_time() * 1000;
+            } else {
+                real_timestamp_ms = esp_timer_get_time() / 1000;
+            }
+            
+            relay->last_change_time = real_timestamp_ms;
+            relay->last_report_time = real_timestamp_ms;
+            
+            if (ctx->state_callback) {
+                relay_event_t event = {
+                    .gpio_pin = relay->gpio_pin,
+                    .old_state = old_state,
+                    .new_state = expected_state,
+                    .timestamp = real_timestamp_ms,
+                    .contact_type = relay->contact_type
+                };
+                
+                strncpy(event.relay_id, relay->relay_id, sizeof(event.relay_id) - 1);
+                event.relay_id[sizeof(event.relay_id) - 1] = '\0';
+                
+                strncpy(event.name, relay->name, sizeof(event.name) - 1);
+                event.name[sizeof(event.name) - 1] = '\0';
+                
+                ctx->state_callback(&event, ctx->state_callback_user_data);
+            }
+            
+            corrections_made++;
+        }
+    }
+    
+    if (corrections_made > 0) {
+        LOG_I(TAG, "Made %d state corrections", corrections_made);
+    } else {
+        LOG_I(TAG, "All relay states are consistent");
+    }
+    
+    return ESP_OK;
+}
+
 static esp_err_t load_relay_config(void) {
     relay_manager_context_t *ctx = &s_relay_ctx;
     esp_err_t ret;
+    
+    LOG_I(TAG, "=== LOADING RELAY CONFIG FROM NVS ===");
     
     size_t active_size = sizeof(bool) * RELAY_MANAGER_MAX_RELAYS;
     bool active_states[RELAY_MANAGER_MAX_RELAYS];
@@ -842,10 +1440,19 @@ static esp_err_t load_relay_config(void) {
     
     ret = config_manager_get_blob("relay_active", active_states, &actual_size);
     if (ret == ESP_OK && actual_size == active_size) {
+        int active_count = 0;
         for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
             ctx->relays[i].is_active = active_states[i];
+            if (active_states[i]) {
+                active_count++;
+                LOG_I(TAG, "Loaded: Relay %s = ACTIVE", ctx->relays[i].relay_id);
+            }
         }
-        LOG_I(TAG, "Loaded active states from NVS");
+        LOG_I(TAG, "Loaded %d active relays from NVS", active_count);
+    } else {
+        LOG_W(TAG, "Failed to load active states from NVS: %s (size: %zu/%zu)", 
+              esp_err_to_name(ret), actual_size, active_size);
+        LOG_W(TAG, "All relays will remain INACTIVE (default state)");
     }
     
     char names_key[32];
@@ -870,14 +1477,31 @@ static esp_err_t load_relay_config(void) {
             ctx->relays[i].contact_type = contact_types[i];
         }
         LOG_I(TAG, "Loaded contact types from NVS");
+    } else {
+        LOG_W(TAG, "Failed to load contact types from NVS: %s", esp_err_to_name(ret));
     }
     
+    LOG_I(TAG, "=== RELAY CONFIG LOAD COMPLETED ===");
     return ESP_OK;
 }
 
 static esp_err_t save_relay_config_immediate(void) {
     relay_manager_context_t *ctx = &s_relay_ctx;
     esp_err_t ret;
+    
+    LOG_I(TAG, "Saving relay config to NVS...");
+    
+    bool any_active = false;
+    for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
+        if (ctx->relays[i].is_active) {
+            LOG_I(TAG, "Saving: Relay %s = ACTIVE", ctx->relays[i].relay_id);
+            any_active = true;
+        }
+    }
+    
+    if (!any_active) {
+        LOG_W(TAG, "Warning: No active relays to save!");
+    }
     
     bool active_states[RELAY_MANAGER_MAX_RELAYS];
     for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
@@ -910,6 +1534,7 @@ static esp_err_t save_relay_config_immediate(void) {
         return ret;
     }
     
+    LOG_I(TAG, "Relay configuration saved successfully");
     return ESP_OK;
 }
 
@@ -1323,6 +1948,74 @@ esp_err_t relay_manager_get_diagnostics_json(char *json_buffer, size_t buffer_si
     return ESP_OK;
 }
 
+esp_err_t relay_manager_force_reconfigure_interrupts(void) {
+    relay_manager_context_t *ctx = &s_relay_ctx;
+    
+    if (!ctx->initialized || ctx->state != RELAY_MGR_STATE_RUNNING) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    LOG_I(TAG, "FORCE reconfiguring ALL GPIO interrupts");
+    debug_relay_states("FORCE_RECONFIG_START");
+    
+    int active_count = 0;
+    int success_count = 0;
+    
+    for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
+        relay_config_t *relay = &ctx->relays[i];
+        
+        if (!relay->is_active || !GPIO_IS_VALID_GPIO(relay->gpio_pin)) {
+            continue;
+        }
+        
+        active_count++;
+        
+        LOG_I(TAG, "Force reconfiguring relay %s (GPIO %d)", relay->relay_id, relay->gpio_pin);
+        
+        gpio_intr_disable(relay->gpio_pin);
+        gpio_isr_handler_remove(relay->gpio_pin);
+        
+        vTaskDelay(pdMS_TO_TICKS(20));
+        
+        gpio_config_t io_conf = {
+            .pin_bit_mask = (1ULL << relay->gpio_pin),
+            .mode = GPIO_MODE_INPUT,
+            .pull_up_en = GPIO_PULLUP_ENABLE,
+            .pull_down_en = GPIO_PULLDOWN_DISABLE,
+            .intr_type = GPIO_INTR_ANYEDGE
+        };
+        
+        esp_err_t ret = gpio_config(&io_conf);
+        if (ret != ESP_OK) {
+            LOG_E(TAG, "Failed to reconfigure GPIO %d: %s", relay->gpio_pin, esp_err_to_name(ret));
+            continue;
+        }
+        
+        ret = gpio_isr_handler_add(relay->gpio_pin, gpio_isr_handler, (void*)(uintptr_t)relay->gpio_pin);
+        if (ret != ESP_OK) {
+            LOG_E(TAG, "Failed to add ISR for GPIO %d: %s", relay->gpio_pin, esp_err_to_name(ret));
+            continue;
+        }
+        
+        ret = gpio_intr_enable(relay->gpio_pin);
+        if (ret != ESP_OK) {
+            LOG_E(TAG, "Failed to enable interrupt for GPIO %d: %s", relay->gpio_pin, esp_err_to_name(ret));
+            gpio_isr_handler_remove(relay->gpio_pin);
+            continue;
+        }
+        
+        success_count++;
+        LOG_I(TAG, "Successfully reconfigured interrupt for relay %s", relay->relay_id);
+        
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+    
+    LOG_I(TAG, "Force reconfiguration completed: %d/%d active relays configured", success_count, active_count);
+    debug_relay_states("FORCE_RECONFIG_END");
+    
+    return (success_count == active_count && active_count > 0) ? ESP_OK : ESP_FAIL;
+}
+
 esp_err_t relay_manager_deinit(void) {
     relay_manager_context_t *ctx = &s_relay_ctx;
     
@@ -1334,6 +2027,8 @@ esp_err_t relay_manager_deinit(void) {
     LOG_I(TAG, "Deinitializing Relay Manager");
     ctx->state = RELAY_MGR_STATE_DEINITIALIZING;
     ctx->initialized = false;
+    
+    relay_manager_cleanup_interrupt_diagnostics();
     
     if (ctx->config_save_pending && ctx->config_save_timer) {
         xTimerStop(ctx->config_save_timer, portMAX_DELAY);
@@ -1359,7 +2054,7 @@ esp_err_t relay_manager_deinit(void) {
         TaskHandle_t temp_handle = ctx->event_task_handle;
         ctx->event_task_handle = NULL;
         vTaskDelete(temp_handle);
-        vTaskDelay(pdMS_TO_TICKS(300));
+        vTaskDelay(pdMS_TO_TICKS(200));
     }
     
     ctx->state_callback = NULL;
@@ -1375,6 +2070,10 @@ esp_err_t relay_manager_deinit(void) {
     if (ctx->config_save_timer) {
         xTimerDelete(ctx->config_save_timer, portMAX_DELAY);
         ctx->config_save_timer = NULL;
+    }
+    
+    for (int i = 0; i < 3; i++) {
+        ctx->pool_in_use[i] = false;
     }
     
     if (ctx->pool_mutex) {

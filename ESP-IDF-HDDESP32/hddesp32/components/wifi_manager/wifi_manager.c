@@ -24,8 +24,8 @@
 #define WIFI_CONNECT_FAIL_BIT BIT4
 
 #define MAX_RECONNECT_ATTEMPTS 5
-#define WIFI_CONNECT_TIMEOUT_MS 45000
-#define RECONNECT_DELAY_MS 5000
+#define WIFI_CONNECT_TIMEOUT_MS 30000
+#define RECONNECT_DELAY_MS 3000
 #define DEFAULT_AP_IP "192.168.4.1"
 
 typedef struct {
@@ -56,9 +56,13 @@ typedef struct {
 static wifi_manager_context_t s_wifi_manager_ctx = {0};
 
 static esp_err_t recreate_wifi_event_group(wifi_manager_context_t *ctx) {
-    EventBits_t current_bits = xEventGroupGetBits(ctx->event_group);
+    EventBits_t current_bits = 0;
     
-    vEventGroupDelete(ctx->event_group);
+    if (ctx->event_group) {
+        current_bits = xEventGroupGetBits(ctx->event_group);
+        vEventGroupDelete(ctx->event_group);
+    }
+    
     ctx->event_group = xEventGroupCreate();
     
     if (ctx->event_group == NULL) {
@@ -78,25 +82,32 @@ static esp_err_t recreate_wifi_event_group(wifi_manager_context_t *ctx) {
 static void safe_wifi_set_bits(wifi_manager_context_t *ctx, EventBits_t bits) {
     ctx->event_group_operations++;
     
-    if (ctx->event_group_operations >= 1000000) {
+    if (ctx->event_group_operations >= 500000) {
         recreate_wifi_event_group(ctx);
     }
     
-    xEventGroupSetBits(ctx->event_group, bits);
+    if (ctx->event_group) {
+        xEventGroupSetBits(ctx->event_group, bits);
+    }
 }
 
 static void safe_wifi_clear_bits(wifi_manager_context_t *ctx, EventBits_t bits) {
     ctx->event_group_operations++;
     
-    if (ctx->event_group_operations >= 1000000) {
+    if (ctx->event_group_operations >= 500000) {
         recreate_wifi_event_group(ctx);
     }
     
-    xEventGroupClearBits(ctx->event_group, bits);
+    if (ctx->event_group) {
+        xEventGroupClearBits(ctx->event_group, bits);
+    }
 }
 
 static esp_err_t cleanup_and_recreate_netifs(wifi_manager_context_t *ctx) {
     esp_err_t ret = ESP_OK;
+    
+    ctx->netif_recreation_count++;
+    LOG_I(TAG, "Recreating network interfaces (count: %lu)", ctx->netif_recreation_count);
     
     if (ctx->sta_netif) {
         esp_netif_destroy(ctx->sta_netif);
@@ -108,7 +119,7 @@ static esp_err_t cleanup_and_recreate_netifs(wifi_manager_context_t *ctx) {
         ctx->ap_netif = NULL;
     }
     
-    vTaskDelay(pdMS_TO_TICKS(100));
+    vTaskDelay(pdMS_TO_TICKS(200));
     
     ctx->sta_netif = esp_netif_create_default_wifi_sta();
     if (ctx->sta_netif == NULL) {
@@ -124,6 +135,7 @@ static esp_err_t cleanup_and_recreate_netifs(wifi_manager_context_t *ctx) {
         return ESP_FAIL;
     }
     
+    LOG_I(TAG, "Network interfaces recreated successfully");
     return ret;
 }
 
@@ -182,16 +194,16 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                     }
                     
                     ctx->scan_ap_count = scan_done->number;
-                    if (ctx->scan_ap_count > 20) {
-                        ctx->scan_ap_count = 20;
-                        LOG_W(TAG, "Limiting scan results to 20 APs to preserve memory");
+                    if (ctx->scan_ap_count > 15) {
+                        ctx->scan_ap_count = 15;
+                        LOG_W(TAG, "Limiting scan results to 15 APs to preserve memory");
                     }
                     
                     if (ctx->scan_ap_count > 0) {
                         size_t free_heap = esp_get_free_heap_size();
                         
-                        if (free_heap > 50000) {
-                            static wifi_ap_record_t static_scan_results[20];
+                        if (free_heap > 40000) {
+                            static wifi_ap_record_t static_scan_results[15];
                             ctx->scan_ap_list = static_scan_results;
                             
                             esp_err_t get_ret = esp_wifi_scan_get_ap_records(&ctx->scan_ap_count, ctx->scan_ap_list);
@@ -395,7 +407,7 @@ esp_err_t wifi_manager_init(void)
     ctx->scan_config.show_hidden = true;
     ctx->scan_config.scan_type = WIFI_SCAN_TYPE_ACTIVE;
     ctx->scan_config.scan_time.active.min = 100;
-    ctx->scan_config.scan_time.active.max = 300;
+    ctx->scan_config.scan_time.active.max = 200;
     
     ctx->state = WIFI_MANAGER_STATE_DISCONNECTED;
     safe_wifi_set_bits(ctx, WIFI_DISCONNECTED_BIT);
@@ -428,7 +440,7 @@ esp_err_t wifi_manager_connect(const char *ssid, const char *password, bool save
         return ESP_ERR_INVALID_ARG;
     }
     
-    if (xSemaphoreTake(ctx->connection_mutex, pdMS_TO_TICKS(5000)) != pdTRUE) {
+    if (xSemaphoreTake(ctx->connection_mutex, pdMS_TO_TICKS(3000)) != pdTRUE) {
         LOG_E(TAG, "Could not acquire connection mutex");
         return ESP_ERR_TIMEOUT;
     }
@@ -442,7 +454,7 @@ esp_err_t wifi_manager_connect(const char *ssid, const char *password, bool save
     
     ctx->connection_in_progress = false;
     
-    vTaskDelay(pdMS_TO_TICKS(500));
+    vTaskDelay(pdMS_TO_TICKS(300));
     
     strncpy(ctx->ssid, ssid, sizeof(ctx->ssid) - 1);
     ctx->ssid[sizeof(ctx->ssid) - 1] = '\0';
@@ -579,7 +591,7 @@ esp_err_t wifi_manager_disconnect(void)
     
     EventBits_t bits = xEventGroupWaitBits(ctx->event_group,
                                           WIFI_DISCONNECTED_BIT,
-                                          pdFALSE, pdFALSE, pdMS_TO_TICKS(5000));
+                                          pdFALSE, pdFALSE, pdMS_TO_TICKS(3000));
     
     if (bits & WIFI_DISCONNECTED_BIT) {
         LOG_I(TAG, "Successfully disconnected from WiFi");
@@ -623,7 +635,7 @@ esp_err_t wifi_manager_start_ap_mode(const char *ap_ssid, const char *ap_passwor
         
         EventBits_t bits = xEventGroupWaitBits(ctx->event_group,
                                               WIFI_DISCONNECTED_BIT,
-                                              pdFALSE, pdFALSE, pdMS_TO_TICKS(5000));
+                                              pdFALSE, pdFALSE, pdMS_TO_TICKS(3000));
         if ((bits & WIFI_DISCONNECTED_BIT) == 0) {
             LOG_W(TAG, "Timeout waiting for disconnection");
         }
@@ -658,7 +670,7 @@ esp_err_t wifi_manager_start_ap_mode(const char *ap_ssid, const char *ap_passwor
     
     EventBits_t bits = xEventGroupWaitBits(ctx->event_group,
                                           WIFI_AP_STARTED_BIT,
-                                          pdFALSE, pdFALSE, pdMS_TO_TICKS(5000));
+                                          pdFALSE, pdFALSE, pdMS_TO_TICKS(3000));
     
     if (bits & WIFI_AP_STARTED_BIT) {
         LOG_I(TAG, "WiFi Access Point started successfully");
@@ -724,7 +736,7 @@ esp_err_t wifi_manager_start_sta_ap_mode(const char *ap_ssid, const char *ap_pas
     
     EventBits_t bits = xEventGroupWaitBits(ctx->event_group,
                                           WIFI_AP_STARTED_BIT,
-                                          pdFALSE, pdFALSE, pdMS_TO_TICKS(5000));
+                                          pdFALSE, pdFALSE, pdMS_TO_TICKS(3000));
     
     if (bits & WIFI_AP_STARTED_BIT) {
         ctx->state = WIFI_MANAGER_STATE_STA_AP_MODE;
@@ -969,7 +981,7 @@ esp_err_t wifi_manager_forget_network(void)
         
         EventBits_t bits = xEventGroupWaitBits(ctx->event_group,
                                               WIFI_DISCONNECTED_BIT,
-                                              pdFALSE, pdFALSE, pdMS_TO_TICKS(5000));
+                                              pdFALSE, pdFALSE, pdMS_TO_TICKS(3000));
         if ((bits & WIFI_DISCONNECTED_BIT) == 0) {
             LOG_W(TAG, "Timeout waiting for disconnection");
         }
@@ -1028,7 +1040,7 @@ esp_err_t wifi_manager_start_scan(void)
         
         ctx->temporary_apsta_mode = true;
         
-        vTaskDelay(pdMS_TO_TICKS(500));
+        vTaskDelay(pdMS_TO_TICKS(300));
     } else {
         ctx->temporary_apsta_mode = false;
     }
@@ -1077,7 +1089,7 @@ esp_err_t wifi_manager_get_scan_results(wifi_scan_result_t *results, size_t max_
         
         EventBits_t bits = xEventGroupWaitBits(ctx->event_group,
                                               WIFI_SCAN_DONE_BIT,
-                                              pdFALSE, pdFALSE, pdMS_TO_TICKS(10000));
+                                              pdFALSE, pdFALSE, pdMS_TO_TICKS(8000));
         
         if ((bits & WIFI_SCAN_DONE_BIT) == 0) {
             LOG_W(TAG, "Timeout waiting for scan to complete");
@@ -1127,9 +1139,9 @@ esp_err_t wifi_manager_handle_disconnection(const char *ap_ssid_prefix, const ch
     static int netif_cleanup_cycle = 0;
     int64_t current_time = esp_timer_get_time() / 1000;
     
-    const int64_t RECONNECT_INTERVAL_MS = 8000;
-    const int NETIF_CLEANUP_THRESHOLD = 50;
-    const int ATTEMPTS_BEFORE_AP = 5;
+    const int64_t RECONNECT_INTERVAL_MS = 5000;
+    const int NETIF_CLEANUP_THRESHOLD = 30;
+    const int ATTEMPTS_BEFORE_AP = 3;
     
     wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
     
@@ -1172,7 +1184,7 @@ esp_err_t wifi_manager_handle_disconnection(const char *ap_ssid_prefix, const ch
             LOG_I(TAG, "Performing netif cleanup after %d reconnections", netif_cleanup_cycle);
             
             esp_wifi_stop();
-            vTaskDelay(pdMS_TO_TICKS(500));
+            vTaskDelay(pdMS_TO_TICKS(300));
             
             if (cleanup_and_recreate_netifs(ctx) == ESP_OK) {
                 LOG_I(TAG, "Netifs recreated successfully");
@@ -1182,17 +1194,17 @@ esp_err_t wifi_manager_handle_disconnection(const char *ap_ssid_prefix, const ch
             }
             
             esp_wifi_start();
-            vTaskDelay(pdMS_TO_TICKS(1000));
+            vTaskDelay(pdMS_TO_TICKS(500));
         }
         
         LOG_I(TAG, "WiFi recovery cycle %d, reconnection attempt %d (cleanup cycle: %d)", 
                  recovery_cycle + 1, reconnect_attempts, netif_cleanup_cycle);
         
-        if (reconnect_attempts % 5 == 0 && netif_cleanup_cycle < NETIF_CLEANUP_THRESHOLD) {
+        if (reconnect_attempts % 3 == 0 && netif_cleanup_cycle < NETIF_CLEANUP_THRESHOLD) {
             esp_wifi_stop();
-            vTaskDelay(pdMS_TO_TICKS(1000));
+            vTaskDelay(pdMS_TO_TICKS(500));
             esp_wifi_start();
-            vTaskDelay(pdMS_TO_TICKS(2000));
+            vTaskDelay(pdMS_TO_TICKS(1000));
         }
         
         if (!ap_mode_active && reconnect_attempts >= ATTEMPTS_BEFORE_AP) {

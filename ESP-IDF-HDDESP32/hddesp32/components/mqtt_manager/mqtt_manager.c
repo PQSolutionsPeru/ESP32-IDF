@@ -36,7 +36,7 @@
 #define DEFAULT_KEEPALIVE 120
 #define DEFAULT_RECONNECT_TIMEOUT_MS 30000
 #define DEFAULT_BUFFER_SIZE 1024
-#define DEFAULT_MAX_QUEUE_SIZE 20
+#define DEFAULT_MAX_QUEUE_SIZE 12
 #define MAX_TOPIC_LENGTH 128
 #define MAX_MESSAGE_LENGTH 1024
 #define MIN_MESSAGE_INTERVAL_MS 100
@@ -88,17 +88,21 @@ typedef struct {
     
     char config_topic[MQTT_TOPIC_MAX_LENGTH];
     
-    char *buffer_pool[5];
-    bool buffer_in_use[5];
+    char *buffer_pool[3];
+    bool buffer_in_use[3];
     SemaphoreHandle_t pool_mutex;
 } mqtt_manager_context_t;
 
 static mqtt_manager_context_t s_mqtt_manager_ctx = {0};
 
 static esp_err_t recreate_mqtt_event_group(mqtt_manager_context_t *ctx) {
-    EventBits_t current_bits = xEventGroupGetBits(ctx->event_group);
+    EventBits_t current_bits = 0;
     
-    vEventGroupDelete(ctx->event_group);
+    if (ctx->event_group) {
+        current_bits = xEventGroupGetBits(ctx->event_group);
+        vEventGroupDelete(ctx->event_group);
+    }
+    
     ctx->event_group = xEventGroupCreate();
     
     if (ctx->event_group == NULL) {
@@ -118,27 +122,31 @@ static esp_err_t recreate_mqtt_event_group(mqtt_manager_context_t *ctx) {
 static void safe_mqtt_set_bits(mqtt_manager_context_t *ctx, EventBits_t bits) {
     ctx->event_group_operations++;
     
-    if (ctx->event_group_operations >= 50000) {
+    if (ctx->event_group_operations >= 30000) {
         recreate_mqtt_event_group(ctx);
     }
     
-    xEventGroupSetBits(ctx->event_group, bits);
+    if (ctx->event_group) {
+        xEventGroupSetBits(ctx->event_group, bits);
+    }
 }
 
 static void safe_mqtt_clear_bits(mqtt_manager_context_t *ctx, EventBits_t bits) {
     ctx->event_group_operations++;
     
-    if (ctx->event_group_operations >= 50000) {
+    if (ctx->event_group_operations >= 30000) {
         recreate_mqtt_event_group(ctx);
     }
     
-    xEventGroupClearBits(ctx->event_group, bits);
+    if (ctx->event_group) {
+        xEventGroupClearBits(ctx->event_group, bits);
+    }
 }
 
 static char* mqtt_get_buffer(mqtt_manager_context_t *ctx) {
-    if (xSemaphoreTake(ctx->buffer_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        for (int i = 0; i < 5; i++) {
-            if (!ctx->buffer_in_use[i]) {
+    if (xSemaphoreTake(ctx->buffer_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        for (int i = 0; i < 3; i++) {
+            if (!ctx->buffer_in_use[i] && ctx->buffer_pool[i]) {
                 ctx->buffer_in_use[i] = true;
                 memset(ctx->buffer_pool[i], 0, MAX_MESSAGE_LENGTH);
                 xSemaphoreGive(ctx->buffer_mutex);
@@ -148,7 +156,7 @@ static char* mqtt_get_buffer(mqtt_manager_context_t *ctx) {
         xSemaphoreGive(ctx->buffer_mutex);
         
         size_t free_heap = esp_get_free_heap_size();
-        if (free_heap < 50000) {
+        if (free_heap < 40000) {
             LOG_W(TAG, "Low memory during buffer allocation: %zu bytes", free_heap);
             mqtt_manager_emergency_memory_cleanup();
         }
@@ -157,7 +165,9 @@ static char* mqtt_get_buffer(mqtt_manager_context_t *ctx) {
 }
 
 static void mqtt_release_buffer(mqtt_manager_context_t *ctx, char *buffer) {
-    if (xSemaphoreTake(ctx->buffer_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+    if (!buffer) return;
+    
+    if (xSemaphoreTake(ctx->buffer_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         for (int i = 0; i < 3; i++) {
             if (ctx->buffer_pool[i] == buffer) {
                 ctx->buffer_in_use[i] = false;
@@ -202,6 +212,96 @@ static bool should_process_message(int64_t current_time) {
     return true;
 }
 
+esp_err_t mqtt_manager_setup_panel_subscriptions(void) {
+    if (!mqtt_manager_is_connected()) {
+        LOG_W(TAG, "MQTT not connected, cannot setup panel subscriptions");
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    char saved_client_id[32] = {0};
+    char saved_panel_id[32] = {0};
+    
+    if (config_manager_get_str("client_id", saved_client_id, sizeof(saved_client_id)) != ESP_OK ||
+        config_manager_get_str("panel_id", saved_panel_id, sizeof(saved_panel_id)) != ESP_OK ||
+        strlen(saved_client_id) == 0 || strlen(saved_panel_id) == 0) {
+        LOG_I(TAG, "No saved panel config found, skipping panel subscriptions");
+        return ESP_ERR_NOT_FOUND;
+    }
+    
+    mqtt_manager_set_panel_config(saved_client_id, saved_panel_id);
+    
+    char topic[MQTT_TOPIC_MAX_LENGTH];
+    
+    esp_err_t ret = mqtt_manager_get_panel_topic(topic, sizeof(topic), "relay_config");
+    if (ret == ESP_OK) {
+        mqtt_manager_subscribe(topic, 2);
+        LOG_I(TAG, "Subscribed to panel relay_config: %s", topic);
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    
+    ret = mqtt_manager_get_panel_topic(topic, sizeof(topic), "relays");
+    if (ret == ESP_OK) {
+        mqtt_manager_subscribe(topic, 2);
+        LOG_I(TAG, "Subscribed to panel relays: %s", topic);
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    
+    ret = mqtt_manager_get_panel_topic(topic, sizeof(topic), "command");
+    if (ret == ESP_OK) {
+        mqtt_manager_subscribe(topic, 1);
+        LOG_I(TAG, "Subscribed to panel command: %s", topic);
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    
+    ret = mqtt_manager_get_panel_topic(topic, sizeof(topic), "status");
+    if (ret == ESP_OK) {
+        mqtt_manager_subscribe(topic, 1);
+        LOG_I(TAG, "Subscribed to panel status: %s", topic);
+    }
+    
+    return ESP_OK;
+}
+
+esp_err_t mqtt_manager_cleanup_panel_subscriptions(void) {
+    mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
+    
+    if (!mqtt_manager_is_connected()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    if (strlen(ctx->client_panel_id) == 0 || strlen(ctx->panel_id) == 0) {
+        return ESP_OK;
+    }
+    
+    char topic[MQTT_TOPIC_MAX_LENGTH];
+    
+    esp_err_t ret = mqtt_manager_get_panel_topic(topic, sizeof(topic), "relay_config");
+    if (ret == ESP_OK) {
+        mqtt_manager_unsubscribe(topic);
+        LOG_I(TAG, "Unsubscribed from panel relay_config: %s", topic);
+    }
+    
+    ret = mqtt_manager_get_panel_topic(topic, sizeof(topic), "relays");
+    if (ret == ESP_OK) {
+        mqtt_manager_unsubscribe(topic);
+        LOG_I(TAG, "Unsubscribed from panel relays: %s", topic);
+    }
+    
+    ret = mqtt_manager_get_panel_topic(topic, sizeof(topic), "command");
+    if (ret == ESP_OK) {
+        mqtt_manager_unsubscribe(topic);
+        LOG_I(TAG, "Unsubscribed from panel command: %s", topic);
+    }
+    
+    ret = mqtt_manager_get_panel_topic(topic, sizeof(topic), "status");
+    if (ret == ESP_OK) {
+        mqtt_manager_unsubscribe(topic);
+        LOG_I(TAG, "Unsubscribed from panel status: %s", topic);
+    }
+    
+    return ESP_OK;
+}
+
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data) {
     esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
     mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
@@ -235,13 +335,12 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 snprintf(notify_topic, sizeof(notify_topic), "esp32/notify/%s/deleted", ctx->esp32_id);
                 mqtt_manager_subscribe(notify_topic, 2);
                 
-                mqtt_manager_subscribe("clients/+/panels/+/relay_config", 2);
-                mqtt_manager_subscribe("clients/+/panels/+/relays", 2);
+                mqtt_manager_setup_panel_subscriptions();
             }
             
             mqtt_pending_message_t pending_msg;
             int pending_count = 0;
-            while (xQueueReceive(ctx->pending_messages, &pending_msg, 0) == pdTRUE && pending_count < 20) {
+            while (xQueueReceive(ctx->pending_messages, &pending_msg, 0) == pdTRUE && pending_count < 10) {
                 esp_mqtt_client_publish(event->client, pending_msg.topic, pending_msg.data, 
                                         pending_msg.data_len, pending_msg.qos, pending_msg.retain);
                 pending_count++;
@@ -297,6 +396,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     
                     mqtt_release_buffer(ctx, topic_buffer);
                     mqtt_release_buffer(ctx, message_buffer);
+                } else {
+                    if (topic_buffer) mqtt_release_buffer(ctx, topic_buffer);
+                    if (message_buffer) mqtt_release_buffer(ctx, message_buffer);
                 }
             }
             break;
@@ -361,11 +463,12 @@ esp_err_t mqtt_manager_init(void) {
         return ESP_ERR_NO_MEM;
     }
     
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 3; i++) {
         ctx->buffer_pool[i] = heap_caps_malloc(MAX_MESSAGE_LENGTH, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
         if (ctx->buffer_pool[i] == NULL) {
             for (int j = 0; j < i; j++) {
                 free(ctx->buffer_pool[j]);
+                ctx->buffer_pool[j] = NULL;
             }
             vSemaphoreDelete(ctx->buffer_mutex);
             vSemaphoreDelete(ctx->mutex);
@@ -377,8 +480,9 @@ esp_err_t mqtt_manager_init(void) {
     
     ctx->pending_messages = xQueueCreate(DEFAULT_MAX_QUEUE_SIZE, sizeof(mqtt_pending_message_t));
     if (ctx->pending_messages == NULL) {
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 3; i++) {
             free(ctx->buffer_pool[i]);
+            ctx->buffer_pool[i] = NULL;
         }
         vSemaphoreDelete(ctx->buffer_mutex);
         vSemaphoreDelete(ctx->mutex);
@@ -541,12 +645,12 @@ esp_err_t mqtt_manager_connect(void) {
         mqtt_cfg.credentials.authentication.password = ctx->password;
         mqtt_cfg.session.keepalive = 60;
         mqtt_cfg.session.disable_clean_session = false;
-        mqtt_cfg.buffer.size = 2048;
-        mqtt_cfg.buffer.out_size = 2048;
-        
+        mqtt_cfg.buffer.size = 1536;
+        mqtt_cfg.buffer.out_size = 1536;
+
         mqtt_cfg.network.timeout_ms = 15000;
         mqtt_cfg.network.reconnect_timeout_ms = 10000;
-        mqtt_cfg.task.stack_size = 10240;
+        mqtt_cfg.task.stack_size = 16384;
         
         if (time_manager_is_synchronized()) {
             char timestamp_str[20];
@@ -733,10 +837,11 @@ esp_err_t mqtt_manager_publish(const char *topic, const char *data, int data_len
         
         if (xQueueSend(ctx->pending_messages, &pending_msg, 0) != pdTRUE) {
             mqtt_pending_message_t dummy;
-            xQueueReceive(ctx->pending_messages, &dummy, 0);
-            if (xQueueSend(ctx->pending_messages, &pending_msg, 0) != pdTRUE) {
-                LOG_E(TAG, "Message queue full, dropping message");
-                return ESP_ERR_NO_MEM;
+            if (xQueueReceive(ctx->pending_messages, &dummy, 0) == pdTRUE) {
+                if (xQueueSend(ctx->pending_messages, &pending_msg, 0) != pdTRUE) {
+                    LOG_E(TAG, "Message queue full, dropping message");
+                    return ESP_ERR_NO_MEM;
+                }
             }
         }
         return ESP_OK;
@@ -1025,7 +1130,7 @@ esp_err_t mqtt_manager_emergency_memory_cleanup(void) {
     if (ctx->pending_messages) {
         mqtt_pending_message_t dummy_msg;
         int cleared = 0;
-        while (xQueueReceive(ctx->pending_messages, &dummy_msg, 0) == pdTRUE && cleared < 5) {
+        while (xQueueReceive(ctx->pending_messages, &dummy_msg, 0) == pdTRUE && cleared < 8) {
             cleared++;
         }
         if (cleared > 0) {
@@ -1033,11 +1138,18 @@ esp_err_t mqtt_manager_emergency_memory_cleanup(void) {
         }
     }
     
-    for (int i = 0; i < 3; i++) {
-        if (ctx->buffer_in_use[i]) {
-            LOG_W(TAG, "Force releasing buffer %d", i);
-            ctx->buffer_in_use[i] = false;
+    if (xSemaphoreTake(ctx->buffer_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        for (int i = 0; i < 3; i++) {
+            if (ctx->buffer_in_use[i]) {
+                LOG_W(TAG, "Force releasing buffer %d", i);
+                ctx->buffer_in_use[i] = false;
+            }
         }
+        xSemaphoreGive(ctx->buffer_mutex);
+    }
+    
+    if (ctx->event_group_operations > 20000) {
+        recreate_mqtt_event_group(ctx);
     }
     
     size_t free_after = esp_get_free_heap_size();
