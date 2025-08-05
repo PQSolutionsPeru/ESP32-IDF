@@ -22,6 +22,10 @@ extern "C" {
 #define RELAY_MANAGER_FAST_READINGS 3
 #define RELAY_MANAGER_AUTO_CHECK_INTERVAL_MS 5000
 
+// NUEVO: Threshold para paneles contra incendios (24 horas)
+#define RELAY_MANAGER_INTERRUPT_SILENCE_THRESHOLD_MS (24 * 60 * 60 * 1000)  // 24 horas
+#define RELAY_MANAGER_INTERRUPT_CHECK_INTERVAL_MS (60 * 1000 * 1000)        // 60 segundos
+
 typedef enum {
     RELAY_STATE_OK = 0,
     RELAY_STATE_DISC,
