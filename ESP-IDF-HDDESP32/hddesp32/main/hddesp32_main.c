@@ -730,6 +730,8 @@ static void system_monitor_task(void *pvParameters) {
     bool portal_config_verified = false;
     int64_t connection_stable_start = 0;
     const int64_t VERIFICATION_DELAY_MS = 30000;
+    static uint32_t uptime_hours = 0;
+    const uint32_t QUARTERLY_RESTART_HOURS = 2160;
     
     while (1) {
         if (task_registered) {
@@ -786,6 +788,22 @@ static void system_monitor_task(void *pvParameters) {
         
         if (cycle_count % 180 == 0) {
             print_memory_info_simple();
+        }
+        
+        if (cycle_count % 1800 == 0) {
+            uptime_hours++;
+            
+            if (uptime_hours >= QUARTERLY_RESTART_HOURS) {
+                LOG_I(TAG, "QUARTERLY RESTART: System has run %lu hours", uptime_hours);
+                
+                if (get_relay_manager_initialized()) {
+                    relay_manager_save_current_states();
+                    config_manager_force_commit();
+                }
+                
+                vTaskDelay(pdMS_TO_TICKS(3000));
+                esp_restart();
+            }
         }
         
         bool wifi_connected = wifi_manager_is_connected();
