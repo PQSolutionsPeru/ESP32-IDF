@@ -34,6 +34,21 @@ typedef enum {
     MQTT_RESOURCE_EMERGENCY
 } mqtt_resource_status_t;
 
+typedef enum {
+    CONNECTIVITY_MSG_WIFI_LOST,
+    CONNECTIVITY_MSG_WIFI_RECOVERED,
+    CONNECTIVITY_MSG_INTERNET_LOST,
+    CONNECTIVITY_MSG_INTERNET_RECOVERED
+} mqtt_connectivity_message_type_t;
+
+typedef struct {
+    mqtt_connectivity_message_type_t type;
+    int64_t start_time_ms;
+    int64_t end_time_ms;
+    char ssid[33];
+    char panel_name[64];
+} mqtt_connectivity_message_t;
+
 typedef struct {
     uint32_t total_messages_sent;
     uint32_t total_messages_received;
@@ -96,6 +111,8 @@ bool mqtt_manager_is_processing_paused(void);
 esp_err_t mqtt_manager_force_buffer_cleanup(void);
 uint32_t mqtt_manager_get_pending_message_count(void);
 bool mqtt_manager_is_under_memory_pressure(void);
+esp_err_t mqtt_manager_send_connectivity_message(const mqtt_connectivity_message_t *msg);
+esp_err_t mqtt_manager_send_connectivity_status_message(const char *status, const char *details);
 
 #ifdef __cplusplus
 }

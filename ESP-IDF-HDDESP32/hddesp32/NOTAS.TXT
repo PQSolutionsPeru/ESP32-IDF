@@ -1,3 +1,241 @@
+IMPORTANTE, COMPORTAMIENTO DE NOTIFICACIONES DE PERDIDA DE INTERNET DEL ESP32:
+ORIGINAL:
+static void monitor_task(void *pvParameters) {
+    connectivity_monitor_context_t *ctx = &s_conn_ctx;
+    
+    LOG_I(TAG, "Monitor task started, waiting for stabilization period");
+    
+    while (ctx->monitoring_active) {
+        int64_t current_time = esp_timer_get_time() / 1000;
+        
+        if (!ctx->stabilization_complete) {
+            int64_t time_elapsed = current_time - ctx->init_time;
+            int64_t time_remaining = CONNECTIVITY_STABILIZATION_TIME_MS - time_elapsed;
+            
+            if (time_remaining <= 0) {
+                ctx->stabilization_complete = true;
+                ctx->state = CONNECTIVITY_STATE_MONITORING;
+                LOG_I(TAG, "Stabilization period complete, starting connectivity monitoring");
+            } else {
+                vTaskDelay(pdMS_TO_TICKS(1000));
+                continue;
+            }
+        }
+        
+        bool wifi_connected = wifi_manager_is_connected();
+        bool internet_available = false;
+        
+        if (wifi_connected) {
+            char current_ssid[33] = {0};
+            wifi_manager_get_configured_ssid(current_ssid, sizeof(current_ssid));
+            
+            if (xSemaphoreTake(ctx->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                strncpy(ctx->status.current_ssid, current_ssid, sizeof(ctx->status.current_ssid) - 1);
+                ctx->status.current_ssid[sizeof(ctx->status.current_ssid) - 1] = '\0';
+                xSemaphoreGive(ctx->mutex);
+            }
+            
+            esp_err_t ping_ret = ping_host("8.8.8.8", &internet_available);
+            if (ping_ret != ESP_OK) {
+                internet_available = false;
+            }
+        }
+        
+        connectivity_event_type_t event_to_add = -1;
+        char event_ssid[33] = {0};
+        bool add_event_needed = false;
+        
+        if (xSemaphoreTake(ctx->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+            bool wifi_state_changed = (ctx->status.wifi_connected != wifi_connected);
+            bool internet_state_changed = (ctx->status.internet_available != internet_available);
+            
+            if (wifi_state_changed) {
+                if (!wifi_connected && ctx->status.wifi_connected) {
+                    ctx->status.wifi_lost_time = current_time;
+                    event_to_add = CONNECTIVITY_EVENT_WIFI_LOST;
+                    strncpy(event_ssid, ctx->status.current_ssid, sizeof(event_ssid) - 1);
+                    add_event_needed = true;
+                    LOG_W(TAG, "WiFi connection lost to SSID: %s", ctx->status.current_ssid);
+                } else if (wifi_connected && !ctx->status.wifi_connected) {
+                    if (ctx->status.wifi_lost_time > 0) {
+                        event_to_add = CONNECTIVITY_EVENT_WIFI_RECOVERED;
+                        strncpy(event_ssid, ctx->status.current_ssid, sizeof(event_ssid) - 1);
+                        add_event_needed = true;
+                        LOG_I(TAG, "WiFi connection recovered to SSID: %s", ctx->status.current_ssid);
+                        ctx->status.wifi_lost_time = 0;
+                    }
+                }
+                ctx->status.wifi_connected = wifi_connected;
+            }
+            
+            if (wifi_connected && internet_state_changed) {
+                if (!internet_available && ctx->status.internet_available) {
+                    ctx->status.internet_lost_time = current_time;
+                    event_to_add = CONNECTIVITY_EVENT_INTERNET_LOST;
+                    strncpy(event_ssid, ctx->status.current_ssid, sizeof(event_ssid) - 1);
+                    add_event_needed = true;
+                    LOG_W(TAG, "Internet connectivity lost while connected to WiFi: %s", ctx->status.current_ssid);
+                } else if (internet_available && !ctx->status.internet_available) {
+                    if (ctx->status.internet_lost_time > 0) {
+                        event_to_add = CONNECTIVITY_EVENT_INTERNET_RECOVERED;
+                        strncpy(event_ssid, ctx->status.current_ssid, sizeof(event_ssid) - 1);
+                        add_event_needed = true;
+                        LOG_I(TAG, "Internet connectivity recovered on WiFi: %s", ctx->status.current_ssid);
+                        ctx->status.internet_lost_time = 0;
+                    }
+                }
+            }
+            
+            if (!wifi_connected) {
+                internet_available = false;
+            }
+            
+            ctx->status.internet_available = internet_available;
+            ctx->status.last_check_time = current_time;
+            
+            xSemaphoreGive(ctx->mutex);
+        }
+        
+        if (add_event_needed && event_to_add != -1) {
+            add_event(event_to_add, event_ssid, current_time);
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(CONNECTIVITY_CHECK_INTERVAL_MS));
+    }
+    
+    LOG_I(TAG, "Monitor task ending");
+    vTaskDelete(NULL);
+}
+
+
+
+SIMPLIFICADO A UN EVENTO POR ITERACIÓN:
+static void monitor_task(void *pvParameters) {
+    connectivity_monitor_context_t *ctx = &s_conn_ctx;
+    
+    LOG_I(TAG, "Monitor task started, waiting for stabilization period");
+    
+    while (ctx->monitoring_active) {
+        int64_t current_time = esp_timer_get_time() / 1000;
+        
+        if (!ctx->stabilization_complete) {
+            int64_t time_elapsed = current_time - ctx->init_time;
+            int64_t time_remaining = CONNECTIVITY_STABILIZATION_TIME_MS - time_elapsed;
+            
+            if (time_remaining <= 0) {
+                ctx->stabilization_complete = true;
+                ctx->state = CONNECTIVITY_STATE_MONITORING;
+                LOG_I(TAG, "Stabilization period complete, starting connectivity monitoring");
+            } else {
+                vTaskDelay(pdMS_TO_TICKS(1000));
+                continue;
+            }
+        }
+        
+        bool wifi_connected = wifi_manager_is_connected();
+        bool internet_available = false;
+        
+        if (wifi_connected) {
+            char current_ssid[33] = {0};
+            wifi_manager_get_configured_ssid(current_ssid, sizeof(current_ssid));
+            
+            if (xSemaphoreTake(ctx->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                strncpy(ctx->status.current_ssid, current_ssid, sizeof(ctx->status.current_ssid) - 1);
+                ctx->status.current_ssid[sizeof(ctx->status.current_ssid) - 1] = '\0';
+                xSemaphoreGive(ctx->mutex);
+            }
+            
+            esp_err_t ping_ret = ping_host("8.8.8.8", &internet_available);
+            if (ping_ret != ESP_OK) {
+                internet_available = false;
+            }
+        }
+        
+        // Variables para un solo evento
+        connectivity_event_type_t event_to_add = -1;
+        char event_ssid[33] = {0};
+        bool add_event_needed = false;
+        
+        if (xSemaphoreTake(ctx->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+            bool wifi_state_changed = (ctx->status.wifi_connected != wifi_connected);
+            bool internet_state_changed = (ctx->status.internet_available != internet_available);
+            
+            // PRIORIDAD 1: Cambios de WiFi (más críticos)
+            if (wifi_state_changed) {
+                if (!wifi_connected && ctx->status.wifi_connected) {
+                    // WiFi perdido
+                    ctx->status.wifi_lost_time = current_time;
+                    event_to_add = CONNECTIVITY_EVENT_WIFI_LOST;
+                    strncpy(event_ssid, ctx->status.current_ssid, sizeof(event_ssid) - 1);
+                    add_event_needed = true;
+                    LOG_W(TAG, "WiFi connection lost to SSID: %s", ctx->status.current_ssid);
+                } else if (wifi_connected && !ctx->status.wifi_connected) {
+                    // WiFi recuperado
+                    if (ctx->status.wifi_lost_time > 0) {
+                        event_to_add = CONNECTIVITY_EVENT_WIFI_RECOVERED;
+                        strncpy(event_ssid, ctx->status.current_ssid, sizeof(event_ssid) - 1);
+                        add_event_needed = true;
+                        LOG_I(TAG, "WiFi connection recovered to SSID: %s", ctx->status.current_ssid);
+                        ctx->status.wifi_lost_time = 0;
+                    }
+                }
+                ctx->status.wifi_connected = wifi_connected;
+            }
+            
+            // PRIORIDAD 2: Cambios de Internet (solo si WiFi conectado y no hay evento WiFi pendiente)
+            else if (wifi_connected && internet_state_changed) {
+                if (!internet_available && ctx->status.internet_available) {
+                    // Internet perdido
+                    ctx->status.internet_lost_time = current_time;
+                    event_to_add = CONNECTIVITY_EVENT_INTERNET_LOST;
+                    strncpy(event_ssid, ctx->status.current_ssid, sizeof(event_ssid) - 1);
+                    add_event_needed = true;
+                    LOG_W(TAG, "Internet connectivity lost while connected to WiFi: %s", ctx->status.current_ssid);
+                } else if (internet_available && !ctx->status.internet_available) {
+                    // Internet recuperado
+                    if (ctx->status.internet_lost_time > 0) {
+                        event_to_add = CONNECTIVITY_EVENT_INTERNET_RECOVERED;
+                        strncpy(event_ssid, ctx->status.current_ssid, sizeof(event_ssid) - 1);
+                        add_event_needed = true;
+                        LOG_I(TAG, "Internet connectivity recovered on WiFi: %s", ctx->status.current_ssid);
+                        ctx->status.internet_lost_time = 0;
+                    }
+                }
+            }
+            
+            // Actualizar estado de internet
+            if (!wifi_connected) {
+                internet_available = false;
+            }
+            ctx->status.internet_available = internet_available;
+            ctx->status.last_check_time = current_time;
+            
+            xSemaphoreGive(ctx->mutex);
+        }
+        
+        // Procesar el evento único (si lo hay)
+        if (add_event_needed && event_to_add != -1) {
+            add_event(event_to_add, event_ssid, current_time);
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(CONNECTIVITY_CHECK_INTERVAL_MS));
+    }
+    
+    LOG_I(TAG, "Monitor task ending");
+    vTaskDelete(NULL);
+}
+
+
+
+
+
+
+
+
+
+
+
+
 IMPLEMENTAR MENSAJE BROWNOUT PARA EL BROKER Y LA APP
 
 REVISAR CONGELAMIENTO POR PROBLEMAS DE DNS: Resolución de nombres después de conectado

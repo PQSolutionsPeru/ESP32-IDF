@@ -4,6 +4,7 @@ idf_component_register(SRCS "hddesp32_main.c"
                         custom_logging 
                         config_manager 
                         config_processor 
+                        connectivity_monitor 
                         esp32_id_manager 
                         wifi_manager 
                         wifi_captive_portal 

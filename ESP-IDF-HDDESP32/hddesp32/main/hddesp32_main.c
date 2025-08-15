@@ -14,6 +14,7 @@
 #include "time_manager.h"
 #include "watchdog_manager.h"
 #include "relay_manager.h"
+#include "connectivity_monitor.h"
 #include "esp_heap_caps.h"
 #include "esp_task_wdt.h"
 #include "config_processor.h"
@@ -27,6 +28,7 @@ static bool g_mqtt_connected = false;
 static bool g_watchdog_available = false;
 static bool g_relay_manager_initialized = false;
 static bool g_need_reregister = false;
+static bool g_connectivity_monitor_started = false;
 
 static char g_mqtt_temp_topic[128];
 static char g_esp32_id_buffer[ESP32_ID_LENGTH + 1];
@@ -46,6 +48,53 @@ typedef struct {
 } deferred_mqtt_message_t;
 
 static QueueHandle_t g_mqtt_message_queue = NULL;
+
+static void debug_connectivity_events(void) {
+    int count = connectivity_monitor_get_pending_event_count();
+    bool has_events = connectivity_monitor_has_pending_ram_events();
+    
+    size_t total_events, pending_events, memory_used;
+    esp_err_t stats_ret = connectivity_monitor_get_ram_usage_stats(&total_events, &pending_events, &memory_used);
+    
+    if (stats_ret != ESP_OK) {
+        LOG_E(TAG, "CRITICAL: Failed to get connectivity stats - possible memory corruption");
+        watchdog_manager_force_reset("connectivity_stats_failure");
+        return;
+    }
+    
+    bool critical_failure = false;
+    
+    if (count > 0 && !has_events) {
+        critical_failure = true;
+        LOG_E(TAG, "CRITICAL: Event count mismatch - count=%d but no events found", count);
+    }
+    
+    if (has_events && count == 0) {
+        critical_failure = true;
+        LOG_E(TAG, "CRITICAL: Event detection mismatch - events found but count=0");
+    }
+    
+    if (pending_events > 20) {
+        critical_failure = true;
+        LOG_E(TAG, "CRITICAL: Event queue overflow - pending=%zu (max=20)", pending_events);
+    }
+    
+    if (memory_used > 8192) {
+        critical_failure = true;
+        LOG_E(TAG, "CRITICAL: Connectivity memory leak - using %zu bytes", memory_used);
+    }
+    
+    // SOLO loggear si hay actividad o problemas
+    if (count > 0 || has_events || total_events > 10) {
+        LOG_D(TAG, "Connectivity activity: events=%zu, pending=%zu, memory=%zu", 
+              total_events, pending_events, memory_used);
+    }
+    
+    if (critical_failure) {
+        LOG_E(TAG, "CRITICAL: Connectivity system failure detected - forcing restart");
+        watchdog_manager_force_reset("connectivity_critical_failure");
+    }
+}
 
 static bool get_wifi_connected(void) {
     bool result = false;
@@ -92,6 +141,35 @@ static void set_relay_manager_initialized(bool initialized) {
     if (xSemaphoreTake(g_global_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
         g_relay_manager_initialized = initialized;
         xSemaphoreGive(g_global_state_mutex);
+    }
+}
+
+static void connectivity_event_callback(const connectivity_event_t *event, void *user_data) {
+    if (!event) {
+        return;
+    }
+
+    LOG_I(TAG, "Connectivity event detected: type=%d, panel=%s, stored_in_ram", 
+          event->type, event->panel_name);
+}
+
+static void start_connectivity_monitoring_if_ready(void) {
+    if (g_connectivity_monitor_started) {
+        return;
+    }
+    
+    if (!get_wifi_connected() || !get_mqtt_connected() || !get_relay_manager_initialized()) {
+        return;
+    }
+    
+    LOG_I(TAG, "System stable - starting connectivity monitoring");
+    
+    esp_err_t ret = connectivity_monitor_start();
+    if (ret == ESP_OK) {
+        g_connectivity_monitor_started = true;
+        LOG_I(TAG, "Connectivity monitoring started successfully");
+    } else {
+        LOG_E(TAG, "Failed to start connectivity monitoring: %s", esp_err_to_name(ret));
     }
 }
 
@@ -587,6 +665,42 @@ static void mqtt_state_callback(mqtt_manager_state_t state, void *user_data) {
                 process_pending_relay_configs();
             }
             
+            start_connectivity_monitoring_if_ready();
+            
+            vTaskDelay(pdMS_TO_TICKS(2000));
+            
+            LOG_I(TAG, "Checking for pending RAM connectivity events after MQTT connection");
+            
+            int event_count = connectivity_monitor_get_pending_event_count();
+            bool has_events = connectivity_monitor_has_pending_ram_events();
+            
+            LOG_I(TAG, "Event count: %d, has_events: %s", event_count, has_events ? "true" : "false");
+            
+            if (has_events || event_count > 0) {
+                LOG_I(TAG, "Processing stored RAM connectivity events (count: %d)", event_count);
+                
+                for (int retry = 0; retry < 3; retry++) {
+                    esp_err_t ram_ret = connectivity_monitor_process_pending_events();
+                    if (ram_ret == ESP_OK) {
+                        LOG_I(TAG, "RAM connectivity events processed successfully on attempt %d", retry + 1);
+                        break;
+                    } else {
+                        LOG_W(TAG, "Failed to process RAM events on attempt %d: %s", retry + 1, esp_err_to_name(ram_ret));
+                        if (retry < 2) {
+                            vTaskDelay(pdMS_TO_TICKS(1000));
+                        }
+                    }
+                }
+                
+                int remaining_count = connectivity_monitor_get_pending_event_count();
+                LOG_I(TAG, "Events remaining after processing: %d", remaining_count);
+            } else {
+                LOG_I(TAG, "No RAM connectivity events to process");
+            }
+            
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            mqtt_manager_send_network_info();
+            
             if (g_watchdog_available) {
                 watchdog_manager_report_activity(WATCHDOG_CHECK_MQTT);
                 
@@ -668,6 +782,8 @@ static void wifi_state_callback(wifi_manager_state_t state, void *user_data) {
                     mqtt_manager_connect();
                 }
             }
+            
+            start_connectivity_monitoring_if_ready();
             break;
             
         case WIFI_MANAGER_STATE_DISCONNECTED:
@@ -732,6 +848,7 @@ static void system_monitor_task(void *pvParameters) {
     const int64_t VERIFICATION_DELAY_MS = 30000;
     static uint32_t uptime_hours = 0;
     const uint32_t QUARTERLY_RESTART_HOURS = 2160;
+    uint32_t watchdog_feed_counter = 0;
     
     while (1) {
         if (task_registered) {
@@ -742,19 +859,17 @@ static void system_monitor_task(void *pvParameters) {
         }
         
         cycle_count++;
+        watchdog_feed_counter++;
         
         deferred_mqtt_message_t msg;
-        if (xQueueReceive(g_mqtt_message_queue, &msg, pdMS_TO_TICKS(100)) == pdTRUE) {
-            if (task_registered) {
-                watchdog_manager_feed();
-            }
-            
+        BaseType_t msg_result = xQueueReceive(g_mqtt_message_queue, &msg, pdMS_TO_TICKS(100));
+        
+        if (watchdog_feed_counter % 2 == 0 && task_registered) {
+            watchdog_manager_feed();
+        }
+        
+        if (msg_result == pdTRUE) {
             process_deferred_mqtt_message(msg.topic, msg.data, msg.data_len);
-            
-            if (task_registered) {
-                watchdog_manager_feed();
-            }
-            
             LOG_I(TAG, "Processed 1 MQTT message from queue");
         }
         
@@ -775,6 +890,30 @@ static void system_monitor_task(void *pvParameters) {
             if (interrupt_check == ESP_FAIL) {
                 LOG_W(TAG, "Relay system check reported issues");
             }
+        }
+        
+        if (cycle_count % 30 == 0 && mqtt_manager_is_connected()) {
+            int pending_count = connectivity_monitor_get_pending_event_count();
+            bool has_pending = connectivity_monitor_has_pending_ram_events();
+            
+            if (has_pending || pending_count > 0) {
+                LOG_I(TAG, "Found %d pending RAM connectivity events - processing", pending_count);
+                esp_err_t ram_ret = connectivity_monitor_process_pending_events();
+                if (ram_ret == ESP_OK) {
+                    LOG_I(TAG, "RAM connectivity events processed successfully");
+                } else {
+                    LOG_W(TAG, "Failed to process RAM events: %s", esp_err_to_name(ram_ret));
+                }
+                
+                int remaining = connectivity_monitor_get_pending_event_count();
+                if (remaining > 0) {
+                    LOG_W(TAG, "Still %d events pending after processing", remaining);
+                }
+            }
+        }
+        
+        if (cycle_count % 120 == 0) {
+            debug_connectivity_events();
         }
         
         if (time_manager_should_send_network_info() || g_need_reregister) {
@@ -984,6 +1123,18 @@ void app_main(void)
         watchdog_manager_feed();
     }
     
+    esp_err_t conn_ret = connectivity_monitor_init();
+    if (conn_ret != ESP_OK) {
+        LOG_E(TAG, "Failed to initialize connectivity monitor: %s", esp_err_to_name(conn_ret));
+    } else {
+        LOG_I(TAG, "Connectivity monitor initialized");
+        connectivity_monitor_set_event_callback(connectivity_event_callback, NULL);
+    }
+    
+    if (main_task_registered) {
+        watchdog_manager_feed();
+    }
+    
     LOG_I(TAG, "Phase 3: Callback configuration");
     
     ESP_ERROR_CHECK(wifi_manager_set_state_callback(wifi_state_callback, NULL));
@@ -1118,5 +1269,10 @@ void app_main(void)
         LOG_I(TAG, "Cleaning up Relay Manager");
         relay_manager_deinit();
         set_relay_manager_initialized(false);
+    }
+    
+    if (g_connectivity_monitor_started) {
+        connectivity_monitor_stop();
+        connectivity_monitor_deinit();
     }
 }

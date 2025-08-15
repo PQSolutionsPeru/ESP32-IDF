@@ -39,6 +39,32 @@ typedef struct {
 
 static time_manager_context_t s_time_manager_ctx = {0};
 
+time_t time_manager_monotonic_to_lima_time(int64_t monotonic_ms) {
+    if (!time_manager_is_synchronized()) {
+        return (monotonic_ms / 1000) - (5 * 3600);
+    }
+    time_t current_time = time(NULL);
+    int64_t current_monotonic = esp_timer_get_time() / 1000;
+    int64_t time_offset = (int64_t)current_time * 1000 - current_monotonic;
+    time_t real_time = (monotonic_ms + time_offset) / 1000;
+    return real_time - (5 * 3600);
+}
+
+char* time_manager_format_monotonic_time_range(int64_t start_ms, int64_t end_ms, char *buffer, size_t size) {
+    if (!buffer || size < 16) {
+        return NULL;
+    }
+    time_t start_time = time_manager_monotonic_to_lima_time(start_ms);
+    time_t end_time = time_manager_monotonic_to_lima_time(end_ms);
+    struct tm start_tm, end_tm;
+    gmtime_r(&start_time, &start_tm);
+    gmtime_r(&end_time, &end_tm);
+    snprintf(buffer, size, "%02d:%02d a %02d:%02d", 
+             start_tm.tm_hour, start_tm.tm_min,
+             end_tm.tm_hour, end_tm.tm_min);
+    return buffer;
+}
+
 static esp_err_t recreate_time_event_group(time_manager_context_t *ctx) {
     EventBits_t current_bits = xEventGroupGetBits(ctx->event_group);
     

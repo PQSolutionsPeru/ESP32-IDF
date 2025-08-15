@@ -95,6 +95,10 @@ typedef struct {
 
 static mqtt_manager_context_t s_mqtt_manager_ctx = {0};
 
+static char *format_time_range(int64_t start_ms, int64_t end_ms, char *buffer, size_t size) {
+    return time_manager_format_monotonic_time_range(start_ms, end_ms, buffer, size);
+}
+
 static esp_err_t recreate_mqtt_event_group(mqtt_manager_context_t *ctx) {
     EventBits_t current_bits = 0;
     
@@ -1186,4 +1190,101 @@ esp_err_t mqtt_manager_send_heartbeat(void) {
              (long long)(esp_timer_get_time() / 1000000));
     
     return mqtt_manager_publish(heartbeat_topic, heartbeat_data, strlen(heartbeat_data), 1, false);
+}
+
+esp_err_t mqtt_manager_send_connectivity_message(const mqtt_connectivity_message_t *msg) {
+    mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
+    static char message_buffer[1024];
+    
+    if (!msg || strlen(ctx->esp32_id) == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!mqtt_manager_is_connected()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    char topic[MQTT_TOPIC_MAX_LENGTH];
+    char time_range[64];
+    
+    snprintf(topic, sizeof(topic), "esp32/connectivity/%s", ctx->esp32_id);
+    format_time_range(msg->start_time_ms, msg->end_time_ms, time_range, sizeof(time_range));
+    
+    const char *event_type = "";
+    const char *status_type = "";
+    
+    switch (msg->type) {
+        case CONNECTIVITY_MSG_WIFI_LOST:
+            event_type = "WIFI_DISCONNECTED";
+            status_type = "wifi_lost";
+            break;
+        case CONNECTIVITY_MSG_WIFI_RECOVERED:
+            event_type = "WIFI_RECONNECTED";
+            status_type = "wifi_recovered";
+            break;
+        case CONNECTIVITY_MSG_INTERNET_LOST:
+            event_type = "INTERNET_LOST";
+            status_type = "internet_lost";
+            break;
+        case CONNECTIVITY_MSG_INTERNET_RECOVERED:
+            event_type = "INTERNET_RECOVERED";
+            status_type = "internet_recovered";
+            break;
+        default:
+            return ESP_ERR_INVALID_ARG;
+    }
+    
+    time_t start_lima = time_manager_monotonic_to_lima_time(msg->start_time_ms);
+    time_t end_lima = time_manager_monotonic_to_lima_time(msg->end_time_ms);
+    
+    int len = snprintf(message_buffer, sizeof(message_buffer),
+             "{"
+             "\"esp32_id\":\"%s\","
+             "\"type\":\"%s\","
+             "\"status\":\"%s\","
+             "\"panel_name\":\"%s\","
+             "\"ssid\":\"%s\","
+             "\"time_range\":\"%s\","
+             "\"start_time\":%lld,"
+             "\"end_time\":%lld,"
+             "\"start_time_lima\":%lld,"
+             "\"end_time_lima\":%lld,"
+             "\"timestamp\":%lld"
+             "}",
+             ctx->esp32_id, event_type, status_type, msg->panel_name, msg->ssid, time_range,
+             (long long)msg->start_time_ms, (long long)msg->end_time_ms,
+             (long long)start_lima * 1000, (long long)end_lima * 1000,
+             (long long)(esp_timer_get_time() / 1000));
+    
+    if (len > 0 && len < sizeof(message_buffer)) {
+        return mqtt_manager_publish(topic, message_buffer, len, 1, false);
+    }
+    return ESP_ERR_INVALID_SIZE;
+}
+
+esp_err_t mqtt_manager_send_connectivity_status_message(const char *status, const char *details) {
+    mqtt_manager_context_t *ctx = &s_mqtt_manager_ctx;
+    
+    if (!status || strlen(ctx->esp32_id) == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    char topic[MQTT_TOPIC_MAX_LENGTH];
+    char message_buffer[256];
+    
+    snprintf(topic, sizeof(topic), "esp32/status/%s", ctx->esp32_id);
+    
+    snprintf(message_buffer, sizeof(message_buffer),
+             "{"
+             "\"esp32_id\":\"%s\","
+             "\"status\":\"%s\","
+             "\"details\":\"%s\","
+             "\"timestamp\":%lld,"
+             "\"type\":\"connectivity\""
+             "}",
+             ctx->esp32_id,
+             status,
+             details ? details : "",
+             (long long)(esp_timer_get_time() / 1000));
+    
+    return mqtt_manager_publish(topic, message_buffer, strlen(message_buffer), 1, false);
 }

@@ -44,6 +44,9 @@ esp_err_t time_manager_epoch_to_iso8601(time_t epoch, char *iso_out, size_t max_
 // Utilidades específicas para el formato Lima, Perú
 esp_err_t time_manager_get_lima_time_str(char *time_out, size_t max_len);
 
+time_t time_manager_monotonic_to_lima_time(int64_t monotonic_ms);
+char* time_manager_format_monotonic_time_range(int64_t start_ms, int64_t end_ms, char *buffer, size_t size);
+
 // ← NUEVAS FUNCIONES PARA MANEJO SEGURO DE NETWORK INFO
 /**
  * @brief Verifica si hay que enviar network info después de sincronización NTP

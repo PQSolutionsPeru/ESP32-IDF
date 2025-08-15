@@ -14,6 +14,10 @@
 #include "config_manager.h"
 #include "esp32_id_manager.h"
 #include "esp_timer.h"
+#include "lwip/inet.h"
+#include "lwip/netdb.h"
+#include "lwip/sockets.h"
+#include "ping/ping_sock.h"
 
 #define TAG "WIFI_MGR"
 
@@ -51,9 +55,54 @@ typedef struct {
     uint32_t netif_recreation_count;
     void (*state_callback)(wifi_manager_state_t state, void *user_data);
     void *user_data;
+    wifi_connectivity_callback_t connectivity_callback;
+    void *connectivity_user_data;
 } wifi_manager_context_t;
 
 static wifi_manager_context_t s_wifi_manager_ctx = {0};
+
+static esp_err_t ping_internet_host(bool *success) {
+    *success = false;
+    
+    if (!wifi_manager_is_connected()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    struct addrinfo hints = {0};
+    struct addrinfo *result = NULL;
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    
+    int ret = getaddrinfo("8.8.8.8", "53", &hints, &result);
+    if (ret != 0 || result == NULL) {
+        return ESP_FAIL;
+    }
+    
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) {
+        freeaddrinfo(result);
+        return ESP_FAIL;
+    }
+    
+    struct timeval timeout = {
+        .tv_sec = 3,
+        .tv_usec = 0
+    };
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+    
+    ret = connect(sock, result->ai_addr, result->ai_addrlen);
+    
+    close(sock);
+    freeaddrinfo(result);
+    
+    if (ret == 0) {
+        *success = true;
+        return ESP_OK;
+    }
+    
+    return ESP_OK;
+}
 
 static esp_err_t recreate_wifi_event_group(wifi_manager_context_t *ctx) {
     EventBits_t current_bits = 0;
@@ -289,6 +338,10 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                     ctx->state_callback(ctx->state, ctx->user_data);
                 }
                 
+                if (ctx->connectivity_callback) {
+                    ctx->connectivity_callback(WIFI_CONNECTIVITY_WIFI_CONNECTED, ctx->ssid, ctx->connectivity_user_data);
+                }
+                
                 if (esp_wifi_sta_get_ap_info(&ctx->ap_info) != ESP_OK) {
                     LOG_W(TAG, "Failed to get AP info");
                 }
@@ -299,6 +352,10 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                 LOG_W(TAG, "Lost IP address");
                 if (ctx->state != WIFI_MANAGER_STATE_STA_AP_MODE) {
                     safe_wifi_clear_bits(ctx, WIFI_CONNECTED_BIT);
+                }
+                
+                if (ctx->connectivity_callback) {
+                    ctx->connectivity_callback(WIFI_CONNECTIVITY_WIFI_DISCONNECTED, ctx->ssid, ctx->connectivity_user_data);
                 }
                 break;
                 
@@ -1259,5 +1316,27 @@ esp_err_t wifi_manager_generate_ap_ssid(char *ap_ssid, size_t max_len, const cha
     snprintf(ap_ssid, max_len, "%s_%s", prefix, &esp32_id[id_len - 6]);
     
     LOG_I(TAG, "Generated AP SSID: %s", ap_ssid);
+    return ESP_OK;
+}
+
+esp_err_t wifi_manager_check_internet_connectivity(bool *has_internet) {
+    if (has_internet == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    return ping_internet_host(has_internet);
+}
+
+esp_err_t wifi_manager_set_connectivity_callback(wifi_connectivity_callback_t callback, void *user_data) {
+    wifi_manager_context_t *ctx = &s_wifi_manager_ctx;
+    
+    if (ctx->event_group == NULL) {
+        LOG_E(TAG, "WiFi Manager not initialized");
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    ctx->connectivity_callback = callback;
+    ctx->connectivity_user_data = user_data;
+    
     return ESP_OK;
 }

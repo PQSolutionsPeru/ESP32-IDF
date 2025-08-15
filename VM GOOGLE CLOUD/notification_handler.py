@@ -36,6 +36,125 @@ class NotificationHandler:
             logging.error(f"Error obteniendo nombre de cuenta: {e}")
             return 'Usuario desconocido'
 
+    def send_wifi_disconnection_notification(self, client_id: str, panel_name: str, ssid: str, time_range: str, client_name: str = ""):
+        """Envía notificación cuando se pierde conexión WiFi"""
+        try:
+            message_text = f"Panel {panel_name} se desconectó de la red {ssid}"
+            if time_range:
+                message_text += f" de {time_range}"
+            
+            timestamp = int(time.time() * 1000)
+            notification_id = f"wifi_disc_{client_id}_{timestamp}"
+            
+            notification_data = {
+                "type": "connectivity",
+                "connectivity_type": "wifi_disconnection",
+                "title": "Desconexión WiFi",
+                "message": message_text,
+                "date_time": datetime.now(pytz.timezone('America/Lima')).strftime('%d/%m/%Y, %H:%M'),
+                "timestamp": timestamp,
+                "panel_name": panel_name,
+                "ssid": ssid,
+                "time_range": time_range,
+                "isRead": False,
+                "action": "WIFI_DISCONNECTED",
+                "documentName": notification_id,
+                "client_name": client_name,
+                "readByAdmin": False,
+                "readByUser": False
+            }
+            
+            notifications_ref = self.db.collection(f'hdd-monitor/accounts/clients/{client_id}/notifications')
+            notifications_ref.document(notification_id).set(notification_data)
+            logging.info(f"Notificación de desconexión WiFi creada: {notification_id}")
+            
+            self.send_fcm_notifications(client_id, notification_data, "connectivity")
+            logging.info(f"Notificación FCM de desconexión WiFi enviada para panel {panel_name}")
+            
+        except Exception as e:
+            logging.error(f"Error enviando notificación de desconexión WiFi: {e}")
+
+    def send_internet_loss_notification(self, client_id: str, panel_name: str, time_range: str, client_name: str = ""):
+        """Envía notificación cuando se pierde conexión a internet"""
+        try:
+            message_text = f"Panel {panel_name} estuvo sin internet"
+            if time_range:
+                message_text += f" de {time_range}"
+            
+            timestamp = int(time.time() * 1000)
+            notification_id = f"inet_loss_{client_id}_{timestamp}"
+            
+            notification_data = {
+                "type": "connectivity",
+                "connectivity_type": "internet_loss",
+                "title": "Sin Internet",
+                "message": message_text,
+                "date_time": datetime.now(pytz.timezone('America/Lima')).strftime('%d/%m/%Y, %H:%M'),
+                "timestamp": timestamp,
+                "panel_name": panel_name,
+                "time_range": time_range,
+                "isRead": False,
+                "action": "INTERNET_LOST",
+                "documentName": notification_id,
+                "client_name": client_name,
+                "readByAdmin": False,
+                "readByUser": False
+            }
+            
+            notifications_ref = self.db.collection(f'hdd-monitor/accounts/clients/{client_id}/notifications')
+            notifications_ref.document(notification_id).set(notification_data)
+            logging.info(f"Notificación de pérdida de internet creada: {notification_id}")
+            
+            self.send_fcm_notifications(client_id, notification_data, "connectivity")
+            logging.info(f"Notificación FCM de pérdida de internet enviada para panel {panel_name}")
+            
+        except Exception as e:
+            logging.error(f"Error enviando notificación de pérdida de internet: {e}")
+
+    def send_connectivity_recovery_notification(self, client_id: str, panel_name: str, recovery_type: str, ssid: str = "", client_name: str = ""):
+        """Envía notificación cuando se recupera la conectividad"""
+        try:
+            if recovery_type == "wifi":
+                message_text = f"Panel {panel_name} se reconectó a la red {ssid}"
+                title = "WiFi Reconectado"
+                action = "WIFI_RECONNECTED"
+                connectivity_type = "wifi_reconnection"
+            else:
+                message_text = f"Panel {panel_name} recuperó conectividad a internet"
+                title = "Internet Recuperado"
+                action = "INTERNET_RECOVERED"
+                connectivity_type = "internet_recovery"
+            
+            timestamp = int(time.time() * 1000)
+            notification_id = f"conn_rec_{client_id}_{timestamp}"
+            
+            notification_data = {
+                "type": "connectivity",
+                "connectivity_type": connectivity_type,
+                "title": title,
+                "message": message_text,
+                "date_time": datetime.now(pytz.timezone('America/Lima')).strftime('%d/%m/%Y, %H:%M'),
+                "timestamp": timestamp,
+                "panel_name": panel_name,
+                "ssid": ssid,
+                "isRead": False,
+                "action": action,
+                "documentName": notification_id,
+                "client_name": client_name,
+                "readByAdmin": False,
+                "readByUser": False
+            }
+            
+            notifications_ref = self.db.collection(f'hdd-monitor/accounts/clients/{client_id}/notifications')
+            notifications_ref.document(notification_id).set(notification_data)
+            logging.info(f"Notificación de recuperación de conectividad creada: {notification_id}")
+            
+            self.send_fcm_notifications(client_id, notification_data, "connectivity")
+            logging.info(f"Notificación FCM de recuperación enviada para panel {panel_name}")
+            
+        except Exception as e:
+            logging.error(f"Error enviando notificación de recuperación de conectividad: {e}")
+
     def process_event_update(self, event_ref: firestore.DocumentReference, old_data: Dict[str, Any], new_data: Dict[str, Any], is_initial_load: bool = False):
         try:
             if is_initial_load:
@@ -269,11 +388,10 @@ class NotificationHandler:
                 notifications_ref = self.db.collection(f'hdd-monitor/accounts/clients/{client_id}/notifications')
                 notifications_ref.document(notification_id).set(notification_doc)
                 
-                # ✅ CAMBIO CRÍTICO: Pasar el relay_display_name en lugar del relay_id raw
                 self.send_fcm_notifications(client_id, {
                     'type': 'relay',
-                    'relay': relay_display_name,  # ✅ USAR EL DISPLAY NAME
-                    'relay_id': relay_id,         # ✅ AGREGAR EL ID RAW POR SI LO NECESITA LA APP
+                    'relay': relay_display_name,
+                    'relay_id': relay_id,
                     'panel_id': panel_id,
                     'panel_name': panel_name,
                     'state': new_data.get('status'),
@@ -534,8 +652,29 @@ class NotificationHandler:
             client_data = client_doc.to_dict() or {}
             client_name = client_data.get('name', '')
 
-            if notification_type == 'relay':
-                notification = messaging.Notification(  # ← AQUÍ DEBE ESTAR DEFINIDA
+            if notification_type == 'connectivity':
+                connectivity_type = notification_data.get('connectivity_type', '')
+                if 'disconnection' in connectivity_type or 'loss' in connectivity_type:
+                    title = f"{client_name} - Pérdida de Conectividad"
+                else:
+                    title = f"{client_name} - Conectividad Recuperada"
+                
+                notification = messaging.Notification(
+                    title=title,
+                    body=notification_data.get('message', '')
+                )
+                base_data = {
+                    'clientDocName': str(client_id),
+                    'panelName': str(notification_data.get('panel_name', '')),
+                    'connectivityType': str(connectivity_type),
+                    'message': str(notification_data.get('message', '')),
+                    'type': 'connectivity',
+                    'timestamp': str(int(time.time() * 1000)),
+                    'ssid': str(notification_data.get('ssid', '')),
+                    'timeRange': str(notification_data.get('time_range', ''))
+                }
+            elif notification_type == 'relay':
+                notification = messaging.Notification(
                     title=f"{client_name} - Cambio de Estado",
                     body=notification_data.get('message', '')
                 )
@@ -551,7 +690,7 @@ class NotificationHandler:
                 }
             else:
                 event_type = notification_data.get('event_type', '') 
-                notification = messaging.Notification(  # ← Y AQUÍ TAMBIÉN
+                notification = messaging.Notification(
                     title=f"Evento {event_type}",
                     body=notification_data.get('message', '')
                 )
@@ -572,7 +711,7 @@ class NotificationHandler:
             android_config = messaging.AndroidConfig(
                 priority='high',
                 notification=messaging.AndroidNotification(
-                    channel_id='event_notifications' if notification_type != 'relay' else 'relay_status',
+                    channel_id='connectivity_notifications' if notification_type == 'connectivity' else ('event_notifications' if notification_type != 'relay' else 'relay_status'),
                     priority='high',
                     sound='default',
                     visibility='public'
