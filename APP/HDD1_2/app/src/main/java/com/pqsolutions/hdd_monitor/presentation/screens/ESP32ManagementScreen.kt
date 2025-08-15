@@ -14,9 +14,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.pqsolutions.hdd_monitor.esp32.ESP32Device
 import com.pqsolutions.hdd_monitor.data.Panel
 import com.pqsolutions.hdd_monitor.presentation.components.AnimatedNotificationBell
@@ -41,6 +44,36 @@ fun ESP32ManagementScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    Log.d(TAG, "ESP32Management - ON_RESUME detectado")
+                    viewModel.onResume()
+                }
+                Lifecycle.Event.ON_START -> {
+                    Log.d(TAG, "ESP32Management - ON_START detectado")
+                }
+                Lifecycle.Event.ON_PAUSE -> {
+                    Log.d(TAG, "ESP32Management - ON_PAUSE detectado")
+                }
+                else -> {}
+            }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        onDispose {
+            Log.d(TAG, "ESP32Management - Disposing lifecycle observer")
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        Log.d(TAG, "ESP32Management - Carga inicial")
+    }
 
     Scaffold(
         topBar = {

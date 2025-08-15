@@ -185,7 +185,9 @@ fun AppNavigation(viewModel: MainViewModel) {
                         navController.navigate(Screen.Dashboard.route)
                     }
                 },
-                onCreatePanel = { navController.navigate(Screen.panelConfiguration()) },
+                onCreatePanel = {
+                    navController.navigate(Screen.panelConfiguration())
+                },
                 onEditPanel = { panelId ->
                     navController.navigate(Screen.panelConfiguration(panelId))
                 },

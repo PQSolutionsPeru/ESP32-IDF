@@ -14,6 +14,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -30,6 +31,8 @@ class DashboardViewModel @Inject constructor(
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
 
     private var panelsJob: Job? = null
+    private var currentClientDocName: String? = null
+    private var isFirstLoad = true
 
     companion object {
         private const val TAG = "DashboardViewModel"
@@ -40,10 +43,23 @@ class DashboardViewModel @Inject constructor(
         loadPanels()
     }
 
+    fun onResume() {
+        Log.d(TAG, "DashboardViewModel resumed - verificando necesidad de recargar")
+
+        if (!isFirstLoad) {
+            Log.d(TAG, "Dashboard resume detectado - forzando recarga de listeners")
+            forceRefreshPanels()
+        } else {
+            isFirstLoad = false
+        }
+    }
+
     fun loadPanels() {
         Log.d(TAG, "loadPanels() called")
 
         _uiState.update { it.copy(isLoading = true, error = null) }
+
+        panelsJob?.cancel()
 
         panelsJob = viewModelScope.launch {
             try {
@@ -51,7 +67,7 @@ class DashboardViewModel @Inject constructor(
                 Log.d(TAG, "Current user: ${currentUser?.documentName}, Role: ${currentUser?.role}")
 
                 if (currentUser != null) {
-                    val clientDocName = when (currentUser.role) {
+                    currentClientDocName = when (currentUser.role) {
                         UserRole.USER -> {
                             Log.d(TAG, "User role detected, using client: ${currentUser.clientDocName}")
                             currentUser.clientDocName
@@ -62,37 +78,8 @@ class DashboardViewModel @Inject constructor(
                         }
                     }
 
-                    val clientsMap = loadClientNames(clientDocName)
+                    startPanelListener(currentClientDocName)
 
-                    panelRepository.getPanels(clientDocName).collect { panels ->
-                        Log.d(TAG, "Received ${panels.size} panels from repository")
-
-                        panels.forEach { panel ->
-                            Log.d(TAG, "Panel: ${panel.name}, Relays: ${panel.relays.size}, Active: ${panel.activeRelays.size}")
-                        }
-
-                        val validPanels = panels.filter { panel ->
-                            panel.documentName.startsWith(DocumentPrefixes.PANEL) &&
-                                    panel.clientName.startsWith(DocumentPrefixes.CLIENT)
-                        }
-
-                        val groupedPanels = validPanels.groupBy {
-                            clientsMap[it.clientName] ?: it.clientName
-                        }
-
-                        _uiState.update { currentState ->
-                            currentState.copy(
-                                isLoading = false,
-                                panels = validPanels,
-                                groupedPanels = groupedPanels,
-                                clientNames = clientsMap,
-                                error = null,
-                                lastUpdate = System.currentTimeMillis()
-                            )
-                        }
-
-                        Log.d(TAG, "Dashboard panels updated successfully: ${validPanels.size} panels")
-                    }
                 } else {
                     Log.e(TAG, "No authenticated user found")
                     _uiState.update { it.copy(
@@ -112,6 +99,74 @@ class DashboardViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private suspend fun startPanelListener(clientDocName: String?) {
+        Log.d(TAG, "Iniciando listener de paneles para cliente: $clientDocName")
+
+        val clientsMap = loadClientNames(clientDocName)
+
+        panelRepository.getPanels(clientDocName)
+            .catch { error ->
+                Log.e(TAG, "Error en listener de paneles", error)
+                _uiState.update { it.copy(
+                    isLoading = false,
+                    error = "Error en listener de paneles: ${error.message}"
+                ) }
+            }
+            .collect { panels ->
+                Log.d(TAG, "Received ${panels.size} panels from repository")
+
+                panels.forEach { panel ->
+                    Log.d(TAG, "Panel: ${panel.name}, Relays: ${panel.relays.size}, Active: ${panel.activeRelays.size}")
+                }
+
+                val validPanels = panels.filter { panel ->
+                    panel.documentName.startsWith(DocumentPrefixes.PANEL) &&
+                            panel.clientName.startsWith(DocumentPrefixes.CLIENT)
+                }
+
+                val groupedPanels = validPanels.groupBy {
+                    clientsMap[it.clientName] ?: it.clientName
+                }
+
+                _uiState.update { currentState ->
+                    currentState.copy(
+                        isLoading = false,
+                        panels = validPanels,
+                        groupedPanels = groupedPanels,
+                        clientNames = clientsMap,
+                        error = null,
+                        lastUpdate = System.currentTimeMillis()
+                    )
+                }
+
+                Log.d(TAG, "Dashboard panels updated successfully: ${validPanels.size} panels")
+            }
+    }
+
+    fun forceRefreshPanels() {
+        Log.d(TAG, "Forzando refresh completo de paneles")
+
+        viewModelScope.launch {
+            try {
+                panelRepository.performPeriodicCleanup()
+
+                kotlinx.coroutines.delay(500)
+
+                loadPanels()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error en force refresh", e)
+                _uiState.update { it.copy(
+                    error = "Error refrescando datos: ${e.message}"
+                ) }
+            }
+        }
+    }
+
+    fun refreshPanels() {
+        Log.d(TAG, "Refresh manual solicitado")
+        loadPanels()
     }
 
     private suspend fun loadClientNames(clientDocName: String?): Map<String, String> {
@@ -154,8 +209,14 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
+    }
+
     override fun onCleared() {
         super.onCleared()
+        Log.d(TAG, "DashboardViewModel being cleared")
+        panelsJob?.cancel()
     }
 
     data class DashboardUiState(

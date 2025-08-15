@@ -36,6 +36,7 @@ class ESP32ManagementViewModel @Inject constructor(
     private var panelsJob: Job? = null
     private var assignedESP32Job: Job? = null
     private var unassignedESP32Job: Job? = null
+    private var currentClientDocName: String? = null
 
     private var panelsLoaded = false
     private var assignedESP32sLoaded = false
@@ -48,22 +49,34 @@ class ESP32ManagementViewModel @Inject constructor(
     }
 
     fun onResume() {
-        Log.d(TAG, "ESP32ManagementViewModel resumed - verificando estado de listeners")
+        Log.d(TAG, "ESP32ManagementViewModel resumed - forzando recarga de listeners")
 
-        if (panelsJob?.isActive != true && assignedESP32Job?.isActive != true && unassignedESP32Job?.isActive != true) {
-            Log.d(TAG, "Listeners no activos, recargando datos")
-            loadData()
-        }
+        cancelExistingJobs()
+        _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+        resetLoadingFlags()
+        loadData()
     }
 
-    private fun loadData() {
-        Log.d(TAG, "Iniciando carga de datos")
-
-        _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-
+    private fun resetLoadingFlags() {
         panelsLoaded = false
         assignedESP32sLoaded = false
         unassignedESP32sLoaded = false
+    }
+
+    private fun cancelExistingJobs() {
+        panelsJob?.cancel()
+        assignedESP32Job?.cancel()
+        unassignedESP32Job?.cancel()
+
+        panelsJob = null
+        assignedESP32Job = null
+        unassignedESP32Job = null
+    }
+
+    private fun loadData() {
+        Log.d(TAG, "Iniciando carga de datos con listeners frescos")
+
+        _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
         viewModelScope.launch {
             try {
@@ -78,13 +91,13 @@ class ESP32ManagementViewModel @Inject constructor(
 
                 Log.d(TAG, "Usuario: ${currentUser.name}, Rol: ${currentUser.role}")
 
-                val clientDocName = when (currentUser.role) {
+                currentClientDocName = when (currentUser.role) {
                     UserRole.USER -> currentUser.clientDocName
                     UserRole.ADMIN -> null
                 }
 
-                cancelJobs()
-                startDataListeners(clientDocName)
+                cancelExistingJobs()
+                startFreshDataListeners(currentClientDocName)
 
             } catch (e: Exception) {
                 Log.e(TAG, "Error cargando datos", e)
@@ -96,8 +109,11 @@ class ESP32ManagementViewModel @Inject constructor(
         }
     }
 
-    private fun startDataListeners(clientDocName: String?) {
+    private fun startFreshDataListeners(clientDocName: String?) {
+        Log.d(TAG, "Iniciando listeners frescos para cliente: $clientDocName")
+
         panelsJob = viewModelScope.launch {
+            Log.d(TAG, "Iniciando listener de paneles")
             panelRepository.getPanels(clientDocName)
                 .catch { error ->
                     Log.e(TAG, "Error en listener de paneles", error)
@@ -109,14 +125,6 @@ class ESP32ManagementViewModel @Inject constructor(
                 }
                 .collect { panels ->
                     Log.d(TAG, "Paneles recibidos: ${panels.size}")
-
-                    panels.forEach { panel ->
-                        Log.d(TAG, "Panel ESP32: ${panel.name}, Relays: ${panel.relays.size}, Active: ${panel.activeRelays.size}, HasIssues: ${panel.hasIssues}")
-                        panel.relays.forEach { relay ->
-                            Log.d(TAG, "  Relay ESP32: ${relay.name}, isActive: ${relay.isActive}, status: ${relay.status}")
-                        }
-                    }
-
                     panelsLoaded = true
                     updatePanels(panels)
                     checkAndUpdateLoadingState()
@@ -124,6 +132,7 @@ class ESP32ManagementViewModel @Inject constructor(
         }
 
         assignedESP32Job = viewModelScope.launch {
+            Log.d(TAG, "Iniciando listener de ESP32s asignados")
             esp32Repository.observeAssignedESP32s(clientDocName)
                 .catch { error ->
                     Log.e(TAG, "Error en listener de ESP32s asignados", error)
@@ -139,6 +148,7 @@ class ESP32ManagementViewModel @Inject constructor(
         }
 
         unassignedESP32Job = viewModelScope.launch {
+            Log.d(TAG, "Iniciando listener de ESP32s no asignados")
             esp32Repository.observeUnassignedESP32s()
                 .catch { error ->
                     Log.e(TAG, "Error en listener de ESP32s no asignados", error)
@@ -156,24 +166,9 @@ class ESP32ManagementViewModel @Inject constructor(
 
     private fun checkAndUpdateLoadingState() {
         if (panelsLoaded && assignedESP32sLoaded && unassignedESP32sLoaded) {
-            val hasData = _uiState.value.panels.isNotEmpty() || _uiState.value.availableESP32s.isNotEmpty()
-            if (_uiState.value.isLoading && hasData) {
-                _uiState.value = _uiState.value.copy(isLoading = false)
-                Log.d(TAG, "Todos los datos cargados con contenido, ocultando loading")
-            } else if (_uiState.value.isLoading && !hasData) {
-                viewModelScope.launch {
-                    kotlinx.coroutines.delay(1000)
-                    if (_uiState.value.isLoading) {
-                        _uiState.value = _uiState.value.copy(isLoading = false)
-                        Log.d(TAG, "Timeout de loading alcanzado, ocultando loading")
-                    }
-                }
-            }
+            _uiState.value = _uiState.value.copy(isLoading = false)
+            Log.d(TAG, "Todos los datos cargados correctamente")
         }
-    }
-
-    private fun cancelJobs() {
-        Log.d(TAG, "cancelJobs called - maintaining jobs for continuous monitoring")
     }
 
     private fun updatePanels(panels: List<Panel>) {
@@ -247,8 +242,28 @@ class ESP32ManagementViewModel @Inject constructor(
     }
 
     fun refreshData() {
-        Log.d(TAG, "Refresh manual solicitado")
-        loadData()
+        Log.d(TAG, "Refresh manual solicitado - reiniciando todos los listeners")
+        onResume()
+    }
+
+    fun forceRefresh() {
+        Log.d(TAG, "Refresh forzado solicitado")
+
+        viewModelScope.launch {
+            try {
+                panelRepository.performPeriodicCleanup()
+                esp32Repository.clearListeners()
+
+                kotlinx.coroutines.delay(1000)
+
+                onResume()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error en refresh forzado", e)
+                _uiState.value = _uiState.value.copy(
+                    error = "Error en refresh: ${e.message}"
+                )
+            }
+        }
     }
 
     fun deletePanel(panelId: String) {
@@ -328,5 +343,7 @@ class ESP32ManagementViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        Log.d(TAG, "ViewModel siendo limpiado")
+        cancelExistingJobs()
     }
 }

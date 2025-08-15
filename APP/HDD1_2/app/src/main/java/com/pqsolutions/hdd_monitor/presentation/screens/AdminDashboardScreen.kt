@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -37,16 +38,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.pqsolutions.hdd_monitor.R
 import com.pqsolutions.hdd_monitor.data.Panel
 import com.pqsolutions.hdd_monitor.data.Relay
 import com.pqsolutions.hdd_monitor.presentation.components.AnimatedNotificationBell
 import com.pqsolutions.hdd_monitor.presentation.components.ScreenTopBar
-import com.pqsolutions.hdd_monitor.presentation.theme.HDD1_2Theme
 import com.pqsolutions.hdd_monitor.presentation.theme.PanelColors
 import com.pqsolutions.hdd_monitor.presentation.util.performHapticFeedback
 import com.pqsolutions.hdd_monitor.presentation.viewmodel.DashboardViewModel
@@ -70,8 +73,32 @@ fun AdminDashboardScreen(
     val uiState by viewModel.uiState.collectAsState()
     val notificationUiState by notificationViewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    Log.d(TAG, "AdminDashboard - ON_RESUME detectado")
+                    viewModel.onResume()
+                    notificationViewModel.restartNotificationCollection()
+                }
+                Lifecycle.Event.ON_START -> {
+                    Log.d(TAG, "AdminDashboard - ON_START detectado")
+                }
+                else -> {}
+            }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     LaunchedEffect(Unit) {
+        Log.d(TAG, "AdminDashboard - Carga inicial")
         viewModel.loadPanels()
         notificationViewModel.restartNotificationCollection()
     }
@@ -81,6 +108,20 @@ fun AdminDashboardScreen(
             ScreenTopBar(
                 title = stringResource(R.string.admin_dashboard_title),
                 actions = {
+                    IconButton(
+                        onClick = {
+                            Log.d(TAG, "Refresh manual solicitado")
+                            performHapticFeedback(context)
+                            viewModel.forceRefreshPanels()
+                            notificationViewModel.restartNotificationCollection()
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Actualizar"
+                        )
+                    }
+
                     AnimatedNotificationBell(
                         hasNewNotifications = hasPendingNotifications,
                         notificationCount = notificationUiState.pendingCount,
@@ -129,11 +170,20 @@ fun AdminDashboardScreen(
             ) {
                 if (uiState.isLoading) {
                     item {
-                        Text(
-                            "Cargando paneles...",
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.padding(vertical = 16.dp)
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            Spacer(modifier = Modifier.padding(horizontal = 8.dp))
+                            Text(
+                                "Cargando paneles...",
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
                     }
                 } else if (uiState.groupedPanels.isEmpty()) {
                     item {
@@ -155,7 +205,7 @@ fun AdminDashboardScreen(
                     }
 
                     clientPanels.forEach { panel ->
-                        item(key = panel.documentName) {
+                        item(key = "${panel.documentName}_${panel.lastUpdate}") {
                             AdminPanelItem(panel)
                             Spacer(modifier = Modifier.height(8.dp))
                         }
@@ -164,12 +214,33 @@ fun AdminDashboardScreen(
 
                 if (uiState.error != null) {
                     item {
-                        Text(
-                            "Error: ${uiState.error}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Red,
-                            modifier = Modifier.padding(vertical = 16.dp)
-                        )
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp)
+                            ) {
+                                Text(
+                                    "Error: ${uiState.error}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Button(
+                                    onClick = {
+                                        viewModel.clearError()
+                                        viewModel.forceRefreshPanels()
+                                    }
+                                ) {
+                                    Text("Reintentar")
+                                }
+                            }
+                        }
                     }
                 }
             }
