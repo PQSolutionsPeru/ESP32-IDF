@@ -26,7 +26,9 @@ data class NotificationUiState(
 )
 
 enum class NotificationType {
-    EVENT, RELAY
+    EVENT,
+    RELAY,
+    CONNECTIVITY  // ✅ AGREGADO
 }
 
 enum class NotificationStatus {
@@ -58,7 +60,11 @@ data class NotificationItem(
     val relayName: String? = null,
     val eventId: String? = null,
     val eventType: String? = null,
-    val isRead: Boolean = false
+    val isRead: Boolean = false,
+    // ✅ CAMPOS DE CONECTIVIDAD AGREGADOS
+    val connectivityType: String? = null,
+    val ssid: String? = null,
+    val timeRange: String? = null
 )
 
 @HiltViewModel
@@ -74,14 +80,20 @@ class NotificationViewModel @Inject constructor(
         loadNotifications()
     }
 
+    // ✅ MÉTODO ACTUALIZADO PARA MANEJAR CONECTIVIDAD
     private fun mapToNotificationItem(notification: Notification): NotificationItem {
-        val notificationType = if (notification.isEventNotification()) {
-            NotificationType.EVENT
-        } else {
-            NotificationType.RELAY
+        val notificationType = when {
+            notification.isConnectivityNotification() -> NotificationType.CONNECTIVITY
+            notification.isEventNotification() -> NotificationType.EVENT
+            else -> NotificationType.RELAY
         }
 
-        val title = "HDD Monitor"
+        val title = when (notificationType) {
+            NotificationType.CONNECTIVITY -> notification.getDisplayTitle()
+            NotificationType.EVENT -> "Evento ${notification.eventType ?: "del Sistema"}"
+            NotificationType.RELAY -> "Actualización de Panel"
+        }
+
         val text = notification.getDisplayMessage()
 
         val status = notification.status?.let {
@@ -106,7 +118,11 @@ class NotificationViewModel @Inject constructor(
             relayName = notification.relayName,
             eventId = notification.eventId,
             eventType = notification.eventType,
-            isRead = notification.isRead
+            isRead = notification.isRead,
+            // ✅ MAPEAR CAMPOS DE CONECTIVIDAD
+            connectivityType = notification.connectivityType,
+            ssid = notification.ssid,
+            timeRange = notification.timeRange
         )
     }
 
@@ -221,6 +237,7 @@ class NotificationViewModel @Inject constructor(
         }
     }
 
+    // ✅ MÉTODO ACTUALIZADO PARA INCLUIR CONECTIVIDAD
     fun onNotificationClick(
         notification: NotificationItem,
         onNavigateToEvent: (String) -> Unit,
@@ -250,6 +267,16 @@ class NotificationViewModel @Inject constructor(
                             onNavigateToPanel(panelId)
                         } ?: run {
                             Log.w(TAG, "No se pudo navegar, panelId es nulo")
+                        }
+                    }
+                    // ✅ BRANCH AGREGADO PARA CONECTIVIDAD
+                    NotificationType.CONNECTIVITY -> {
+                        notification.panelDocName?.let { panelId ->
+                            Log.d(TAG, "Navegando al panel desde notificación de conectividad: $panelId")
+                            onNavigateToPanel(panelId)
+                        } ?: run {
+                            Log.w(TAG, "Notificación de conectividad sin panelId, navegando a dashboard")
+                            // Opcional: agregar navegación a dashboard general
                         }
                     }
                 }

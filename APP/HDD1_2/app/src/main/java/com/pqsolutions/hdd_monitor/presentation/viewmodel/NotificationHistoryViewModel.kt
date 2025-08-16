@@ -113,6 +113,7 @@ class NotificationHistoryViewModel @Inject constructor(
         }
     }
 
+    // ✅ MÉTODO ACTUALIZADO SIN DUPLICAR CLASES
     private fun mapToNotificationItem(notification: Notification): NotificationItem? {
         return try {
             val displayMessage = notification.getDisplayMessage()
@@ -132,14 +133,21 @@ class NotificationHistoryViewModel @Inject constructor(
                 return null
             }
 
+            // ✅ DETERMINAR EL TIPO DE NOTIFICACIÓN
+            val notificationType = when {
+                notification.isConnectivityNotification() -> NotificationType.CONNECTIVITY
+                notification.isEventNotification() -> NotificationType.EVENT
+                notification.isRelayNotification() -> NotificationType.RELAY
+                else -> NotificationType.RELAY // fallback
+            }
+
+            // ✅ USAR EL NUEVO MÉTODO getDisplayTitle()
+            val title = notification.getDisplayTitle()
+
             val notificationItem = NotificationItem(
                 documentName = notification.documentName,
                 clientDocName = notification.clientDocName,
-                title = if (notification.isEventNotification()) {
-                    "Evento ${notification.eventType ?: "desconocido"}"
-                } else {
-                    "Actualización de Panel"
-                },
+                title = title,
                 text = displayMessage,
                 date_time = notification.date_time,
                 status = notification.status?.let {
@@ -150,16 +158,16 @@ class NotificationHistoryViewModel @Inject constructor(
                 relayName = notification.relayName,
                 eventId = notification.eventId,
                 eventType = notification.eventType,
-                notificationType = if (notification.isEventNotification()) {
-                    NotificationType.EVENT
-                } else {
-                    NotificationType.RELAY
-                },
+                notificationType = notificationType,
                 isRead = notification.isRead,
-                timestamp = notification.timestamp
+                timestamp = notification.timestamp,
+                // ✅ MAPEAR CAMPOS DE CONECTIVIDAD
+                connectivityType = notification.connectivityType,
+                ssid = notification.ssid,
+                timeRange = notification.timeRange
             )
 
-            Log.d(TAG, "Mapeado exitoso: ${notificationItem.documentName} -> ${notificationItem.text.take(50)}")
+            Log.d(TAG, "Mapeado exitoso (${notificationType.name}): ${notificationItem.documentName} -> ${notificationItem.text.take(50)}")
             notificationItem
         } catch (e: Exception) {
             Log.e(TAG, "Error mapping notification ${notification.documentName}: ${e.message}", e)

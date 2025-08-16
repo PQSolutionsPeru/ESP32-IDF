@@ -21,6 +21,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -122,6 +124,11 @@ fun NotificationHistoryScreen(
                                         onNavigateToPanel(panelId)
                                     }
                                 }
+                                NotificationType.CONNECTIVITY -> {
+                                    notification.panelDocName?.let { panelId ->
+                                        onNavigateToPanel(panelId)
+                                    }
+                                }
                             }
                         }
                     )
@@ -196,25 +203,64 @@ private fun NotificationCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = when {
-                    notification.notificationType == NotificationType.EVENT -> Icons.Filled.Event
-                    notification.notificationType == NotificationType.RELAY && notification.text.contains("DISC") -> Icons.Filled.Warning
-                    else -> Icons.Default.Info
+                imageVector = when (notification.notificationType) {
+                    NotificationType.EVENT -> Icons.Filled.Event
+                    NotificationType.CONNECTIVITY -> {
+                        when {
+                            notification.connectivityType?.contains("disconnection") == true ||
+                                    notification.connectivityType?.contains("lost") == true ->
+                                Icons.Filled.Warning
+                            notification.connectivityType?.contains("reconnected") == true ||
+                                    notification.connectivityType?.contains("recovered") == true ->
+                                Icons.Filled.CheckCircle
+                            else -> Icons.Filled.Wifi
+                        }
+                    }
+                    NotificationType.RELAY -> {
+                        if (notification.text.contains("DISC"))
+                            Icons.Filled.Warning
+                        else
+                            Icons.Filled.Info
+                    }
                 },
                 contentDescription = null,
                 modifier = Modifier
                     .size(24.dp)
                     .padding(end = 8.dp),
-                tint = when {
-                    notification.notificationType == NotificationType.EVENT -> MaterialTheme.colorScheme.primary
-                    notification.notificationType == NotificationType.RELAY && notification.text.contains("DISC") -> MaterialTheme.colorScheme.error
-                    else -> MaterialTheme.colorScheme.secondary
+                tint = when (notification.notificationType) {
+                    NotificationType.EVENT -> MaterialTheme.colorScheme.primary
+                    NotificationType.CONNECTIVITY -> {
+                        when {
+                            notification.connectivityType?.contains("disconnection") == true ||
+                                    notification.connectivityType?.contains("lost") == true ->
+                                MaterialTheme.colorScheme.error
+                            notification.connectivityType?.contains("reconnected") == true ||
+                                    notification.connectivityType?.contains("recovered") == true ->
+                                MaterialTheme.colorScheme.tertiary
+                            else -> MaterialTheme.colorScheme.secondary
+                        }
+                    }
+                    NotificationType.RELAY -> {
+                        if (notification.text.contains("DISC"))
+                            MaterialTheme.colorScheme.error
+                        else
+                            MaterialTheme.colorScheme.secondary
+                    }
                 }
             )
 
             Column(
                 modifier = Modifier.weight(1f)
             ) {
+                Text(
+                    text = notification.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
                 Text(
                     text = notification.text,
                     style = MaterialTheme.typography.bodyLarge,
@@ -224,28 +270,73 @@ private fun NotificationCard(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
+                when (notification.notificationType) {
+                    NotificationType.CONNECTIVITY -> {
+                        notification.ssid?.let { ssid ->
+                            Text(
+                                text = "Red: $ssid",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                        }
+
+                        notification.timeRange?.let { timeRange ->
+                            Text(
+                                text = "Duración: $timeRange",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                        }
+                    }
+
+                    NotificationType.RELAY -> {
+                        notification.relayName?.let { relay ->
+                            Text(
+                                text = stringResource(R.string.field_relay, relay),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                        }
+                    }
+
+                    NotificationType.EVENT -> {
+                        notification.eventType?.let { eventType ->
+                            Text(
+                                text = "Tipo: $eventType",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                        }
+                    }
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    notification.panelDocName?.let { panelId ->
+                    notification.panelName?.let { panelName ->
+                        Text(
+                            text = "Panel: $panelName",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } ?: notification.panelDocName?.let { panelId ->
                         Text(
                             text = stringResource(R.string.field_panel_id, panelId),
-                            style = MaterialTheme.typography.bodySmall
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+
                     Text(
                         text = notification.date_time,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-
-                notification.relayName?.let { relay ->
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = stringResource(R.string.field_relay, relay),
-                        style = MaterialTheme.typography.bodySmall
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }

@@ -65,11 +65,10 @@ class FirebaseMessagingService : FirebaseMessagingService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-            // Canal para eventos
             val eventChannel = NotificationChannel(
                 "event_notifications",
                 "Eventos",
-                NotificationManager.IMPORTANCE_HIGH // TODOS los eventos son importantes
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Notificaciones sobre eventos del sistema"
                 enableLights(true)
@@ -78,11 +77,22 @@ class FirebaseMessagingService : FirebaseMessagingService() {
             }
             notificationManager.createNotificationChannel(eventChannel)
 
-            // Canal para estado del panel
+            val connectivityChannel = NotificationChannel(
+                "connectivity_notifications",
+                "Conectividad",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Notificaciones sobre problemas de conectividad WiFi e Internet"
+                enableLights(true)
+                enableVibration(true)
+                setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION), null)
+            }
+            notificationManager.createNotificationChannel(connectivityChannel)
+
             val statusChannel = NotificationChannel(
                 "status_notifications",
                 "Estado del Panel",
-                NotificationManager.IMPORTANCE_HIGH // Estado del panel es importante
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Notificaciones sobre cambios en el estado del panel"
                 enableLights(true)
@@ -91,11 +101,10 @@ class FirebaseMessagingService : FirebaseMessagingService() {
             }
             notificationManager.createNotificationChannel(statusChannel)
 
-            // Canal para relays
             val relayChannel = NotificationChannel(
                 "relay_notifications",
                 "Estado del Relay",
-                NotificationManager.IMPORTANCE_HIGH // TODOS los cambios de relay son importantes
+                NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Notificaciones sobre cambios en el estado de los relays"
                 enableLights(true)
@@ -179,6 +188,9 @@ class FirebaseMessagingService : FirebaseMessagingService() {
             Log.d(TAG, "Procesando mensaje tipo: $messageType")
 
             when {
+                messageType == "connectivity" -> {
+                    processConnectivityMessage(data)
+                }
                 messageType == "event" || data.containsKey("eventId") || data.containsKey("eventType") -> {
                     processEventMessage(data)
                 }
@@ -195,6 +207,118 @@ class FirebaseMessagingService : FirebaseMessagingService() {
         }
 
         Log.d(TAG, "=================== FIN FCM 24/7 ===================")
+    }
+
+    private fun processConnectivityMessage(data: Map<String, String>) {
+        Log.d(TAG, "=== PROCESANDO CONECTIVIDAD 24/7 ===")
+
+        val clientDocName = data["clientDocName"] ?: ""
+        val panelName = data["panelName"] ?: data["panel_name"] ?: "Panel"
+        val connectivityType = data["connectivityType"] ?: data["connectivity_type"] ?: ""
+        val ssid = data["ssid"] ?: ""
+        val timeRange = data["timeRange"] ?: data["time_range"] ?: ""
+        val messageFromServer = data["message"] ?: ""
+
+        Log.d(TAG, "Datos completos de conectividad: $data")
+        Log.d(TAG, "Panel: $panelName, Tipo: $connectivityType, SSID: $ssid")
+        Log.d(TAG, "Mensaje del servidor: '$messageFromServer'")
+
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                if (messageFromServer.isNotEmpty()) {
+                    Log.d(TAG, "Usando mensaje específico del servidor: '$messageFromServer'")
+                    showConnectivityNotification(clientDocName, panelName, connectivityType, messageFromServer, ssid, timeRange)
+                } else {
+                    val fallbackMessage = when {
+                        connectivityType.contains("disconnection") || connectivityType.contains("lost") -> {
+                            if (connectivityType.contains("wifi")) {
+                                "Panel $panelName se desconectó de la red WiFi $ssid"
+                            } else {
+                                "Panel $panelName perdió conexión a Internet"
+                            }
+                        }
+                        connectivityType.contains("reconnected") || connectivityType.contains("recovered") -> {
+                            if (connectivityType.contains("wifi")) {
+                                "Panel $panelName se reconectó a la red WiFi $ssid"
+                            } else {
+                                "Panel $panelName recuperó conexión a Internet"
+                            }
+                        }
+                        else -> "Cambio de conectividad en panel $panelName"
+                    }
+
+                    Log.w(TAG, "Usando mensaje fallback: '$fallbackMessage'")
+                    showConnectivityNotification(clientDocName, panelName, connectivityType, fallbackMessage, ssid, timeRange)
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Error procesando connectivity message", e)
+            }
+        }
+    }
+
+    private fun showConnectivityNotification(
+        clientDocName: String,
+        panelName: String,
+        connectivityType: String,
+        message: String,
+        ssid: String,
+        timeRange: String
+    ) {
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        val intent = Intent(this, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            putExtra("type", "connectivity")
+            putExtra("clientDocName", clientDocName)
+            putExtra("panelName", panelName)
+            putExtra("connectivityType", connectivityType)
+            putExtra("ssid", ssid)
+            putExtra("timeRange", timeRange)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            System.currentTimeMillis().toInt(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val (title, priority, color) = when {
+            connectivityType.contains("disconnection") || connectivityType.contains("lost") -> {
+                if (connectivityType.contains("wifi")) {
+                    Triple("⚠️ WiFi Desconectado", NotificationCompat.PRIORITY_HIGH, 0xFFFF4444.toInt())
+                } else {
+                    Triple("⚠️ Sin Internet", NotificationCompat.PRIORITY_HIGH, 0xFFFF6600.toInt())
+                }
+            }
+            connectivityType.contains("reconnected") || connectivityType.contains("recovered") -> {
+                if (connectivityType.contains("wifi")) {
+                    Triple("✅ WiFi Reconectado", NotificationCompat.PRIORITY_DEFAULT, 0xFF00AA00.toInt())
+                } else {
+                    Triple("✅ Internet Recuperado", NotificationCompat.PRIORITY_DEFAULT, 0xFF00AA00.toInt())
+                }
+            }
+            else -> {
+                Triple("🔄 Conectividad", NotificationCompat.PRIORITY_DEFAULT, 0xFF0088FF.toInt())
+            }
+        }
+
+        val notification = NotificationCompat.Builder(this, "connectivity_notifications")
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("$clientDocName - $title")
+            .setContentText(message)
+            .setPriority(priority)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+            .setVibrate(longArrayOf(0, 500, 250, 500))
+            .setLights(color, 500, 500)
+            .build()
+
+        notificationManager.notify("connectivity_${panelName}_${connectivityType}".hashCode(), notification)
+        Log.d(TAG, "Notificación de conectividad mostrada: '$message'")
     }
 
     private fun processRelayMessage(data: Map<String, String>) {
@@ -305,13 +429,12 @@ class FirebaseMessagingService : FirebaseMessagingService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // TODAS las notificaciones son importantes en sistema de monitoreo
         val notification = NotificationCompat.Builder(this, "relay_notifications")
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("$clientDocName - Cambio de Estado")
-            .setContentText(message) // USAR EXACTAMENTE el mensaje del servidor
-            .setPriority(NotificationCompat.PRIORITY_HIGH) // SIEMPRE alta prioridad
-            .setCategory(NotificationCompat.CATEGORY_STATUS) // Categoría de estado del sistema
+            .setContentText(message)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
@@ -323,13 +446,11 @@ class FirebaseMessagingService : FirebaseMessagingService() {
         Log.d(TAG, "Notificación de relay mostrada: '$message'")
     }
 
-    // Procesamiento simplificado para otros tipos de mensaje
     private fun processEventMessage(data: Map<String, String>) {
         Log.d(TAG, "Procesando evento 24/7: ${data["eventType"]}")
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // Tu servidor SIEMPRE envía mensaje específico en data.message
                 val title = data["title"] ?: data["eventTitle"] ?: "Evento del Sistema"
                 val message = data["message"] ?: ""
                 val eventId = data["eventId"] ?: ""
@@ -344,7 +465,6 @@ class FirebaseMessagingService : FirebaseMessagingService() {
                         showEventNotification(title, message, eventId, clientDocName, action)
                     }
                 } else {
-                    // Esto solo debería pasar en casos muy extraños
                     Log.w(TAG, "Evento sin mensaje específico del servidor - datos: $data")
                     val fallbackMessage = "Evento ${data["eventType"] ?: ""} ${action.lowercase()}"
                     withContext(Dispatchers.Main) {
@@ -463,7 +583,7 @@ class FirebaseMessagingService : FirebaseMessagingService() {
                         .setSmallIcon(R.drawable.ic_notification)
                         .setContentTitle(title)
                         .setContentText(message)
-                        .setPriority(NotificationCompat.PRIORITY_HIGH) // SIEMPRE importante en monitoreo
+                        .setPriority(NotificationCompat.PRIORITY_HIGH)
                         .setCategory(NotificationCompat.CATEGORY_STATUS)
                         .setAutoCancel(true)
                         .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
@@ -506,7 +626,7 @@ class FirebaseMessagingService : FirebaseMessagingService() {
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(message)
-            .setPriority(NotificationCompat.PRIORITY_HIGH) // SIEMPRE alta prioridad
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_EVENT)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
