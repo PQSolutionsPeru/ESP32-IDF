@@ -25,14 +25,18 @@ typedef enum {
     CONNECTIVITY_EVENT_WIFI_LOST = 0,
     CONNECTIVITY_EVENT_WIFI_RECOVERED,
     CONNECTIVITY_EVENT_INTERNET_LOST,
-    CONNECTIVITY_EVENT_INTERNET_RECOVERED
+    CONNECTIVITY_EVENT_INTERNET_RECOVERED,
+    CONNECTIVITY_EVENT_MQTT_LOST,
+    CONNECTIVITY_EVENT_MQTT_RECOVERED
 } connectivity_event_type_t;
 
 typedef struct {
     bool wifi_connected;
     bool internet_available;
+    bool mqtt_connected;
     int64_t wifi_lost_time;
     int64_t internet_lost_time;
+    int64_t mqtt_lost_time;
     int64_t last_check_time;
     char current_ssid[33];
 } connectivity_status_t;
@@ -82,6 +86,8 @@ int connectivity_monitor_get_pending_event_count(void);
 esp_err_t connectivity_monitor_get_ram_usage_stats(size_t *total_events, size_t *pending_events, size_t *memory_used);
 
 void connectivity_monitor_debug_dump_events(void);
+
+esp_err_t connectivity_monitor_report_mqtt_status(bool mqtt_connected);
 
 #ifdef __cplusplus
 }

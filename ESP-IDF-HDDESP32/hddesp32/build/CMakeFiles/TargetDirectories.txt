@@ -858,6 +858,13 @@ E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp3
 E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/time_manager/CMakeFiles/install.dir
 E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/time_manager/CMakeFiles/install/local.dir
 E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/time_manager/CMakeFiles/install/strip.dir
+E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/connectivity_monitor/CMakeFiles/__idf_connectivity_monitor.dir
+E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/connectivity_monitor/CMakeFiles/edit_cache.dir
+E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/connectivity_monitor/CMakeFiles/rebuild_cache.dir
+E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/connectivity_monitor/CMakeFiles/list_install_components.dir
+E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/connectivity_monitor/CMakeFiles/install.dir
+E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/connectivity_monitor/CMakeFiles/install/local.dir
+E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/connectivity_monitor/CMakeFiles/install/strip.dir
 E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/mqtt_manager/CMakeFiles/__idf_mqtt_manager.dir
 E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/mqtt_manager/CMakeFiles/edit_cache.dir
 E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/mqtt_manager/CMakeFiles/rebuild_cache.dir
@@ -879,13 +886,6 @@ E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp3
 E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/config_processor/CMakeFiles/install.dir
 E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/config_processor/CMakeFiles/install/local.dir
 E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/config_processor/CMakeFiles/install/strip.dir
-E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/connectivity_monitor/CMakeFiles/__idf_connectivity_monitor.dir
-E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/connectivity_monitor/CMakeFiles/edit_cache.dir
-E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/connectivity_monitor/CMakeFiles/rebuild_cache.dir
-E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/connectivity_monitor/CMakeFiles/list_install_components.dir
-E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/connectivity_monitor/CMakeFiles/install.dir
-E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/connectivity_monitor/CMakeFiles/install/local.dir
-E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/connectivity_monitor/CMakeFiles/install/strip.dir
 E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/wifi_captive_portal/CMakeFiles/__idf_wifi_captive_portal.dir
 E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/wifi_captive_portal/CMakeFiles/edit_cache.dir
 E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/wifi_captive_portal/CMakeFiles/rebuild_cache.dir

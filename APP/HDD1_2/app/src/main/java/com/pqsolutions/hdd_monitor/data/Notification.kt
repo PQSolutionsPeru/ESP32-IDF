@@ -151,8 +151,10 @@ data class Notification(
                 connectivityType != null ||
                 documentName.contains("wifi_") ||
                 documentName.contains("inet_") ||
+                documentName.contains("mqtt_") ||
                 message.contains("desconectó de la red") ||
                 message.contains("sin internet") ||
+                message.contains("servidor MQTT") ||
                 message.contains("reconectó") ||
                 message.contains("recuperó conectividad")
     }
@@ -193,7 +195,8 @@ data class Notification(
             documentName.startsWith("notification_") ||
             documentName.startsWith("relay_") ||
             documentName.startsWith("wifi_") ||
-            documentName.startsWith("inet_")) {
+            documentName.startsWith("inet_") ||
+            documentName.startsWith("mqtt_")) {
             return true
         }
 
@@ -231,6 +234,13 @@ data class Notification(
         return when {
             isConnectivityNotification() -> {
                 title ?: when {
+                    connectivityType?.contains("mqtt") == true -> {
+                        if (connectivityType.contains("disconnection")) {
+                            "Pérdida de Conexión al Servidor"
+                        } else {
+                            "Servidor Reconectado"
+                        }
+                    }
                     connectivityType?.contains("disconnection") == true ||
                             connectivityType?.contains("lost") == true -> "Pérdida de Conectividad"
                     connectivityType?.contains("reconnected") == true ||
@@ -242,6 +252,13 @@ data class Notification(
             isRelayNotification() -> "Actualización de Panel"
             else -> "Notificación del Sistema"
         }
+    }
+
+    fun isMqttNotification(): Boolean {
+        return connectivityType?.contains("mqtt") == true ||
+                documentName.contains("mqtt_") ||
+                message.contains("servidor MQTT") ||
+                message.contains("MQTT")
     }
 
     fun sortByMostRecent(notifications: List<Notification>): List<Notification> {
@@ -287,8 +304,12 @@ data class Notification(
             isConnectivityNotification() -> {
                 append("type='connectivity', ")
                 append("connectivity_type='$connectivityType', ")
-                append("ssid='$ssid', ")
-                append("time_range='$timeRange', ")
+                if (isMqttNotification()) {
+                    append("mqtt_event=true, ")
+                } else {
+                    append("ssid='$ssid', ")
+                    append("time_range='$timeRange', ")
+                }
             }
             isEventNotification() -> {
                 append("eventId='$eventId', ")

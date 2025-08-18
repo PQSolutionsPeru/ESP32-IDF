@@ -126,7 +126,10 @@ static void save_event_to_ram(int64_t start_time, int64_t end_time,
     }
     
     LOG_I(TAG, "Event saved to RAM at index %d: %s from %lld to %lld, ssid=%s, panel=%s", 
-          index, (loss_type == CONNECTIVITY_EVENT_WIFI_LOST) ? "wifi_lost" : "internet_lost",
+          index, 
+          (loss_type == CONNECTIVITY_EVENT_WIFI_LOST) ? "wifi_lost" : 
+          (loss_type == CONNECTIVITY_EVENT_INTERNET_LOST) ? "internet_lost" : 
+          (loss_type == CONNECTIVITY_EVENT_MQTT_LOST) ? "mqtt_lost" : "unknown",
           (long long)start_time, (long long)end_time, 
           ctx->pending_events[index].ssid, ctx->pending_events[index].panel_name);
     
@@ -163,11 +166,20 @@ static esp_err_t process_pending_ram_events(void) {
             mqtt_connectivity_message_t msg = {0};
             msg.start_time_ms = ctx->pending_events[i].start_time_ms;
             msg.end_time_ms = ctx->pending_events[i].end_time_ms;
-            
-            if (ctx->pending_events[i].loss_type == CONNECTIVITY_EVENT_WIFI_LOST) {
-                msg.type = CONNECTIVITY_MSG_WIFI_LOST;
-            } else {
-                msg.type = CONNECTIVITY_MSG_INTERNET_LOST;
+
+            switch (ctx->pending_events[i].loss_type) {
+                case CONNECTIVITY_EVENT_WIFI_LOST:
+                    msg.type = CONNECTIVITY_MSG_WIFI_LOST;
+                    break;
+                case CONNECTIVITY_EVENT_INTERNET_LOST:
+                    msg.type = CONNECTIVITY_MSG_INTERNET_LOST;
+                    break;
+                case CONNECTIVITY_EVENT_MQTT_LOST:
+                    msg.type = CONNECTIVITY_MSG_MQTT_LOST;
+                    break;
+                default:
+                    LOG_W(TAG, "Unknown connectivity event type: %d", ctx->pending_events[i].loss_type);
+                    continue;
             }
             
             strncpy(msg.ssid, ctx->pending_events[i].ssid, sizeof(msg.ssid) - 1);
@@ -187,7 +199,9 @@ static esp_err_t process_pending_ram_events(void) {
             
             if (ret == ESP_OK) {
                 LOG_I(TAG, "RAM event %d sent successfully: %s", i,
-                      (msg.type == CONNECTIVITY_MSG_WIFI_LOST) ? "wifi_lost" : "internet_lost");
+                      (msg.type == CONNECTIVITY_MSG_WIFI_LOST) ? "wifi_lost" : 
+                      (msg.type == CONNECTIVITY_MSG_INTERNET_LOST) ? "internet_lost" :
+                      (msg.type == CONNECTIVITY_MSG_MQTT_LOST) ? "mqtt_lost" : "unknown");
                 ctx->pending_events[i].valid = false;
                 processed++;
             } else {
@@ -276,34 +290,37 @@ static void add_event(connectivity_event_type_t type, const char *ssid, int64_t 
     if (xSemaphoreTake(ctx->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         
         if (type == CONNECTIVITY_EVENT_WIFI_LOST) {
-            connectivity_event_t *internet_event = NULL;
             int64_t earliest_loss_time = timestamp;
             
+            // Buscar eventos de internet y MQTT para obtener el timestamp más temprano
             for (int i = 0; i < ctx->event_count; i++) {
                 size_t index = (ctx->event_write_index - ctx->event_count + i) % CONNECTIVITY_MAX_STORED_EVENTS;
                 connectivity_event_t *event = &ctx->events[index];
                 
-                if (event->type == CONNECTIVITY_EVENT_INTERNET_LOST && !event->sent) {
-                    internet_event = event;
-                    earliest_loss_time = event->timestamp_ms;
-                    break;
+                if ((event->type == CONNECTIVITY_EVENT_INTERNET_LOST || 
+                     event->type == CONNECTIVITY_EVENT_MQTT_LOST) && !event->sent) {
+                    if (event->timestamp_ms < earliest_loss_time) {
+                        earliest_loss_time = event->timestamp_ms;
+                    }
                 }
             }
             
-            // Invalidar eventos de internet
+            // Invalidar eventos de internet y MQTT
             for (int i = 0; i < ctx->event_count; i++) {
                 size_t index = (ctx->event_write_index - ctx->event_count + i) % CONNECTIVITY_MAX_STORED_EVENTS;
                 connectivity_event_t *event = &ctx->events[index];
                 
-                if (event->type == CONNECTIVITY_EVENT_INTERNET_LOST && !event->sent) {
+                if ((event->type == CONNECTIVITY_EVENT_INTERNET_LOST || 
+                     event->type == CONNECTIVITY_EVENT_MQTT_LOST) && !event->sent) {
                     event->sent = true;
                 }
             }
             
-            // Limpiar eventos RAM
+            // Limpiar eventos RAM de internet y MQTT
             for (int j = ctx->pending_event_count - 1; j >= 0; j--) {
                 if (ctx->pending_events[j].valid && 
-                    ctx->pending_events[j].loss_type == CONNECTIVITY_EVENT_INTERNET_LOST) {
+                    (ctx->pending_events[j].loss_type == CONNECTIVITY_EVENT_INTERNET_LOST ||
+                     ctx->pending_events[j].loss_type == CONNECTIVITY_EVENT_MQTT_LOST)) {
                     ctx->pending_events[j].valid = false;
                 }
             }
@@ -443,9 +460,61 @@ static void add_event(connectivity_event_type_t type, const char *ssid, int64_t 
                 }
             }
         }
+
+        else if (type == CONNECTIVITY_EVENT_MQTT_RECOVERED) {
+            bool has_pending_wifi_loss = false;
+            for (int i = 0; i < ctx->event_count; i++) {
+                size_t index = (ctx->event_write_index - ctx->event_count + i) % CONNECTIVITY_MAX_STORED_EVENTS;
+                connectivity_event_t *event = &ctx->events[index];
+                
+                if (event->type == CONNECTIVITY_EVENT_WIFI_LOST && !event->sent) {
+                    has_pending_wifi_loss = true;
+                    break;
+                }
+            }
+            
+            if (!has_pending_wifi_loss) {
+                connectivity_event_t *mqtt_loss = NULL;
+                for (int i = ctx->event_count - 1; i >= 0; i--) {
+                    size_t index = (ctx->event_write_index - ctx->event_count + i) % CONNECTIVITY_MAX_STORED_EVENTS;
+                    connectivity_event_t *event = &ctx->events[index];
+                    
+                    if (event->type == CONNECTIVITY_EVENT_MQTT_LOST && !event->sent) {
+                        mqtt_loss = event;
+                        break;
+                    }
+                }
+                
+                if (mqtt_loss) {
+                    char panel_name[32] = {0};
+                    if (config_manager_get_str("panel_name", panel_name, sizeof(panel_name)) != ESP_OK || 
+                        strlen(panel_name) == 0) {
+                        strcpy(panel_name, "Panel");
+                    }
+                    
+                    save_event_to_ram(mqtt_loss->timestamp_ms, timestamp, CONNECTIVITY_EVENT_MQTT_LOST,
+                                      ssid ? ssid : mqtt_loss->ssid, panel_name);
+                    
+                    mqtt_loss->sent = true;
+                    
+                    if (ctx->event_callback) {
+                        connectivity_event_t recovery_event = {0};
+                        recovery_event.type = CONNECTIVITY_EVENT_MQTT_RECOVERED;
+                        recovery_event.timestamp_ms = timestamp;
+                        strncpy(recovery_event.ssid, ssid ? ssid : mqtt_loss->ssid, sizeof(recovery_event.ssid) - 1);
+                        recovery_event.ssid[sizeof(recovery_event.ssid) - 1] = '\0';
+                        strncpy(recovery_event.panel_name, panel_name, sizeof(recovery_event.panel_name) - 1);
+                        recovery_event.panel_name[sizeof(recovery_event.panel_name) - 1] = '\0';
+                        recovery_event.sent = true;
+                        
+                        ctx->event_callback(&recovery_event, ctx->callback_user_data);
+                    }
+                }
+            }
+        }
         
         else {
-            // Eventos de pérdida (INTERNET_LOST, etc.)
+            // Eventos de pérdida (INTERNET_LOST, MQTT_LOST, etc.)
             connectivity_event_t *event = &ctx->events[ctx->event_write_index];
             event->type = type;
             event->timestamp_ms = timestamp;
@@ -505,6 +574,7 @@ static void monitor_task(void *pvParameters) {
         
         bool wifi_connected = wifi_manager_is_connected();
         bool internet_available = false;
+        bool mqtt_connected = mqtt_manager_is_connected();
         
         if (wifi_connected) {
             char current_ssid[33] = {0};
@@ -529,6 +599,7 @@ static void monitor_task(void *pvParameters) {
         if (xSemaphoreTake(ctx->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
             bool wifi_state_changed = (ctx->status.wifi_connected != wifi_connected);
             bool internet_state_changed = (ctx->status.internet_available != internet_available);
+            bool mqtt_state_changed = (ctx->status.mqtt_connected != mqtt_connected);
             
             // PRIORIDAD 1: Cambios de WiFi (más críticos)
             if (wifi_state_changed) {
@@ -551,10 +622,30 @@ static void monitor_task(void *pvParameters) {
                 
                 if (wifi_connected && event_to_add == CONNECTIVITY_EVENT_WIFI_RECOVERED) {
                     ctx->status.internet_lost_time = 0;
+                    ctx->status.mqtt_lost_time = 0;
                 }
             }
             
-            // PRIORIDAD 2: Cambios de Internet (solo si no hay eventos WiFi)
+            // PRIORIDAD 2: Cambios de MQTT (solo si no hay eventos WiFi)
+            else if (wifi_connected && mqtt_state_changed) {
+                if (!mqtt_connected && ctx->status.mqtt_connected) {
+                    ctx->status.mqtt_lost_time = current_time;
+                    event_to_add = CONNECTIVITY_EVENT_MQTT_LOST;
+                    strncpy(event_ssid, ctx->status.current_ssid, sizeof(event_ssid) - 1);
+                    add_event_needed = true;
+                    LOG_W(TAG, "MQTT connection lost while connected to WiFi: %s", ctx->status.current_ssid);
+                } else if (mqtt_connected && !ctx->status.mqtt_connected) {
+                    if (ctx->status.mqtt_lost_time > 0) {
+                        event_to_add = CONNECTIVITY_EVENT_MQTT_RECOVERED;
+                        strncpy(event_ssid, ctx->status.current_ssid, sizeof(event_ssid) - 1);
+                        add_event_needed = true;
+                        LOG_I(TAG, "MQTT connection recovered on WiFi: %s", ctx->status.current_ssid);
+                        ctx->status.mqtt_lost_time = 0;
+                    }
+                }
+            }
+            
+            // PRIORIDAD 3: Cambios de Internet (solo si no hay eventos WiFi o MQTT)
             else if (wifi_connected && internet_state_changed) {
                 if (!internet_available && ctx->status.internet_available) {
                     ctx->status.internet_lost_time = current_time;
@@ -575,10 +666,13 @@ static void monitor_task(void *pvParameters) {
             
             if (!wifi_connected) {
                 internet_available = false;
+                mqtt_connected = false;
                 ctx->status.internet_lost_time = 0;
+                ctx->status.mqtt_lost_time = 0;
             }
             
             ctx->status.internet_available = internet_available;
+            ctx->status.mqtt_connected = mqtt_connected;
             ctx->status.last_check_time = current_time;
             
             xSemaphoreGive(ctx->mutex);
@@ -593,6 +687,35 @@ static void monitor_task(void *pvParameters) {
     
     LOG_I(TAG, "Monitor task ending");
     vTaskDelete(NULL);
+}
+
+esp_err_t connectivity_monitor_report_mqtt_status(bool mqtt_connected) {
+    connectivity_monitor_context_t *ctx = &s_conn_ctx;
+    
+    if (ctx->mutex == NULL || !ctx->monitoring_active) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    int64_t current_time = esp_timer_get_time() / 1000;
+    
+    if (xSemaphoreTake(ctx->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        if (ctx->status.mqtt_connected != mqtt_connected) {
+            LOG_I(TAG, "MQTT status change reported: %s -> %s", 
+                  ctx->status.mqtt_connected ? "connected" : "disconnected",
+                  mqtt_connected ? "connected" : "disconnected");
+            
+            ctx->status.mqtt_connected = mqtt_connected;
+            
+            if (!mqtt_connected) {
+                ctx->status.mqtt_lost_time = current_time;
+            } else {
+                ctx->status.mqtt_lost_time = 0;
+            }
+        }
+        xSemaphoreGive(ctx->mutex);
+    }
+    
+    return ESP_OK;
 }
 
 esp_err_t connectivity_monitor_init(void) {

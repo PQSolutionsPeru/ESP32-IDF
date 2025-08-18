@@ -1,7 +1,7 @@
 idf_component_register(
     SRCS "mqtt_manager.c" "mqtt_ssl_setup.c"
     INCLUDE_DIRS "include"
-    REQUIRES esp_wifi mqtt nvs_flash esp_event config_manager esp32_id_manager wifi_manager time_manager esp_common mbedtls esp_timer custom_logging
+    REQUIRES esp_wifi mqtt nvs_flash esp_event config_manager esp32_id_manager wifi_manager time_manager connectivity_monitor esp_common mbedtls esp_timer custom_logging
 )
 
 # Configuraciones optimizadas para ESP32 4MB - ESP-IDF v5.4.1

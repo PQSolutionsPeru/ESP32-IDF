@@ -201,7 +201,7 @@ class MQTTClient:
             from notification_handler import NotificationHandler
             notification_handler = NotificationHandler(self.db)
             
-            if event_type in ['WIFI_DISCONNECTED', 'INTERNET_LOST']:
+            if event_type in ['WIFI_DISCONNECTED', 'INTERNET_LOST', 'MQTT_DISCONNECTED']:
                 if event_type == 'WIFI_DISCONNECTED':
                     message = f"Panel {panel_name} se desconectó de la red {ssid}"
                     if time_range:
@@ -209,27 +209,39 @@ class MQTTClient:
                     notification_handler.send_wifi_disconnection_notification(
                         client_id, panel_name, ssid, time_range, client_name
                     )
-                else:
+                elif event_type == 'INTERNET_LOST':
                     message = f"Panel {panel_name} estuvo sin internet"
                     if time_range:
                         message += f" de {time_range}"
                     notification_handler.send_internet_loss_notification(
                         client_id, panel_name, time_range, client_name
                     )
+                elif event_type == 'MQTT_DISCONNECTED':
+                    message = f"Panel {panel_name} perdió conexión con el servidor MQTT"
+                    if time_range:
+                        message += f" de {time_range}"
+                    notification_handler.send_mqtt_disconnection_notification(
+                        client_id, panel_name, time_range, client_name
+                    )
                 
                 logging.info(f"Notificación de conectividad enviada: {message}")
-                
-            elif event_type in ['WIFI_RECONNECTED', 'INTERNET_RECOVERED']:
+
+            elif event_type in ['WIFI_RECONNECTED', 'INTERNET_RECOVERED', 'MQTT_RECONNECTED']:
                 if event_type == 'WIFI_RECONNECTED':
                     notification_handler.send_connectivity_recovery_notification(
                         client_id, panel_name, "wifi", ssid, client_name
                     )
                     message = f"Panel {panel_name} se reconectó a la red {ssid}"
-                else:
+                elif event_type == 'INTERNET_RECOVERED':
                     notification_handler.send_connectivity_recovery_notification(
                         client_id, panel_name, "internet", "", client_name
                     )
                     message = f"Panel {panel_name} recuperó conectividad a internet"
+                elif event_type == 'MQTT_RECONNECTED':
+                    notification_handler.send_connectivity_recovery_notification(
+                        client_id, panel_name, "mqtt", "", client_name
+                    )
+                    message = f"Panel {panel_name} se reconectó al servidor MQTT"
                 
                 logging.info(f"Notificación de recuperación enviada: {message}")
                 

@@ -38,6 +38,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -207,13 +208,28 @@ private fun NotificationCard(
                     NotificationType.EVENT -> Icons.Filled.Event
                     NotificationType.CONNECTIVITY -> {
                         when {
-                            notification.connectivityType?.contains("disconnection") == true ||
-                                    notification.connectivityType?.contains("lost") == true ->
-                                Icons.Filled.Warning
-                            notification.connectivityType?.contains("reconnected") == true ||
-                                    notification.connectivityType?.contains("recovered") == true ->
-                                Icons.Filled.CheckCircle
-                            else -> Icons.Filled.Wifi
+                            notification.connectivityType?.contains("mqtt") == true -> {
+                                if (notification.connectivityType.contains("disconnection")) {
+                                    Icons.Filled.Warning  // Servidor desconectado
+                                } else {
+                                    Icons.Filled.CheckCircle  // Servidor reconectado
+                                }
+                            }
+                            notification.connectivityType?.contains("wifi") == true -> {
+                                if (notification.connectivityType.contains("disconnection")) {
+                                    Icons.Filled.Warning  // WiFi desconectado
+                                } else {
+                                    Icons.Filled.Wifi  // WiFi reconectado
+                                }
+                            }
+                            notification.connectivityType?.contains("internet") == true -> {
+                                if (notification.connectivityType.contains("lost")) {
+                                    Icons.Filled.Warning  // Internet perdido
+                                } else {
+                                    Icons.Filled.CheckCircle  // Internet recuperado
+                                }
+                            }
+                            else -> Icons.Filled.Info  // Conectividad genérica
                         }
                     }
                     NotificationType.RELAY -> {
@@ -231,12 +247,27 @@ private fun NotificationCard(
                     NotificationType.EVENT -> MaterialTheme.colorScheme.primary
                     NotificationType.CONNECTIVITY -> {
                         when {
-                            notification.connectivityType?.contains("disconnection") == true ||
-                                    notification.connectivityType?.contains("lost") == true ->
-                                MaterialTheme.colorScheme.error
-                            notification.connectivityType?.contains("reconnected") == true ||
-                                    notification.connectivityType?.contains("recovered") == true ->
-                                MaterialTheme.colorScheme.tertiary
+                            notification.connectivityType?.contains("mqtt") == true -> {
+                                if (notification.connectivityType.contains("disconnection")) {
+                                    MaterialTheme.colorScheme.error  // Rojo para servidor desconectado
+                                } else {
+                                    Color(0xFF0088AA)  // Azul cyan para servidor reconectado
+                                }
+                            }
+                            notification.connectivityType?.contains("wifi") == true -> {
+                                if (notification.connectivityType.contains("disconnection")) {
+                                    MaterialTheme.colorScheme.error  // Rojo para WiFi desconectado
+                                } else {
+                                    MaterialTheme.colorScheme.primary  // Azul para WiFi reconectado
+                                }
+                            }
+                            notification.connectivityType?.contains("internet") == true -> {
+                                if (notification.connectivityType.contains("lost")) {
+                                    Color(0xFFFF6600)  // Naranja para internet perdido
+                                } else {
+                                    MaterialTheme.colorScheme.tertiary  // Verde para internet recuperado
+                                }
+                            }
                             else -> MaterialTheme.colorScheme.secondary
                         }
                     }
@@ -272,13 +303,33 @@ private fun NotificationCard(
 
                 when (notification.notificationType) {
                     NotificationType.CONNECTIVITY -> {
-                        notification.ssid?.let { ssid ->
-                            Text(
-                                text = "Red: $ssid",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
+                        when {
+                            notification.connectivityType?.contains("mqtt") == true -> {
+                                Text(
+                                    text = "Servidor MQTT",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                            }
+                            notification.connectivityType?.contains("wifi") == true -> {
+                                notification.ssid?.let { ssid ->
+                                    Text(
+                                        text = "Red: $ssid",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                }
+                            }
+                            notification.connectivityType?.contains("internet") == true -> {
+                                Text(
+                                    text = "Conectividad a Internet",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                            }
                         }
 
                         notification.timeRange?.let { timeRange ->

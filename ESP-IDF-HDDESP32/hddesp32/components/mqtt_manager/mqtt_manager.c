@@ -24,6 +24,7 @@
 #include "config_manager.h"
 #include "wifi_manager.h"
 #include "time_manager.h"
+#include "connectivity_monitor.h"
 
 #define TAG "MQTT_MGR"
 
@@ -326,6 +327,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             
             safe_mqtt_clear_bits(ctx, MQTT_DISCONNECTED_BIT | MQTT_ERROR_BIT);
             safe_mqtt_set_bits(ctx, MQTT_CONNECTED_BIT);
+            connectivity_monitor_report_mqtt_status(true);
             
             if (ctx->state_callback) {
                 ctx->state_callback(ctx->state, ctx->state_user_data);
@@ -363,6 +365,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             
             safe_mqtt_clear_bits(ctx, MQTT_CONNECTED_BIT);
             safe_mqtt_set_bits(ctx, MQTT_DISCONNECTED_BIT);
+            connectivity_monitor_report_mqtt_status(false);
             
             if (ctx->state_callback) {
                 ctx->state_callback(ctx->state, ctx->state_user_data);
@@ -418,6 +421,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             
             safe_mqtt_clear_bits(ctx, MQTT_CONNECTED_BIT);
             safe_mqtt_set_bits(ctx, MQTT_ERROR_BIT);
+
+            connectivity_monitor_report_mqtt_status(false);
             
             if (ctx->state_callback) {
                 ctx->state_callback(ctx->state, ctx->state_user_data);
@@ -1228,6 +1233,14 @@ esp_err_t mqtt_manager_send_connectivity_message(const mqtt_connectivity_message
         case CONNECTIVITY_MSG_INTERNET_RECOVERED:
             event_type = "INTERNET_RECOVERED";
             status_type = "internet_recovered";
+            break;
+        case CONNECTIVITY_MSG_MQTT_LOST:
+            event_type = "MQTT_DISCONNECTED";
+            status_type = "mqtt_lost";
+            break;
+        case CONNECTIVITY_MSG_MQTT_RECOVERED:
+            event_type = "MQTT_RECONNECTED";
+            status_type = "mqtt_recovered";
             break;
         default:
             return ESP_ERR_INVALID_ARG;

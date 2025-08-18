@@ -231,17 +231,17 @@ class FirebaseMessagingService : FirebaseMessagingService() {
                 } else {
                     val fallbackMessage = when {
                         connectivityType.contains("disconnection") || connectivityType.contains("lost") -> {
-                            if (connectivityType.contains("wifi")) {
-                                "Panel $panelName se desconectó de la red WiFi $ssid"
-                            } else {
-                                "Panel $panelName perdió conexión a Internet"
+                            when {
+                                connectivityType.contains("wifi") -> "Panel $panelName se desconectó de la red WiFi $ssid"
+                                connectivityType.contains("mqtt") -> "Panel $panelName perdió conexión con el servidor MQTT"
+                                else -> "Panel $panelName perdió conexión a Internet"
                             }
                         }
                         connectivityType.contains("reconnected") || connectivityType.contains("recovered") -> {
-                            if (connectivityType.contains("wifi")) {
-                                "Panel $panelName se reconectó a la red WiFi $ssid"
-                            } else {
-                                "Panel $panelName recuperó conexión a Internet"
+                            when {
+                                connectivityType.contains("wifi") -> "Panel $panelName se reconectó a la red WiFi $ssid"
+                                connectivityType.contains("mqtt") -> "Panel $panelName se reconectó al servidor MQTT"
+                                else -> "Panel $panelName recuperó conexión a Internet"
                             }
                         }
                         else -> "Cambio de conectividad en panel $panelName"
@@ -286,17 +286,17 @@ class FirebaseMessagingService : FirebaseMessagingService() {
 
         val (title, priority, color) = when {
             connectivityType.contains("disconnection") || connectivityType.contains("lost") -> {
-                if (connectivityType.contains("wifi")) {
-                    Triple("⚠️ WiFi Desconectado", NotificationCompat.PRIORITY_HIGH, 0xFFFF4444.toInt())
-                } else {
-                    Triple("⚠️ Sin Internet", NotificationCompat.PRIORITY_HIGH, 0xFFFF6600.toInt())
+                when {
+                    connectivityType.contains("wifi") -> Triple("⚠️ WiFi Desconectado", NotificationCompat.PRIORITY_HIGH, 0xFFFF4444.toInt())
+                    connectivityType.contains("mqtt") -> Triple("⚠️ Servidor Desconectado", NotificationCompat.PRIORITY_HIGH, 0xFFFF8800.toInt())
+                    else -> Triple("⚠️ Sin Internet", NotificationCompat.PRIORITY_HIGH, 0xFFFF6600.toInt())
                 }
             }
             connectivityType.contains("reconnected") || connectivityType.contains("recovered") -> {
-                if (connectivityType.contains("wifi")) {
-                    Triple("✅ WiFi Reconectado", NotificationCompat.PRIORITY_DEFAULT, 0xFF00AA00.toInt())
-                } else {
-                    Triple("✅ Internet Recuperado", NotificationCompat.PRIORITY_DEFAULT, 0xFF00AA00.toInt())
+                when {
+                    connectivityType.contains("wifi") -> Triple("✅ WiFi Reconectado", NotificationCompat.PRIORITY_DEFAULT, 0xFF00AA00.toInt())
+                    connectivityType.contains("mqtt") -> Triple("✅ Servidor Reconectado", NotificationCompat.PRIORITY_DEFAULT, 0xFF0088AA.toInt())
+                    else -> Triple("✅ Internet Recuperado", NotificationCompat.PRIORITY_DEFAULT, 0xFF00AA00.toInt())
                 }
             }
             else -> {
