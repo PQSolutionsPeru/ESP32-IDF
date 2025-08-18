@@ -32,7 +32,7 @@ class DashboardViewModel @Inject constructor(
 
     private var panelsJob: Job? = null
     private var currentClientDocName: String? = null
-    private var isFirstLoad = true
+    private var isInitialized = false
 
     companion object {
         private const val TAG = "DashboardViewModel"
@@ -43,20 +43,13 @@ class DashboardViewModel @Inject constructor(
         loadPanels()
     }
 
-    fun onResume() {
-        Log.d(TAG, "DashboardViewModel resumed - verificando necesidad de recargar")
-
-        if (!isFirstLoad) {
-            Log.d(TAG, "Dashboard resume detectado - forzando recarga de listeners")
-            forceRefreshPanels()
-        } else {
-            isFirstLoad = false
-        }
-    }
-
     fun loadPanels() {
-        Log.d(TAG, "loadPanels() called")
+        if (isInitialized && panelsJob?.isActive == true) {
+            Log.d(TAG, "Panels already loading, skipping duplicate call")
+            return
+        }
 
+        Log.d(TAG, "loadPanels() called")
         _uiState.update { it.copy(isLoading = true, error = null) }
 
         panelsJob?.cancel()
@@ -79,6 +72,7 @@ class DashboardViewModel @Inject constructor(
                     }
 
                     startPanelListener(currentClientDocName)
+                    isInitialized = true
 
                 } else {
                     Log.e(TAG, "No authenticated user found")
@@ -118,7 +112,7 @@ class DashboardViewModel @Inject constructor(
                 Log.d(TAG, "Received ${panels.size} panels from repository")
 
                 panels.forEach { panel ->
-                    Log.d(TAG, "Panel: ${panel.name}, Relays: ${panel.relays.size}, Active: ${panel.activeRelays.size}")
+                    Log.d(TAG, "Panel: ${panel.name}, Relays: ${panel.relays.size}, Active: ${panel.activeRelays.size}, ESP32Status: ${panel.esp32Status}")
                 }
 
                 val validPanels = panels.filter { panel ->
@@ -145,28 +139,27 @@ class DashboardViewModel @Inject constructor(
             }
     }
 
-    fun forceRefreshPanels() {
-        Log.d(TAG, "Forzando refresh completo de paneles")
+    fun refreshPanels() {
+        Log.d(TAG, "Refresh manual solicitado")
+        _uiState.update { it.copy(isLoading = true) }
 
         viewModelScope.launch {
             try {
-                panelRepository.performPeriodicCleanup()
+                val clientsMap = loadClientNames(currentClientDocName)
 
-                kotlinx.coroutines.delay(500)
-
-                loadPanels()
+                _uiState.update { currentState ->
+                    currentState.copy(
+                        clientNames = clientsMap,
+                        lastUpdate = System.currentTimeMillis()
+                    )
+                }
             } catch (e: Exception) {
-                Log.e(TAG, "Error en force refresh", e)
+                Log.e(TAG, "Error en refresh", e)
                 _uiState.update { it.copy(
                     error = "Error refrescando datos: ${e.message}"
                 ) }
             }
         }
-    }
-
-    fun refreshPanels() {
-        Log.d(TAG, "Refresh manual solicitado")
-        loadPanels()
     }
 
     private suspend fun loadClientNames(clientDocName: String?): Map<String, String> {

@@ -73,7 +73,7 @@ fun UserDashboardScreen(
     val context = LocalContext.current
 
     LaunchedEffect(Unit) {
-        viewModel.loadPanels()
+        Log.d(TAG, "UserDashboard - Initial load")
         notificationViewModel.restartNotificationCollection()
     }
 
@@ -82,6 +82,20 @@ fun UserDashboardScreen(
             ScreenTopBar(
                 title = stringResource(R.string.user_dashboard_title),
                 actions = {
+                    IconButton(
+                        onClick = {
+                            Log.d(TAG, "Manual refresh requested")
+                            performHapticFeedback(context)
+                            viewModel.refreshPanels()
+                            notificationViewModel.restartNotificationCollection()
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Actualizar"
+                        )
+                    }
+
                     AnimatedNotificationBell(
                         hasNewNotifications = hasPendingNotifications,
                         notificationCount = notificationUiState.pendingCount,
@@ -136,9 +150,41 @@ fun UserDashboardScreen(
                     }
                 } else {
                     uiState.panels.forEach { panel ->
-                        item(key = panel.documentName) {
+                        item(key = "${panel.documentName}_${panel.lastUpdate}_${panel.esp32Status}") {
                             UserPanelItem(panel)
                             Spacer(modifier = Modifier.height(8.dp))
+                        }
+                    }
+                }
+
+                if (uiState.error != null) {
+                    item {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp)
+                            ) {
+                                Text(
+                                    "Error: ${uiState.error}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Button(
+                                    onClick = {
+                                        viewModel.clearError()
+                                        viewModel.refreshPanels()
+                                    }
+                                ) {
+                                    Text("Reintentar")
+                                }
+                            }
                         }
                     }
                 }

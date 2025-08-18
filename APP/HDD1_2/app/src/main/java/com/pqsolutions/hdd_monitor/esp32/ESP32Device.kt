@@ -19,6 +19,15 @@ data class ESP32Device(
     @get:PropertyName("lastNetworkUpdate")
     @set:PropertyName("lastNetworkUpdate")
     var lastNetworkUpdate: com.google.firebase.Timestamp = com.google.firebase.Timestamp.now(),
+    @get:PropertyName("lastDisconnect")
+    @set:PropertyName("lastDisconnect")
+    var lastDisconnect: com.google.firebase.Timestamp? = null,
+    @get:PropertyName("lastConfigResponse")
+    @set:PropertyName("lastConfigResponse")
+    var lastConfigResponse: com.google.firebase.Timestamp? = null,
+    @get:PropertyName("firstSeen")
+    @set:PropertyName("firstSeen")
+    var firstSeen: com.google.firebase.Timestamp? = null,
     val clientName: String = "",
     val panelName: String = ""
 ) {
@@ -44,5 +53,11 @@ data class ESP32Device(
         "lastNetworkUpdate" to lastNetworkUpdate,
         "clientName" to clientName,
         "panelName" to panelName
-    )
+    ).let { baseMap ->
+        val fullMap = baseMap.toMutableMap()
+        lastDisconnect?.let { fullMap["lastDisconnect"] = it }
+        lastConfigResponse?.let { fullMap["lastConfigResponse"] = it }
+        firstSeen?.let { fullMap["firstSeen"] = it }
+        fullMap
+    }
 }

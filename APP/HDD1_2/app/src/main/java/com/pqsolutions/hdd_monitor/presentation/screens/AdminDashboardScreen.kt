@@ -27,7 +27,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -38,13 +37,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import com.pqsolutions.hdd_monitor.R
 import com.pqsolutions.hdd_monitor.data.Panel
 import com.pqsolutions.hdd_monitor.data.Relay
@@ -73,33 +69,9 @@ fun AdminDashboardScreen(
     val uiState by viewModel.uiState.collectAsState()
     val notificationUiState by notificationViewModel.uiState.collectAsState()
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_RESUME -> {
-                    Log.d(TAG, "AdminDashboard - ON_RESUME detectado")
-                    viewModel.onResume()
-                    notificationViewModel.restartNotificationCollection()
-                }
-                Lifecycle.Event.ON_START -> {
-                    Log.d(TAG, "AdminDashboard - ON_START detectado")
-                }
-                else -> {}
-            }
-        }
-
-        lifecycleOwner.lifecycle.addObserver(observer)
-
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
 
     LaunchedEffect(Unit) {
-        Log.d(TAG, "AdminDashboard - Carga inicial")
-        viewModel.loadPanels()
+        Log.d(TAG, "AdminDashboard - Initial load")
         notificationViewModel.restartNotificationCollection()
     }
 
@@ -110,9 +82,9 @@ fun AdminDashboardScreen(
                 actions = {
                     IconButton(
                         onClick = {
-                            Log.d(TAG, "Refresh manual solicitado")
+                            Log.d(TAG, "Manual refresh requested")
                             performHapticFeedback(context)
-                            viewModel.forceRefreshPanels()
+                            viewModel.refreshPanels()
                             notificationViewModel.restartNotificationCollection()
                         }
                     ) {
@@ -205,7 +177,7 @@ fun AdminDashboardScreen(
                     }
 
                     clientPanels.forEach { panel ->
-                        item(key = "${panel.documentName}_${panel.lastUpdate}") {
+                        item(key = "${panel.documentName}_${panel.lastUpdate}_${panel.esp32Status}") {
                             AdminPanelItem(panel)
                             Spacer(modifier = Modifier.height(8.dp))
                         }
@@ -234,7 +206,7 @@ fun AdminDashboardScreen(
                                 Button(
                                     onClick = {
                                         viewModel.clearError()
-                                        viewModel.forceRefreshPanels()
+                                        viewModel.refreshPanels()
                                     }
                                 ) {
                                     Text("Reintentar")
@@ -314,7 +286,7 @@ private fun DashboardButton(onClick: () -> Unit, text: String) {
 fun AdminPanelItem(panel: Panel) {
     var expanded by remember { mutableStateOf(false) }
 
-    Log.d(TAG, "AdminPanelItem - Panel: ${panel.name}, Total relays: ${panel.relays.size}, Active relays: ${panel.activeRelays.size}")
+    Log.d(TAG, "AdminPanelItem - Panel: ${panel.name}, Total relays: ${panel.relays.size}, Active relays: ${panel.activeRelays.size}, ESP32 Status: ${panel.esp32Status}")
     panel.relays.forEach { relay ->
         Log.d(TAG, "  Relay: ${relay.name}, isActive: ${relay.isActive}, status: ${relay.status}")
     }

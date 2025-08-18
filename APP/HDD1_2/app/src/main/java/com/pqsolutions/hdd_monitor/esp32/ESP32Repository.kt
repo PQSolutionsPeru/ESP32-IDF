@@ -12,6 +12,7 @@ import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.Source
+import com.google.firebase.firestore.MetadataChanges
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -125,7 +126,7 @@ class ESP32Repository @Inject constructor(
             activeListeners[listenerId]?.remove()
 
             listenerRegistration = firestore.collection(ESP32_COLLECTION)
-                .addSnapshotListener { snapshot, error ->
+                .addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
                     if (error != null) {
                         Log.e(TAG, "Error al observar ESP32s", error)
                         return@addSnapshotListener
@@ -134,6 +135,11 @@ class ESP32Repository @Inject constructor(
                     val devices = snapshot?.documents?.mapNotNull { doc ->
                         doc.toESP32Device()
                     } ?: emptyList()
+
+                    Log.d(TAG, "ESP32s actualizados: ${devices.size} dispositivos")
+                    devices.forEach { device ->
+                        Log.d(TAG, "ESP32: ${device.documentName}, Status: ${device.status}")
+                    }
 
                     trySend(devices)
                 }
@@ -252,13 +258,13 @@ class ESP32Repository @Inject constructor(
 
             val listenerRegistration = firestore.collection(ESP32_COLLECTION)
                 .document(esp32Id)
-                .addSnapshotListener { snapshot, error ->
+                .addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
                     if (error != null) {
                         Log.e(TAG, "Error al observar estado de ESP32 $esp32Id", error)
                         return@addSnapshotListener
                     }
 
-                    val status = snapshot?.getString("status") ?: "UNKNOWN"
+                    val status = snapshot?.getString("status") ?: ESP32Device.STATUS_OFFLINE
                     Log.d(TAG, "Estado de ESP32 $esp32Id actualizado: $status")
                     trySend(status)
                 }
@@ -289,7 +295,7 @@ class ESP32Repository @Inject constructor(
                         ESP32Device.STATUS_RUNNING,
                         ESP32Device.STATUS_OFFLINE
                     ))
-                    .addSnapshotListener { snapshot, error ->
+                    .addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
                         if (error != null) {
                             Log.e(TAG, "Error observando ESP32s asignados para cliente", error)
                             return@addSnapshotListener
@@ -311,7 +317,7 @@ class ESP32Repository @Inject constructor(
                     }
             } else {
                 firestore.collection(ESP32_COLLECTION)
-                    .addSnapshotListener { snapshot, error ->
+                    .addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
                         if (error != null) {
                             Log.e(TAG, "Error observando ESP32s para admin", error)
                             return@addSnapshotListener
@@ -533,14 +539,15 @@ class ESP32Repository @Inject constructor(
                 "status" to ESP32Device.STATUS_AWAITING_CONFIG,
                 "client_id" to "",
                 "panel_id" to "",
-                "lastUpdate" to Timestamp.now()
+                "lastUpdate" to Timestamp.now(),
+                "lastNetworkUpdate" to Timestamp.now()
             )
         } else {
             mapOf(
                 "IP" to ip,
                 "MAC" to mac.uppercase().replace(":", ""),
-                "status" to ESP32Device.STATUS_AWAITING_CONFIG,
-                "lastUpdate" to Timestamp.now()
+                "lastUpdate" to Timestamp.now(),
+                "lastNetworkUpdate" to Timestamp.now()
             )
         }
 
