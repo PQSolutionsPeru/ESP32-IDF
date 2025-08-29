@@ -140,77 +140,38 @@ fun AdminDashboardScreen(
                     .weight(1f)
                     .padding(horizontal = 16.dp)
             ) {
+                // Estado de carga
                 if (uiState.isLoading) {
                     item {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 16.dp),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                            Spacer(modifier = Modifier.padding(horizontal = 8.dp))
-                            Text(
-                                "Cargando paneles...",
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                        }
+                        LoadingContent()
+                    }
+                } else if (uiState.error != null) {
+                    // Estado de error
+                    item {
+                        ErrorContent(
+                            error = uiState.error!!,
+                            onRetry = {
+                                viewModel.clearError()
+                                viewModel.refreshPanels()
+                            }
+                        )
                     }
                 } else if (uiState.groupedPanels.isEmpty()) {
+                    // Sin paneles (solo después de cargar)
                     item {
-                        Text(
-                            "No hay paneles disponibles",
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.padding(vertical = 16.dp)
-                        )
+                        EmptyContent()
                     }
-                }
-
-                uiState.groupedPanels.forEach { (clientName, clientPanels) ->
-                    item {
-                        Text(
-                            text = "Cliente: $clientName",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-                    }
-
-                    clientPanels.forEach { panel ->
-                        item(key = "${panel.documentName}_${panel.lastUpdate}_${panel.esp32Status}") {
-                            AdminPanelItem(panel)
-                            Spacer(modifier = Modifier.height(8.dp))
+                } else {
+                    // Contenido normal - paneles agrupados por cliente
+                    uiState.groupedPanels.forEach { (clientName, clientPanels) ->
+                        item(key = "client_header_$clientName") {
+                            ClientHeader(clientName = clientName)
                         }
-                    }
-                }
 
-                if (uiState.error != null) {
-                    item {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp)
-                            ) {
-                                Text(
-                                    "Error: ${uiState.error}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onErrorContainer
-                                )
+                        clientPanels.forEach { panel ->
+                            item(key = panel.documentName) {
+                                AdminPanelItem(panel = panel)
                                 Spacer(modifier = Modifier.height(8.dp))
-                                Button(
-                                    onClick = {
-                                        viewModel.clearError()
-                                        viewModel.refreshPanels()
-                                    }
-                                ) {
-                                    Text("Reintentar")
-                                }
                             }
                         }
                     }
@@ -218,6 +179,92 @@ fun AdminDashboardScreen(
             }
         }
     }
+}
+
+@Composable
+private fun LoadingContent() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 32.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(24.dp),
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.padding(horizontal = 8.dp))
+        Text(
+            "Cargando paneles...",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+@Composable
+private fun ErrorContent(error: String, onRetry: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                "Error: $error",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = onRetry,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error
+                )
+            ) {
+                Text("Reintentar")
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyContent() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            "No hay paneles disponibles",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            "Los paneles aparecerán aquí cuando se configuren",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun ClientHeader(clientName: String) {
+    Text(
+        text = "Cliente: $clientName",
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(vertical = 8.dp)
+    )
 }
 
 @Composable

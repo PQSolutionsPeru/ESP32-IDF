@@ -33,18 +33,21 @@ class PanelRepository @Inject constructor(
         private const val BASE_PATH = "hdd-monitor/accounts/clients"
         private const val MAX_RETRIES = 3
         private const val INITIAL_RETRY_DELAY = 500L
+        private const val UPDATE_DEBOUNCE_MS = 200L
     }
 
     private val activeListeners = ConcurrentHashMap<String, ListenerRegistration>()
     private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val esp32StatusCache = ConcurrentHashMap<String, String>()
 
+    // Cache y debounce para evitar actualizaciones duplicadas
+    private val currentPanelsCache = ConcurrentHashMap<String, List<Panel>>()
+    private var currentUpdateCallback: ((List<Panel>) -> Unit)? = null
+    private var lastUpdateTime = 0L
+
     init {
         startESP32StatusMonitoring()
     }
-
-    private val currentPanelsCache = ConcurrentHashMap<String, List<Panel>>()
-    private var currentUpdateCallback: ((List<Panel>) -> Unit)? = null
 
     private fun startESP32StatusMonitoring() {
         coroutineScope.launch {
@@ -72,19 +75,50 @@ class PanelRepository @Inject constructor(
 
     private fun updateAllPanelsWithNewESP32Status() {
         coroutineScope.launch {
+            // Consolidar todas las actualizaciones en una sola
+            val allUpdatedPanels = mutableListOf<Panel>()
+            var hasUpdates = false
+
             currentPanelsCache.values.forEach { panelsList ->
                 val updatedPanels = panelsList.map { panel ->
                     val newESP32Status = esp32StatusCache[panel.esp32_id] ?: ESP32Device.STATUS_OFFLINE
                     if (panel.esp32Status != newESP32Status) {
                         Log.d(TAG, "Updating panel ${panel.name} ESP32 status: ${panel.esp32Status} -> $newESP32Status")
+                        hasUpdates = true
                         panel.copy(esp32Status = newESP32Status)
                     } else {
                         panel
                     }
                 }
-                currentUpdateCallback?.invoke(updatedPanels)
+                allUpdatedPanels.addAll(updatedPanels)
+            }
+
+            if (hasUpdates) {
+                // Deduplicar y enviar una sola actualización
+                val uniqueUpdatedPanels = allUpdatedPanels.distinctBy { it.documentName }
+                sendDebouncedUpdate(uniqueUpdatedPanels)
             }
         }
+    }
+
+    private fun sendDebouncedUpdate(panels: List<Panel>) {
+        val now = System.currentTimeMillis()
+        if (now - lastUpdateTime < UPDATE_DEBOUNCE_MS) {
+            // Programar actualización después del debounce
+            coroutineScope.launch {
+                delay(UPDATE_DEBOUNCE_MS)
+                sendUpdate(panels)
+            }
+        } else {
+            sendUpdate(panels)
+        }
+    }
+
+    private fun sendUpdate(panels: List<Panel>) {
+        lastUpdateTime = System.currentTimeMillis()
+        val uniquePanels = panels.distinctBy { it.documentName }
+        Log.d(TAG, "Sending update with ${uniquePanels.size} unique panels")
+        currentUpdateCallback?.invoke(uniquePanels)
     }
 
     fun getPanels(clientDocName: String?): Flow<List<Panel>> = callbackFlow {
@@ -93,16 +127,19 @@ class PanelRepository @Inject constructor(
         try {
             if (clientDocName != null) {
                 setupClientPanelsFlow(clientDocName) { panels ->
-                    trySend(panels)
+                    val uniquePanels = panels.distinctBy { it.documentName }
+                    trySend(uniquePanels)
                 }
             } else {
                 setupAdminPanelsFlow { panels ->
-                    trySend(panels)
+                    val uniquePanels = panels.distinctBy { it.documentName }
+                    trySend(uniquePanels)
                 }
             }
 
             awaitClose {
                 Log.d(TAG, "Closing panel flow for clientDocName: $clientDocName")
+                clearRelatedListeners(clientDocName)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error setting up panels listener", e)
@@ -110,17 +147,31 @@ class PanelRepository @Inject constructor(
         }
     }.flowOn(Dispatchers.IO)
 
+    private fun clearRelatedListeners(clientDocName: String?) {
+        val keysToRemove = if (clientDocName != null) {
+            activeListeners.keys.filter { it.contains(clientDocName) }
+        } else {
+            activeListeners.keys.filter { it.startsWith("admin_") }
+        }
+
+        keysToRemove.forEach { key ->
+            activeListeners[key]?.remove()
+            activeListeners.remove(key)
+        }
+    }
+
     private fun setupClientPanelsFlow(clientDocName: String, onUpdate: (List<Panel>) -> Unit) {
         val panelListenerId = "panels_$clientDocName"
         currentUpdateCallback = onUpdate
 
+        // Limpiar listeners previos
         activeListeners[panelListenerId]?.remove()
 
         val panelRegistration = firestore.collection("$BASE_PATH/$clientDocName/panels")
             .addSnapshotListener(MetadataChanges.INCLUDE) { panelsSnapshot, error ->
                 if (error != null) {
                     Log.e(TAG, "Error in panels listener for client $clientDocName", error)
-                    onUpdate(emptyList())
+                    sendDebouncedUpdate(emptyList())
                     return@addSnapshotListener
                 }
 
@@ -137,8 +188,8 @@ class PanelRepository @Inject constructor(
                     }
 
                     currentPanelsCache[clientDocName] = panels
-                    setupRelayListeners(panels, onUpdate)
-                    onUpdate(panels)
+                    setupRelayListenersForClient(clientDocName, panels, onUpdate)
+                    sendDebouncedUpdate(panels)
                     Log.d(TAG, "Client panels loaded for $clientDocName: ${panels.size}")
                 }
             }
@@ -152,7 +203,7 @@ class PanelRepository @Inject constructor(
         coroutineScope.launch {
             try {
                 val clientsSnapshot = firestore.collection("$BASE_PATH").get().await()
-                val allPanels = mutableListOf<Panel>()
+                val allPanelsMap = ConcurrentHashMap<String, List<Panel>>()
 
                 for (clientDoc in clientsSnapshot.documents) {
                     if (clientDoc.exists()) {
@@ -180,14 +231,13 @@ class PanelRepository @Inject constructor(
                                         }
                                     }
 
-                                    synchronized(allPanels) {
-                                        allPanels.removeAll { it.clientName == clientId }
-                                        allPanels.addAll(clientPanels)
+                                    allPanelsMap[clientId] = clientPanels
+                                    setupRelayListenersForClient(clientId, clientPanels, onUpdate)
 
-                                        currentPanelsCache["admin_all"] = allPanels.toList()
-                                        setupRelayListeners(allPanels.toList(), onUpdate)
-                                        onUpdate(allPanels.toList())
-                                    }
+                                    // Consolidar todos los paneles de todos los clientes
+                                    val consolidatedPanels = allPanelsMap.values.flatten()
+                                    currentPanelsCache["admin_all"] = consolidatedPanels
+                                    sendDebouncedUpdate(consolidatedPanels)
                                 }
                             }
 
@@ -195,8 +245,9 @@ class PanelRepository @Inject constructor(
                     }
                 }
 
-                val initialSnapshot = firestore.collection("$BASE_PATH").get().await()
-                for (clientDoc in initialSnapshot.documents) {
+                // Carga inicial
+                val initialPanels = mutableListOf<Panel>()
+                for (clientDoc in clientsSnapshot.documents) {
                     if (clientDoc.exists()) {
                         val clientId = clientDoc.id
                         val panelsSnapshot = firestore.collection("$BASE_PATH/$clientId/panels").get().await()
@@ -205,20 +256,19 @@ class PanelRepository @Inject constructor(
                             if (doc.exists()) {
                                 val panel = loadCompletePanel(clientId, doc)
                                 if (panel != null) {
-                                    allPanels.add(panel)
+                                    initialPanels.add(panel)
                                 }
                             }
                         }
                     }
                 }
 
-                currentPanelsCache["admin_all"] = allPanels.toList()
-                setupRelayListeners(allPanels.toList(), onUpdate)
-                onUpdate(allPanels.toList())
+                currentPanelsCache["admin_all"] = initialPanels
+                sendDebouncedUpdate(initialPanels)
 
             } catch (e: Exception) {
                 Log.e(TAG, "Error setting up admin panels flow", e)
-                onUpdate(emptyList())
+                sendDebouncedUpdate(emptyList())
             }
         }
     }
@@ -286,10 +336,15 @@ class PanelRepository @Inject constructor(
         }
     }
 
-    private fun setupRelayListeners(panels: List<Panel>, onUpdate: (List<Panel>) -> Unit) {
+    private fun setupRelayListenersForClient(
+        clientDocName: String,
+        panels: List<Panel>,
+        onUpdate: (List<Panel>) -> Unit
+    ) {
         panels.forEach { panel ->
             val relayListenerId = "relays_${panel.clientName}_${panel.documentName}"
 
+            // Evitar listeners duplicados
             if (activeListeners.containsKey(relayListenerId)) {
                 return@forEach
             }
@@ -323,7 +378,9 @@ class PanelRepository @Inject constructor(
                                 }
                             } ?: emptyList()
 
-                            val updatedPanels = panels.map { p ->
+                            // Actualizar solo el panel afectado en el cache
+                            val currentPanels = currentPanelsCache[clientDocName] ?: emptyList()
+                            val updatedPanels = currentPanels.map { p ->
                                 if (p.documentName == panel.documentName) {
                                     val currentESP32Status = esp32StatusCache[p.esp32_id] ?: ESP32Device.STATUS_OFFLINE
                                     p.copy(
@@ -336,7 +393,17 @@ class PanelRepository @Inject constructor(
                                 }
                             }
 
-                            onUpdate(updatedPanels)
+                            currentPanelsCache[clientDocName] = updatedPanels
+
+                            // Para admin, también actualizar el cache consolidado
+                            if (currentPanelsCache.containsKey("admin_all")) {
+                                val adminPanels = currentPanelsCache.values.flatten().distinctBy { it.documentName }
+                                currentPanelsCache["admin_all"] = adminPanels
+                                sendDebouncedUpdate(adminPanels)
+                            } else {
+                                sendDebouncedUpdate(updatedPanels)
+                            }
+
                             Log.d(TAG, "Relays updated for panel ${panel.documentName}: ${relays.size} relays, ESP32 status: ${esp32StatusCache[panel.esp32_id]}")
 
                         } catch (e: Exception) {
@@ -663,7 +730,8 @@ class PanelRepository @Inject constructor(
         return mapOf(
             "activeListeners" to activeListeners.size,
             "memoryUsageMB" to getMemoryUsage(),
-            "esp32StatusCacheSize" to esp32StatusCache.size
+            "esp32StatusCacheSize" to esp32StatusCache.size,
+            "panelsCacheSize" to currentPanelsCache.size
         )
     }
 
@@ -677,6 +745,7 @@ class PanelRepository @Inject constructor(
 
         val listenersSnapshot = activeListeners.toMap()
         activeListeners.clear()
+        currentPanelsCache.clear()
 
         listenersSnapshot.forEach { (key, registration) ->
             try {
@@ -689,5 +758,12 @@ class PanelRepository @Inject constructor(
 
     fun performPeriodicCleanup() {
         Log.d(TAG, "Performing periodic cleanup")
+
+        // Limpiar cache antiguo
+        val now = System.currentTimeMillis()
+        if (now - lastUpdateTime > 60000) { // 1 minuto
+            currentPanelsCache.clear()
+            esp32StatusCache.clear()
+        }
     }
 }

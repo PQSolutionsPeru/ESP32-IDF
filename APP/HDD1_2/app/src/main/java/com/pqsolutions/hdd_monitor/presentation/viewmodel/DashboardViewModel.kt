@@ -98,6 +98,7 @@ class DashboardViewModel @Inject constructor(
     private suspend fun startPanelListener(clientDocName: String?) {
         Log.d(TAG, "Iniciando listener de paneles para cliente: $clientDocName")
 
+        // Cargar nombres de clientes al inicio
         val clientsMap = loadClientNames(clientDocName)
 
         panelRepository.getPanels(clientDocName)
@@ -111,19 +112,30 @@ class DashboardViewModel @Inject constructor(
             .collect { panels ->
                 Log.d(TAG, "Received ${panels.size} panels from repository")
 
-                panels.forEach { panel ->
-                    Log.d(TAG, "Panel: ${panel.name}, Relays: ${panel.relays.size}, Active: ${panel.activeRelays.size}, ESP32Status: ${panel.esp32Status}")
+                // Deduplicar paneles por documentName
+                val uniquePanels = panels.distinctBy { it.documentName }
+
+                if (panels.size != uniquePanels.size) {
+                    Log.w(TAG, "⚠️ Removed ${panels.size - uniquePanels.size} duplicate panels")
                 }
 
-                val validPanels = panels.filter { panel ->
+                // Log de cada panel único
+                uniquePanels.forEach { panel ->
+                    Log.d(TAG, "Panel: ${panel.name} (${panel.documentName}), Relays: ${panel.relays.size}, Active: ${panel.activeRelays.size}, ESP32Status: ${panel.esp32Status}")
+                }
+
+                // Filtrar paneles válidos
+                val validPanels = uniquePanels.filter { panel ->
                     panel.documentName.startsWith(DocumentPrefixes.PANEL) &&
                             panel.clientName.startsWith(DocumentPrefixes.CLIENT)
                 }
 
+                // Agrupar paneles por cliente
                 val groupedPanels = validPanels.groupBy {
                     clientsMap[it.clientName] ?: it.clientName
                 }
 
+                // Actualizar estado
                 _uiState.update { currentState ->
                     currentState.copy(
                         isLoading = false,
@@ -135,13 +147,20 @@ class DashboardViewModel @Inject constructor(
                     )
                 }
 
-                Log.d(TAG, "Dashboard panels updated successfully: ${validPanels.size} panels")
+                Log.d(TAG, "Dashboard panels updated successfully: ${validPanels.size} unique panels")
             }
     }
 
     fun refreshPanels() {
         Log.d(TAG, "Refresh manual solicitado")
-        _uiState.update { it.copy(isLoading = true) }
+
+        // Solo mostrar loading si no hay paneles
+        val shouldShowLoading = _uiState.value.panels.isEmpty()
+
+        _uiState.update { it.copy(
+            isLoading = shouldShowLoading,
+            error = null
+        ) }
 
         viewModelScope.launch {
             try {
@@ -150,12 +169,14 @@ class DashboardViewModel @Inject constructor(
                 _uiState.update { currentState ->
                     currentState.copy(
                         clientNames = clientsMap,
-                        lastUpdate = System.currentTimeMillis()
+                        lastUpdate = System.currentTimeMillis(),
+                        isLoading = false
                     )
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error en refresh", e)
                 _uiState.update { it.copy(
+                    isLoading = false,
                     error = "Error refrescando datos: ${e.message}"
                 ) }
             }
@@ -165,6 +186,7 @@ class DashboardViewModel @Inject constructor(
     private suspend fun loadClientNames(clientDocName: String?): Map<String, String> {
         return try {
             if (clientDocName != null) {
+                // Para usuario específico
                 val clientSnapshot = firestore
                     .collection("hdd-monitor/accounts/clients")
                     .document(clientDocName)
@@ -182,6 +204,7 @@ class DashboardViewModel @Inject constructor(
                     emptyMap()
                 }
             } else {
+                // Para admin (todos los clientes)
                 val clients = mutableMapOf<String, String>()
                 val clientsSnapshot = firestore
                     .collection("hdd-monitor/accounts/clients")

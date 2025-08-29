@@ -140,56 +140,113 @@ fun UserDashboardScreen(
                     .weight(1f)
                     .padding(horizontal = 16.dp)
             ) {
+                // Estado de carga
                 if (uiState.isLoading) {
                     item {
                         LoadingContent()
                     }
-                } else if (uiState.panels.isEmpty()) {
+                } else if (uiState.error != null) {
+                    // Estado de error
                     item {
-                        EmptyPanelsContent()
+                        ErrorContent(
+                            error = uiState.error!!,
+                            onRetry = {
+                                viewModel.clearError()
+                                viewModel.refreshPanels()
+                            }
+                        )
+                    }
+                } else if (uiState.panels.isEmpty()) {
+                    // Sin paneles (solo después de cargar)
+                    item {
+                        EmptyContent()
                     }
                 } else {
+                    // Contenido normal - lista de paneles
                     uiState.panels.forEach { panel ->
-                        item(key = "${panel.documentName}_${panel.lastUpdate}_${panel.esp32Status}") {
-                            UserPanelItem(panel)
+                        item(key = panel.documentName) {
+                            UserPanelItem(panel = panel)
                             Spacer(modifier = Modifier.height(8.dp))
-                        }
-                    }
-                }
-
-                if (uiState.error != null) {
-                    item {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp)
-                            ) {
-                                Text(
-                                    "Error: ${uiState.error}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onErrorContainer
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Button(
-                                    onClick = {
-                                        viewModel.clearError()
-                                        viewModel.refreshPanels()
-                                    }
-                                ) {
-                                    Text("Reintentar")
-                                }
-                            }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun LoadingContent() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 32.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(24.dp),
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.padding(horizontal = 8.dp))
+        Text(
+            "Cargando paneles...",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+@Composable
+private fun ErrorContent(error: String, onRetry: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                "Error: $error",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = onRetry,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error
+                )
+            ) {
+                Text("Reintentar")
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyContent() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = stringResource(R.string.no_panels_available),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            "Los paneles aparecerán aquí cuando se configuren",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -239,24 +296,6 @@ private fun DashboardActions(
 }
 
 @Composable
-private fun LoadingContent() {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        CircularProgressIndicator()
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "Cargando paneles...",
-            style = MaterialTheme.typography.bodyLarge
-        )
-    }
-}
-
-@Composable
 private fun DashboardButton(onClick: () -> Unit, text: String) {
     Button(
         onClick = onClick,
@@ -267,24 +306,10 @@ private fun DashboardButton(onClick: () -> Unit, text: String) {
 }
 
 @Composable
-private fun EmptyPanelsContent() {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            text = stringResource(R.string.no_panels_available),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
 fun UserPanelItem(panel: Panel) {
     var expanded by remember { mutableStateOf(false) }
+
+    Log.d(TAG, "UserPanelItem - Panel: ${panel.name}, Total relays: ${panel.relays.size}, Active relays: ${panel.activeRelays.size}, ESP32 Status: ${panel.esp32Status}")
 
     val backgroundColor = when {
         panel.isESP32Offline() -> PanelColors.PanelBackgroundOffline
@@ -296,7 +321,10 @@ fun UserPanelItem(panel: Panel) {
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize()
-            .clickable { expanded = !expanded },
+            .clickable {
+                expanded = !expanded
+                Log.d(TAG, "Panel ${panel.name} expandido: $expanded")
+            },
         colors = CardDefaults.cardColors(containerColor = backgroundColor)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -332,11 +360,16 @@ fun UserPanelItem(panel: Panel) {
                     )
                 } else {
                     Text("Detalles de relays activos:", style = MaterialTheme.typography.bodyMedium)
+
+                    Log.d(TAG, "Mostrando relays activos para panel ${panel.name}: ${panel.activeRelays.size} relays")
+
                     panel.activeRelays.forEach { relay ->
+                        Log.d(TAG, "  Mostrando relay activo: ${relay.name} (${relay.status})")
                         UserRelayStatus(relay)
                     }
 
                     if (panel.activeRelays.isEmpty()) {
+                        Log.d(TAG, "No hay relays activos para mostrar en panel ${panel.name}")
                         Text(
                             "No hay relays habilitados para monitoreo",
                             style = MaterialTheme.typography.bodySmall,
