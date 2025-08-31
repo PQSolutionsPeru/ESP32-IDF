@@ -37,10 +37,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.pqsolutions.hdd_monitor.R
 import com.pqsolutions.hdd_monitor.data.Panel
 import com.pqsolutions.hdd_monitor.data.Relay
@@ -50,6 +53,7 @@ import com.pqsolutions.hdd_monitor.presentation.theme.PanelColors
 import com.pqsolutions.hdd_monitor.presentation.util.performHapticFeedback
 import com.pqsolutions.hdd_monitor.presentation.viewmodel.DashboardViewModel
 import com.pqsolutions.hdd_monitor.presentation.viewmodel.NotificationViewModel
+import kotlinx.coroutines.awaitCancellation
 
 private const val TAG = "AdminDashboardScreen"
 
@@ -69,10 +73,27 @@ fun AdminDashboardScreen(
     val uiState by viewModel.uiState.collectAsState()
     val notificationUiState by notificationViewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
 
-    LaunchedEffect(Unit) {
-        Log.d(TAG, "AdminDashboard - Initial load")
-        notificationViewModel.restartNotificationCollection()
+    LaunchedEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    Log.d(TAG, "AdminDashboard - ON_RESUME")
+                    viewModel.onScreenVisible()
+                    notificationViewModel.restartNotificationCollection()
+                }
+                Lifecycle.Event.ON_PAUSE -> {
+                    Log.d(TAG, "AdminDashboard - ON_PAUSE")
+                    viewModel.onScreenHidden()
+                }
+                else -> {}
+            }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        awaitCancellation()
     }
 
     Scaffold(
@@ -140,13 +161,11 @@ fun AdminDashboardScreen(
                     .weight(1f)
                     .padding(horizontal = 16.dp)
             ) {
-                // Estado de carga
                 if (uiState.isLoading) {
                     item {
                         LoadingContent()
                     }
                 } else if (uiState.error != null) {
-                    // Estado de error
                     item {
                         ErrorContent(
                             error = uiState.error!!,
@@ -157,12 +176,10 @@ fun AdminDashboardScreen(
                         )
                     }
                 } else if (uiState.groupedPanels.isEmpty()) {
-                    // Sin paneles (solo después de cargar)
                     item {
                         EmptyContent()
                     }
                 } else {
-                    // Contenido normal - paneles agrupados por cliente
                     uiState.groupedPanels.forEach { (clientName, clientPanels) ->
                         item(key = "client_header_$clientName") {
                             ClientHeader(clientName = clientName)

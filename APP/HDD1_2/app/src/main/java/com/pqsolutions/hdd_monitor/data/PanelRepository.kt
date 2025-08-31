@@ -5,6 +5,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.MetadataChanges
+import com.google.firebase.firestore.Source
 import com.pqsolutions.hdd_monitor.data.util.IdManager
 import com.pqsolutions.hdd_monitor.esp32.ESP32Device
 import com.pqsolutions.hdd_monitor.esp32.ESP32Repository
@@ -14,9 +15,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.util.concurrent.ConcurrentHashMap
@@ -33,280 +36,176 @@ class PanelRepository @Inject constructor(
         private const val BASE_PATH = "hdd-monitor/accounts/clients"
         private const val MAX_RETRIES = 3
         private const val INITIAL_RETRY_DELAY = 500L
-        private const val UPDATE_DEBOUNCE_MS = 200L
     }
 
     private val activeListeners = ConcurrentHashMap<String, ListenerRegistration>()
+    private val listenerCreationTime = ConcurrentHashMap<String, Long>()
     private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val esp32StatusCache = ConcurrentHashMap<String, String>()
 
-    // Cache y debounce para evitar actualizaciones duplicadas
-    private val currentPanelsCache = ConcurrentHashMap<String, List<Panel>>()
-    private var currentUpdateCallback: ((List<Panel>) -> Unit)? = null
-    private var lastUpdateTime = 0L
+    private val _panelUpdates = MutableSharedFlow<List<Panel>>(replay = 1)
+    private var currentPanelsList = mutableListOf<Panel>()
 
-    init {
-        startESP32StatusMonitoring()
-    }
-
-    private fun startESP32StatusMonitoring() {
+    fun getPanels(clientDocName: String?): Flow<List<Panel>> {
         coroutineScope.launch {
-            esp32Repository.observeESP32s().collect { esp32Devices ->
-                Log.d(TAG, "ESP32 status update received: ${esp32Devices.size} devices")
-                var hasStatusChange = false
-
-                esp32Devices.forEach { device ->
-                    val oldStatus = esp32StatusCache[device.documentName]
-                    val newStatus = device.status
-                    esp32StatusCache[device.documentName] = newStatus
-
-                    if (oldStatus != newStatus) {
-                        Log.d(TAG, "ESP32 ${device.documentName} status changed: $oldStatus -> $newStatus")
-                        hasStatusChange = true
-                    }
-                }
-
-                if (hasStatusChange) {
-                    updateAllPanelsWithNewESP32Status()
-                }
-            }
-        }
-    }
-
-    private fun updateAllPanelsWithNewESP32Status() {
-        coroutineScope.launch {
-            // Consolidar todas las actualizaciones en una sola
-            val allUpdatedPanels = mutableListOf<Panel>()
-            var hasUpdates = false
-
-            currentPanelsCache.values.forEach { panelsList ->
-                val updatedPanels = panelsList.map { panel ->
-                    val newESP32Status = esp32StatusCache[panel.esp32_id] ?: ESP32Device.STATUS_OFFLINE
-                    if (panel.esp32Status != newESP32Status) {
-                        Log.d(TAG, "Updating panel ${panel.name} ESP32 status: ${panel.esp32Status} -> $newESP32Status")
-                        hasUpdates = true
-                        panel.copy(esp32Status = newESP32Status)
-                    } else {
-                        panel
-                    }
-                }
-                allUpdatedPanels.addAll(updatedPanels)
-            }
-
-            if (hasUpdates) {
-                // Deduplicar y enviar una sola actualización
-                val uniqueUpdatedPanels = allUpdatedPanels.distinctBy { it.documentName }
-                sendDebouncedUpdate(uniqueUpdatedPanels)
-            }
-        }
-    }
-
-    private fun sendDebouncedUpdate(panels: List<Panel>) {
-        val now = System.currentTimeMillis()
-        if (now - lastUpdateTime < UPDATE_DEBOUNCE_MS) {
-            // Programar actualización después del debounce
-            coroutineScope.launch {
-                delay(UPDATE_DEBOUNCE_MS)
-                sendUpdate(panels)
-            }
-        } else {
-            sendUpdate(panels)
-        }
-    }
-
-    private fun sendUpdate(panels: List<Panel>) {
-        lastUpdateTime = System.currentTimeMillis()
-        val uniquePanels = panels.distinctBy { it.documentName }
-        Log.d(TAG, "Sending update with ${uniquePanels.size} unique panels")
-        currentUpdateCallback?.invoke(uniquePanels)
-    }
-
-    fun getPanels(clientDocName: String?): Flow<List<Panel>> = callbackFlow {
-        Log.d(TAG, "getPanels called with clientDocName: $clientDocName")
-
-        try {
             if (clientDocName != null) {
-                setupClientPanelsFlow(clientDocName) { panels ->
-                    val uniquePanels = panels.distinctBy { it.documentName }
-                    trySend(uniquePanels)
-                }
+                startClientPanelsCollection(clientDocName)
             } else {
-                setupAdminPanelsFlow { panels ->
-                    val uniquePanels = panels.distinctBy { it.documentName }
-                    trySend(uniquePanels)
-                }
+                startAdminPanelsCollection()
             }
+        }
 
-            awaitClose {
-                Log.d(TAG, "Closing panel flow for clientDocName: $clientDocName")
-                clearRelatedListeners(clientDocName)
+        return _panelUpdates.combine(esp32Repository.observeESP32s()) { panels: List<Panel>, esp32Devices: List<ESP32Device> ->
+            val esp32StatusMap = esp32Devices.associateBy({ device -> device.documentName }, { device -> device.status })
+
+            panels.map { panel: Panel ->
+                val currentESP32Status = esp32StatusMap[panel.esp32_id] ?: ESP32Device.STATUS_OFFLINE
+                panel.copy(esp32Status = currentESP32Status)
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error setting up panels listener", e)
-            close(e)
-        }
-    }.flowOn(Dispatchers.IO)
-
-    private fun clearRelatedListeners(clientDocName: String?) {
-        val keysToRemove = if (clientDocName != null) {
-            activeListeners.keys.filter { it.contains(clientDocName) }
-        } else {
-            activeListeners.keys.filter { it.startsWith("admin_") }
-        }
-
-        keysToRemove.forEach { key ->
-            activeListeners[key]?.remove()
-            activeListeners.remove(key)
-        }
+        }.distinctUntilChanged().flowOn(Dispatchers.IO)
     }
 
-    private fun setupClientPanelsFlow(clientDocName: String, onUpdate: (List<Panel>) -> Unit) {
-        val panelListenerId = "panels_$clientDocName"
-        currentUpdateCallback = onUpdate
+    private suspend fun startClientPanelsCollection(clientDocName: String) {
+        Log.d(TAG, "Starting client panels collection for: $clientDocName")
 
-        // Limpiar listeners previos
-        activeListeners[panelListenerId]?.remove()
+        val panelsListenerId = "client_panels_$clientDocName"
+        clearOldListeners(panelsListenerId)
 
-        val panelRegistration = firestore.collection("$BASE_PATH/$clientDocName/panels")
-            .addSnapshotListener(MetadataChanges.INCLUDE) { panelsSnapshot, error ->
+        val panelsListener = firestore.collection("$BASE_PATH/$clientDocName/panels")
+            .addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
                 if (error != null) {
-                    Log.e(TAG, "Error in panels listener for client $clientDocName", error)
-                    sendDebouncedUpdate(emptyList())
+                    Log.e(TAG, "Error in client panels listener", error)
                     return@addSnapshotListener
                 }
 
                 coroutineScope.launch {
                     val panels = mutableListOf<Panel>()
 
-                    panelsSnapshot?.documents?.forEach { doc ->
+                    snapshot?.documents?.forEach { doc ->
                         if (doc.exists()) {
-                            val panel = loadCompletePanel(clientDocName, doc)
+                            val panel = createPanelFromDocument(clientDocName, doc)
                             if (panel != null) {
-                                panels.add(panel)
+                                val completePanel = loadPanelWithRelays(clientDocName, panel)
+                                panels.add(completePanel)
                             }
                         }
                     }
 
-                    currentPanelsCache[clientDocName] = panels
-                    setupRelayListenersForClient(clientDocName, panels, onUpdate)
-                    sendDebouncedUpdate(panels)
-                    Log.d(TAG, "Client panels loaded for $clientDocName: ${panels.size}")
+                    synchronized(currentPanelsList) {
+                        currentPanelsList.clear()
+                        currentPanelsList.addAll(panels)
+                    }
+
+                    _panelUpdates.tryEmit(panels)
+                    setupRelayListenersForClient(clientDocName, panels)
                 }
             }
 
-        activeListeners[panelListenerId] = panelRegistration
+        activeListeners[panelsListenerId] = panelsListener
+        listenerCreationTime[panelsListenerId] = System.currentTimeMillis()
     }
 
-    private fun setupAdminPanelsFlow(onUpdate: (List<Panel>) -> Unit) {
-        currentUpdateCallback = onUpdate
+    private suspend fun startAdminPanelsCollection() {
+        Log.d(TAG, "Starting admin panels collection with dynamic client discovery")
 
-        coroutineScope.launch {
-            try {
-                val clientsSnapshot = firestore.collection("$BASE_PATH").get().await()
-                val allPanelsMap = ConcurrentHashMap<String, List<Panel>>()
+        val clientsListenerId = "admin_clients_dynamic"
+        clearOldListeners("admin_")
 
-                for (clientDoc in clientsSnapshot.documents) {
-                    if (clientDoc.exists()) {
-                        val clientId = clientDoc.id
-                        val clientListenerId = "admin_client_$clientId"
-
-                        activeListeners[clientListenerId]?.remove()
-
-                        val clientPanelRegistration = firestore.collection("$BASE_PATH/$clientId/panels")
-                            .addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
-                                if (error != null) {
-                                    Log.e(TAG, "Error in client panels listener for $clientId", error)
-                                    return@addSnapshotListener
-                                }
-
-                                coroutineScope.launch {
-                                    val clientPanels = mutableListOf<Panel>()
-
-                                    snapshot?.documents?.forEach { doc ->
-                                        if (doc.exists()) {
-                                            val panel = loadCompletePanel(clientId, doc)
-                                            if (panel != null) {
-                                                clientPanels.add(panel)
-                                            }
-                                        }
-                                    }
-
-                                    allPanelsMap[clientId] = clientPanels
-                                    setupRelayListenersForClient(clientId, clientPanels, onUpdate)
-
-                                    // Consolidar todos los paneles de todos los clientes
-                                    val consolidatedPanels = allPanelsMap.values.flatten()
-                                    currentPanelsCache["admin_all"] = consolidatedPanels
-                                    sendDebouncedUpdate(consolidatedPanels)
-                                }
-                            }
-
-                        activeListeners[clientListenerId] = clientPanelRegistration
-                    }
+        val clientsListener = firestore.collection(BASE_PATH)
+            .addSnapshotListener(MetadataChanges.INCLUDE) { clientsSnapshot, error ->
+                if (error != null) {
+                    Log.e(TAG, "Error in clients listener", error)
+                    return@addSnapshotListener
                 }
 
-                // Carga inicial
-                val initialPanels = mutableListOf<Panel>()
-                for (clientDoc in clientsSnapshot.documents) {
-                    if (clientDoc.exists()) {
-                        val clientId = clientDoc.id
-                        val panelsSnapshot = firestore.collection("$BASE_PATH/$clientId/panels").get().await()
+                coroutineScope.launch {
+                    val allPanels = mutableListOf<Panel>()
+                    val clientIds = clientsSnapshot?.documents?.mapNotNull { it.id } ?: emptyList()
 
-                        panelsSnapshot.documents.forEach { doc ->
-                            if (doc.exists()) {
-                                val panel = loadCompletePanel(clientId, doc)
-                                if (panel != null) {
-                                    initialPanels.add(panel)
+                    for (clientId in clientIds) {
+                        try {
+                            val panelsSnapshot = firestore.collection("$BASE_PATH/$clientId/panels")
+                                .get(Source.DEFAULT)
+                                .await()
+
+                            panelsSnapshot.documents.forEach { doc ->
+                                if (doc.exists()) {
+                                    val panel = createPanelFromDocument(clientId, doc)
+                                    if (panel != null) {
+                                        val completePanel = loadPanelWithRelays(clientId, panel)
+                                        allPanels.add(completePanel)
+                                    }
                                 }
                             }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error loading panels for client $clientId", e)
                         }
                     }
+
+                    synchronized(currentPanelsList) {
+                        currentPanelsList.clear()
+                        currentPanelsList.addAll(allPanels)
+                    }
+
+                    _panelUpdates.tryEmit(allPanels)
+                    setupAdminRelayListeners(clientIds, allPanels)
+                    setupDynamicPanelListeners(clientIds)
                 }
+            }
 
-                currentPanelsCache["admin_all"] = initialPanels
-                sendDebouncedUpdate(initialPanels)
+        activeListeners[clientsListenerId] = clientsListener
+        listenerCreationTime[clientsListenerId] = System.currentTimeMillis()
+    }
 
-            } catch (e: Exception) {
-                Log.e(TAG, "Error setting up admin panels flow", e)
-                sendDebouncedUpdate(emptyList())
+    private fun setupDynamicPanelListeners(clientIds: List<String>) {
+        clientIds.forEach { clientId ->
+            val panelListenerId = "admin_panel_$clientId"
+
+            if (!activeListeners.containsKey(panelListenerId)) {
+                val panelListener = firestore.collection("$BASE_PATH/$clientId/panels")
+                    .addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
+                        if (error != null) {
+                            Log.e(TAG, "Error in dynamic panel listener for $clientId", error)
+                            return@addSnapshotListener
+                        }
+
+                        Log.d(TAG, "Panel changes detected for client $clientId: ${snapshot?.size()} panels")
+                    }
+
+                activeListeners[panelListenerId] = panelListener
+                listenerCreationTime[panelListenerId] = System.currentTimeMillis()
             }
         }
     }
 
-    private suspend fun loadCompletePanel(
+    private fun createPanelFromDocument(
         clientDocName: String,
-        panelDoc: com.google.firebase.firestore.DocumentSnapshot
+        doc: com.google.firebase.firestore.DocumentSnapshot
     ): Panel? {
         return try {
-            val panelData = panelDoc.data ?: return null
-            val panelId = panelDoc.id
-            val esp32Id = panelData["esp32_id"] as? String ?: ""
+            val data = doc.data ?: return null
 
-            val basePanel = Panel(
-                documentName = panelId,
-                name = panelData["name"] as? String ?: "",
-                location = panelData["location"] as? String ?: "",
+            Panel(
+                documentName = doc.id,
+                name = data["name"] as? String ?: "",
+                location = data["location"] as? String ?: "",
                 clientName = clientDocName,
-                clientDisplayName = panelData["clientDisplayName"] as? String ?: clientDocName,
-                esp32_id = esp32Id,
-                lastUpdate = panelData["lastUpdate"] as? Long ?: System.currentTimeMillis(),
+                clientDisplayName = data["clientDisplayName"] as? String ?: clientDocName,
+                esp32_id = data["esp32_id"] as? String ?: "",
+                lastUpdate = data["lastUpdate"] as? Long ?: System.currentTimeMillis(),
                 relays = emptyList(),
-                esp32Status = esp32StatusCache[esp32Id] ?: ESP32Device.STATUS_OFFLINE
+                esp32Status = ESP32Device.STATUS_OFFLINE
             )
-
-            val relays = loadPanelRelays(clientDocName, panelId)
-            basePanel.copy(relays = relays)
         } catch (e: Exception) {
-            Log.e(TAG, "Error loading complete panel", e)
+            Log.e(TAG, "Error creating panel from document ${doc.id}", e)
             null
         }
     }
 
-    private suspend fun loadPanelRelays(clientDocName: String, panelDocName: String): List<Relay> {
+    private suspend fun loadPanelWithRelays(clientDocName: String, panel: Panel): Panel {
         return try {
             val relaysSnapshot = firestore
-                .collection("$BASE_PATH/$clientDocName/panels/$panelDocName/relays")
-                .get()
+                .collection("$BASE_PATH/$clientDocName/panels/${panel.documentName}/relays")
+                .get(Source.DEFAULT)
                 .await()
 
             val relays = relaysSnapshot.documents.mapNotNull { doc ->
@@ -328,30 +227,69 @@ class PanelRepository @Inject constructor(
                 }
             }
 
-            Log.d(TAG, "Loaded ${relays.size} relays for panel $panelDocName")
-            relays
+            panel.copy(relays = relays)
         } catch (e: Exception) {
-            Log.e(TAG, "Error loading relays for panel $panelDocName", e)
-            emptyList()
+            Log.e(TAG, "Error loading relays for panel ${panel.documentName}", e)
+            panel
+        }
+    }
+
+    private fun clearOldListeners(prefix: String) {
+        val listenersToRemove = activeListeners.keys.filter { it.startsWith(prefix) }
+
+        listenersToRemove.forEach { key ->
+            try {
+                activeListeners[key]?.remove()
+                activeListeners.remove(key)
+                listenerCreationTime.remove(key)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error removing listener $key", e)
+            }
+        }
+    }
+
+    suspend fun reactivateListenersForClient(clientDocName: String?) {
+        Log.d(TAG, "Reactivating listeners for client: $clientDocName")
+
+        if (clientDocName != null) {
+            clearOldListeners("client_panels_$clientDocName")
+            startClientPanelsCollection(clientDocName)
+        } else {
+            clearOldListeners("admin_")
+            startAdminPanelsCollection()
+        }
+    }
+
+    suspend fun forceRefreshFromServer() {
+        try {
+            Log.d(TAG, "Forcing refresh from server")
+
+            firestore.collection(BASE_PATH)
+                .limit(1)
+                .get(Source.SERVER)
+                .await()
+
+            Log.d(TAG, "Force refresh completed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in force refresh", e)
+            throw e
         }
     }
 
     private fun setupRelayListenersForClient(
         clientDocName: String,
-        panels: List<Panel>,
-        onUpdate: (List<Panel>) -> Unit
+        panels: List<Panel>
     ) {
         panels.forEach { panel ->
-            val relayListenerId = "relays_${panel.clientName}_${panel.documentName}"
+            val relayListenerId = "relays_${clientDocName}_${panel.documentName}"
 
-            // Evitar listeners duplicados
             if (activeListeners.containsKey(relayListenerId)) {
                 return@forEach
             }
 
             val relayRegistration = firestore
-                .collection("$BASE_PATH/${panel.clientName}/panels/${panel.documentName}/relays")
-                .addSnapshotListener { relaysSnapshot, error ->
+                .collection("$BASE_PATH/$clientDocName/panels/${panel.documentName}/relays")
+                .addSnapshotListener(MetadataChanges.INCLUDE) { relaysSnapshot, error ->
                     if (error != null) {
                         Log.e(TAG, "Error in relays listener for ${panel.documentName}", error)
                         return@addSnapshotListener
@@ -378,33 +316,16 @@ class PanelRepository @Inject constructor(
                                 }
                             } ?: emptyList()
 
-                            // Actualizar solo el panel afectado en el cache
-                            val currentPanels = currentPanelsCache[clientDocName] ?: emptyList()
-                            val updatedPanels = currentPanels.map { p ->
-                                if (p.documentName == panel.documentName) {
-                                    val currentESP32Status = esp32StatusCache[p.esp32_id] ?: ESP32Device.STATUS_OFFLINE
-                                    p.copy(
-                                        relays = relays,
-                                        esp32Status = currentESP32Status
-                                    )
-                                } else {
-                                    val currentESP32Status = esp32StatusCache[p.esp32_id] ?: ESP32Device.STATUS_OFFLINE
-                                    p.copy(esp32Status = currentESP32Status)
+                            synchronized(currentPanelsList) {
+                                val panelIndex = currentPanelsList.indexOfFirst { it.documentName == panel.documentName }
+                                if (panelIndex != -1) {
+                                    val updatedPanel = currentPanelsList[panelIndex].copy(relays = relays)
+                                    currentPanelsList[panelIndex] = updatedPanel
+
+                                    Log.d(TAG, "Relays updated for panel ${panel.documentName}: ${relays.size} relays")
+                                    _panelUpdates.tryEmit(currentPanelsList.toList())
                                 }
                             }
-
-                            currentPanelsCache[clientDocName] = updatedPanels
-
-                            // Para admin, también actualizar el cache consolidado
-                            if (currentPanelsCache.containsKey("admin_all")) {
-                                val adminPanels = currentPanelsCache.values.flatten().distinctBy { it.documentName }
-                                currentPanelsCache["admin_all"] = adminPanels
-                                sendDebouncedUpdate(adminPanels)
-                            } else {
-                                sendDebouncedUpdate(updatedPanels)
-                            }
-
-                            Log.d(TAG, "Relays updated for panel ${panel.documentName}: ${relays.size} relays, ESP32 status: ${esp32StatusCache[panel.esp32_id]}")
 
                         } catch (e: Exception) {
                             Log.e(TAG, "Error processing relays for panel ${panel.documentName}", e)
@@ -413,6 +334,69 @@ class PanelRepository @Inject constructor(
                 }
 
             activeListeners[relayListenerId] = relayRegistration
+            listenerCreationTime[relayListenerId] = System.currentTimeMillis()
+        }
+    }
+
+    private fun setupAdminRelayListeners(
+        clientIds: List<String>,
+        panels: List<Panel>
+    ) {
+        panels.forEach { panel ->
+            val relayListenerId = "admin_relay_${panel.clientName}_${panel.documentName}"
+
+            if (activeListeners.containsKey(relayListenerId)) {
+                return@forEach
+            }
+
+            val relayRegistration = firestore
+                .collection("$BASE_PATH/${panel.clientName}/panels/${panel.documentName}/relays")
+                .addSnapshotListener(MetadataChanges.INCLUDE) { relaysSnapshot, error ->
+                    if (error != null) {
+                        Log.e(TAG, "Error in admin relays listener for ${panel.documentName}", error)
+                        return@addSnapshotListener
+                    }
+
+                    coroutineScope.launch {
+                        try {
+                            val relays = relaysSnapshot?.documents?.mapNotNull { doc ->
+                                try {
+                                    val data = doc.data ?: return@mapNotNull null
+                                    Relay(
+                                        name = doc.id,
+                                        status = data["status"] as? String ?: "UNKNOWN",
+                                        date_time = data["date_time"] as? String,
+                                        customName = data["customName"] as? String,
+                                        isActive = data["isActive"] as? Boolean ?: false,
+                                        contactType = data["contactType"] as? String ?: "NO",
+                                        lastCommandSent = (data["lastCommandSent"] as? Number)?.toLong(),
+                                        commandSource = data["commandSource"] as? String
+                                    )
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Error converting admin relay ${doc.id}", e)
+                                    null
+                                }
+                            } ?: emptyList()
+
+                            synchronized(currentPanelsList) {
+                                val panelIndex = currentPanelsList.indexOfFirst { it.documentName == panel.documentName }
+                                if (panelIndex != -1) {
+                                    val updatedPanel = currentPanelsList[panelIndex].copy(relays = relays)
+                                    currentPanelsList[panelIndex] = updatedPanel
+
+                                    Log.d(TAG, "Admin relays updated for panel ${panel.documentName}: ${relays.size} relays")
+                                    _panelUpdates.tryEmit(currentPanelsList.toList())
+                                }
+                            }
+
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error processing admin relays for panel ${panel.documentName}", e)
+                        }
+                    }
+                }
+
+            activeListeners[relayListenerId] = relayRegistration
+            listenerCreationTime[relayListenerId] = System.currentTimeMillis()
         }
     }
 
@@ -621,6 +605,7 @@ class PanelRepository @Inject constructor(
         keysToRemove.forEach { key ->
             activeListeners[key]?.remove()
             activeListeners.remove(key)
+            listenerCreationTime.remove(key)
         }
     }
 
@@ -672,66 +657,45 @@ class PanelRepository @Inject constructor(
         Log.d(TAG, "Starting panel updates observation for $clientDocName/$panelDocName")
 
         val panelListenerId = "panel_${clientDocName}_$panelDocName"
-        val relayListenerId = "relays_${clientDocName}_$panelDocName"
-
-        fun loadAndSendPanel() {
-            coroutineScope.launch {
-                try {
-                    val panelDoc = firestore
-                        .document("$BASE_PATH/$clientDocName/panels/$panelDocName")
-                        .get()
-                        .await()
-
-                    val panel = if (panelDoc.exists()) {
-                        loadCompletePanel(clientDocName, panelDoc)
-                    } else null
-
-                    trySend(panel)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error loading panel in observer", e)
-                    trySend(null)
-                }
-            }
-        }
 
         val panelRegistration = firestore
             .document("$BASE_PATH/$clientDocName/panels/$panelDocName")
-            .addSnapshotListener { _, error ->
+            .addSnapshotListener { panelSnapshot, error ->
                 if (error != null) {
                     Log.e(TAG, "Error observing panel", error)
                     return@addSnapshotListener
                 }
-                loadAndSendPanel()
-            }
 
-        val relayRegistration = firestore
-            .collection("$BASE_PATH/$clientDocName/panels/$panelDocName/relays")
-            .addSnapshotListener { _, error ->
-                if (error != null) {
-                    Log.e(TAG, "Error observing relays", error)
-                    return@addSnapshotListener
+                coroutineScope.launch {
+                    try {
+                        val panel = if (panelSnapshot?.exists() == true) {
+                            val basePanel = createPanelFromDocument(clientDocName, panelSnapshot)
+                            basePanel?.let { loadPanelWithRelays(clientDocName, it) }
+                        } else null
+
+                        trySend(panel)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error loading panel in observer", e)
+                        trySend(null)
+                    }
                 }
-                loadAndSendPanel()
             }
 
         activeListeners[panelListenerId] = panelRegistration
-        activeListeners[relayListenerId] = relayRegistration
+        listenerCreationTime[panelListenerId] = System.currentTimeMillis()
 
         awaitClose {
             Log.d(TAG, "Closing panel updates observation")
-            activeListeners[panelListenerId]?.remove()
-            activeListeners[relayListenerId]?.remove()
+            panelRegistration.remove()
             activeListeners.remove(panelListenerId)
-            activeListeners.remove(relayListenerId)
+            listenerCreationTime.remove(panelListenerId)
         }
     }.flowOn(Dispatchers.IO)
 
     fun getListenerStats(): Map<String, Any> {
         return mapOf(
             "activeListeners" to activeListeners.size,
-            "memoryUsageMB" to getMemoryUsage(),
-            "esp32StatusCacheSize" to esp32StatusCache.size,
-            "panelsCacheSize" to currentPanelsCache.size
+            "memoryUsageMB" to getMemoryUsage()
         )
     }
 
@@ -745,7 +709,7 @@ class PanelRepository @Inject constructor(
 
         val listenersSnapshot = activeListeners.toMap()
         activeListeners.clear()
-        currentPanelsCache.clear()
+        listenerCreationTime.clear()
 
         listenersSnapshot.forEach { (key, registration) ->
             try {
@@ -756,14 +720,43 @@ class PanelRepository @Inject constructor(
         }
     }
 
-    fun performPeriodicCleanup() {
-        Log.d(TAG, "Performing periodic cleanup")
+    fun clearStaleListeners() {
+        Log.d(TAG, "Clearing stale listeners only")
 
-        // Limpiar cache antiguo
+        val currentTime = System.currentTimeMillis()
+        val staleListenerAge = 5 * 60 * 1000L
+
+        val staleKeys = activeListeners.keys.filter { key ->
+            key.contains("_old_") ||
+                    key.contains("_temp_") ||
+                    isListenerStale(key, currentTime, staleListenerAge)
+        }
+
+        staleKeys.forEach { key ->
+            try {
+                activeListeners[key]?.remove()
+                activeListeners.remove(key)
+                listenerCreationTime.remove(key)
+                Log.d(TAG, "Removed stale listener: $key")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error removing stale listener: $key", e)
+            }
+        }
+    }
+
+    private fun isListenerStale(key: String, currentTime: Long, staleAge: Long): Boolean {
+        val creationTime = listenerCreationTime[key] ?: return false
+        val age = currentTime - creationTime
+        return age > staleAge && !key.contains("client_panels_") && !key.contains("admin_clients_")
+    }
+
+    fun performPeriodicCleanup() {
+        Log.d(TAG, "Performing periodic cleanup - selective mode")
+        clearStaleListeners()
+
         val now = System.currentTimeMillis()
-        if (now - lastUpdateTime > 60000) { // 1 minuto
-            currentPanelsCache.clear()
-            esp32StatusCache.clear()
+        if (now % 300000 < 10000) {
+            System.gc()
         }
     }
 }

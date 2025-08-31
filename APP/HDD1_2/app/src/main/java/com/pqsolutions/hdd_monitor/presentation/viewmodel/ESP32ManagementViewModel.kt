@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import javax.inject.Inject
 
 @HiltViewModel
@@ -28,6 +29,7 @@ class ESP32ManagementViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "ESP32ManagementViewModel"
+        private const val LOADING_TIMEOUT_MS = 10000L
     }
 
     private val _uiState = MutableStateFlow(ESP32ManagementState())
@@ -36,9 +38,11 @@ class ESP32ManagementViewModel @Inject constructor(
     private var panelsJob: Job? = null
     private var assignedESP32Job: Job? = null
     private var unassignedESP32Job: Job? = null
+    private var loadingTimeoutJob: Job? = null
     private var currentClientDocName: String? = null
 
     private var panelsLoaded = false
+    private var panelsInitialLoadComplete = false
     private var assignedESP32sLoaded = false
     private var unassignedESP32sLoaded = false
 
@@ -59,6 +63,7 @@ class ESP32ManagementViewModel @Inject constructor(
 
     private fun resetLoadingFlags() {
         panelsLoaded = false
+        panelsInitialLoadComplete = false
         assignedESP32sLoaded = false
         unassignedESP32sLoaded = false
     }
@@ -67,10 +72,12 @@ class ESP32ManagementViewModel @Inject constructor(
         panelsJob?.cancel()
         assignedESP32Job?.cancel()
         unassignedESP32Job?.cancel()
+        loadingTimeoutJob?.cancel()
 
         panelsJob = null
         assignedESP32Job = null
         unassignedESP32Job = null
+        loadingTimeoutJob = null
     }
 
     private fun loadData() {
@@ -112,12 +119,15 @@ class ESP32ManagementViewModel @Inject constructor(
     private fun startFreshDataListeners(clientDocName: String?) {
         Log.d(TAG, "Iniciando listeners frescos para cliente: $clientDocName")
 
+        startLoadingTimeout()
+
         panelsJob = viewModelScope.launch {
             Log.d(TAG, "Iniciando listener de paneles")
             panelRepository.getPanels(clientDocName)
                 .catch { error ->
                     Log.e(TAG, "Error en listener de paneles", error)
                     panelsLoaded = true
+                    panelsInitialLoadComplete = true
                     checkAndUpdateLoadingState()
                     _uiState.value = _uiState.value.copy(
                         error = "Error cargando paneles: ${error.message}"
@@ -125,6 +135,12 @@ class ESP32ManagementViewModel @Inject constructor(
                 }
                 .collect { panels ->
                     Log.d(TAG, "Paneles recibidos: ${panels.size}")
+
+                    if (!panelsInitialLoadComplete) {
+                        panelsInitialLoadComplete = true
+                        Log.d(TAG, "Carga inicial de paneles completada")
+                    }
+
                     panelsLoaded = true
                     updatePanels(panels)
                     checkAndUpdateLoadingState()
@@ -164,8 +180,22 @@ class ESP32ManagementViewModel @Inject constructor(
         }
     }
 
+    private fun startLoadingTimeout() {
+        loadingTimeoutJob?.cancel()
+        loadingTimeoutJob = viewModelScope.launch {
+            delay(LOADING_TIMEOUT_MS)
+            if (!panelsInitialLoadComplete) {
+                Log.w(TAG, "Loading timeout alcanzado, forzando completion")
+                panelsInitialLoadComplete = true
+                panelsLoaded = true
+                checkAndUpdateLoadingState()
+            }
+        }
+    }
+
     private fun checkAndUpdateLoadingState() {
-        if (panelsLoaded && assignedESP32sLoaded && unassignedESP32sLoaded) {
+        if (panelsInitialLoadComplete && assignedESP32sLoaded && unassignedESP32sLoaded) {
+            loadingTimeoutJob?.cancel()
             _uiState.value = _uiState.value.copy(isLoading = false)
             Log.d(TAG, "Todos los datos cargados correctamente")
         }

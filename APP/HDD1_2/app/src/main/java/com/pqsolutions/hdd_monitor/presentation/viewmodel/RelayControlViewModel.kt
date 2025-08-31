@@ -8,6 +8,7 @@ import com.pqsolutions.hdd_monitor.data.Panel
 import com.pqsolutions.hdd_monitor.data.PanelRepository
 import com.pqsolutions.hdd_monitor.data.Relay
 import com.pqsolutions.hdd_monitor.data.UserRepository
+import com.pqsolutions.hdd_monitor.data.manager.ListenerManager
 import com.pqsolutions.hdd_monitor.domain.model.UserRole
 import com.pqsolutions.hdd_monitor.presentation.state.RelayControlState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
@@ -24,7 +26,8 @@ import javax.inject.Inject
 class RelayControlViewModel @Inject constructor(
     private val panelRepository: PanelRepository,
     private val userRepository: UserRepository,
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    private val listenerManager: ListenerManager
 ) : ViewModel() {
 
     companion object {
@@ -38,6 +41,7 @@ class RelayControlViewModel @Inject constructor(
 
     init {
         Log.d(TAG, "RelayControlViewModel inicializado")
+        listenerManager.setCurrentScreen("relay_control")
     }
 
     fun loadSpecificPanel(panelId: String?) {
@@ -67,18 +71,24 @@ class RelayControlViewModel @Inject constructor(
                     val clientsMap = loadClientNames(clientDocName)
                     _uiState.value = _uiState.value.copy(clientNames = clientsMap)
 
-                    panelRepository.observePanelUpdates(clientDocName, panelId)
+                    panelRepository.getPanels(clientDocName)
                         .catch { error ->
+                            Log.e(TAG, "Error en flujo de panel específico", error)
                             _uiState.value = _uiState.value.copy(isLoading = false, error = "Error: ${error.message}")
                         }
-                        .collect { panel ->
-                            if (panel != null) {
-                                val clientDisplayName = clientsMap[panel.clientName] ?: panel.clientName
-                                val groupedPanels: Map<String, List<Panel>> = mapOf(clientDisplayName to listOf(panel))
+                        .filter { panels -> panels.any { it.documentName == panelId } }
+                        .collect { panels ->
+                            val targetPanel = panels.find { it.documentName == panelId }
+
+                            if (targetPanel != null) {
+                                val clientDisplayName = clientsMap[targetPanel.clientName] ?: targetPanel.clientName
+                                val groupedPanels: Map<String, List<Panel>> = mapOf(clientDisplayName to listOf(targetPanel))
+
+                                Log.d(TAG, "Panel específico cargado: ${targetPanel.name}, ESP32 Status: ${targetPanel.esp32Status}")
 
                                 _uiState.value = _uiState.value.copy(
                                     isLoading = false,
-                                    panels = listOf(panel),
+                                    panels = listOf(targetPanel),
                                     groupedPanels = groupedPanels,
                                     error = null,
                                     lastUpdate = System.currentTimeMillis()
@@ -92,8 +102,10 @@ class RelayControlViewModel @Inject constructor(
                 }
 
             } catch (e: Exception) {
-                Log.e(TAG, "Error cargando panel", e)
-                _uiState.value = _uiState.value.copy(isLoading = false, error = "Error: ${e.message}")
+                if (e !is kotlinx.coroutines.CancellationException) {
+                    Log.e(TAG, "Error cargando panel específico", e)
+                    _uiState.value = _uiState.value.copy(isLoading = false, error = "Error: ${e.message}")
+                }
             }
         }
     }
@@ -102,7 +114,7 @@ class RelayControlViewModel @Inject constructor(
         currentJob?.cancel()
         currentJob = viewModelScope.launch {
             try {
-                Log.d(TAG, "Cargando todos los paneles")
+                Log.d(TAG, "Cargando todos los paneles con sistema unificado")
                 _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
                 val currentUser = userRepository.getCurrentUser()
@@ -121,9 +133,15 @@ class RelayControlViewModel @Inject constructor(
 
                 panelRepository.getPanels(clientDocName)
                     .catch { error ->
+                        Log.e(TAG, "Error en flujo de paneles", error)
                         _uiState.value = _uiState.value.copy(isLoading = false, error = "Error: ${error.message}")
                     }
                     .collect { panels ->
+                        Log.d(TAG, "Paneles recibidos con ESP32 status:")
+                        panels.forEach { panel ->
+                            Log.d(TAG, "  Panel: ${panel.name}, ESP32 Status: ${panel.esp32Status}, Relays: ${panel.relays.size}")
+                        }
+
                         val groupedPanels = panels.groupBy { panel ->
                             clientsMap[panel.clientName] ?: panel.clientName
                         }
@@ -138,45 +156,29 @@ class RelayControlViewModel @Inject constructor(
                     }
 
             } catch (e: Exception) {
-                Log.e(TAG, "Error cargando paneles", e)
-                _uiState.value = _uiState.value.copy(isLoading = false, error = "Error: ${e.message}")
+                if (e !is kotlinx.coroutines.CancellationException) {
+                    Log.e(TAG, "Error cargando paneles", e)
+                    _uiState.value = _uiState.value.copy(isLoading = false, error = "Error: ${e.message}")
+                }
             }
         }
     }
 
-    private suspend fun observePanel(clientDocName: String, panelId: String) {
-        panelRepository.observePanelUpdates(clientDocName, panelId)
-            .catch { error ->
-                _uiState.value = _uiState.value.copy(isLoading = false, error = "Error: ${error.message}")
-            }
-            .collect { panel ->
-                if (panel != null) {
-                    val clientsMap = _uiState.value.clientNames
-                    val clientDisplayName = clientsMap[panel.clientName] ?: panel.clientName
-                    val groupedPanels: Map<String, List<Panel>> = mapOf(clientDisplayName to listOf(panel))
-
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        panels = listOf(panel),
-                        groupedPanels = groupedPanels,
-                        error = null
-                    )
-                } else {
-                    _uiState.value = _uiState.value.copy(isLoading = false, error = "Panel no encontrado")
-                }
-            }
-    }
-
     private suspend fun findPanelClient(panelId: String): String? {
         return try {
+            Log.d(TAG, "Buscando cliente para panel: $panelId")
             val allClientsSnapshot = firestore.collection("hdd-monitor/accounts/clients").get().await()
             for (clientDoc in allClientsSnapshot.documents) {
                 if (clientDoc.exists()) {
                     val clientId = clientDoc.id
                     val panelExists = panelRepository.verifyPanelExists(clientId, panelId)
-                    if (panelExists) return clientId
+                    if (panelExists) {
+                        Log.d(TAG, "Panel $panelId encontrado en cliente: $clientId")
+                        return clientId
+                    }
                 }
             }
+            Log.w(TAG, "Panel $panelId no encontrado en ningún cliente")
             null
         } catch (e: Exception) {
             Log.e(TAG, "Error buscando cliente del panel", e)
@@ -207,12 +209,20 @@ class RelayControlViewModel @Inject constructor(
         }
     }
 
-    fun refreshPanels() = loadPanels()
-    fun refreshSpecificPanel(panelId: String?) = loadSpecificPanel(panelId)
+    fun refreshPanels() {
+        Log.d(TAG, "Refresh solicitado")
+        loadPanels()
+    }
+
+    fun refreshSpecificPanel(panelId: String?) {
+        Log.d(TAG, "Refresh de panel específico solicitado: $panelId")
+        loadSpecificPanel(panelId)
+    }
 
     fun updateRelayConfig(panel: Panel, updatedRelay: Relay) {
         viewModelScope.launch {
             try {
+                Log.d(TAG, "Actualizando configuración de relay: ${updatedRelay.name}")
                 _uiState.value = _uiState.value.copy(operationInProgress = true)
 
                 val updateData = mutableMapOf<String, Any>(
@@ -232,6 +242,7 @@ class RelayControlViewModel @Inject constructor(
                     .update(updateData)
                     .await()
 
+                Log.d(TAG, "Configuración de relay actualizada exitosamente")
                 _uiState.value = _uiState.value.copy(operationInProgress = false)
 
             } catch (e: Exception) {
@@ -247,5 +258,8 @@ class RelayControlViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
+        Log.d(TAG, "RelayControlViewModel being cleared")
+        currentJob?.cancel()
+        listenerManager.setCurrentScreen("other")
     }
 }

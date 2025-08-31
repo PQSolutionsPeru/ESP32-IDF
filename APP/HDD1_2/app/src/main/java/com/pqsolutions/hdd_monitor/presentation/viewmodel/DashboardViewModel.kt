@@ -7,7 +7,9 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.pqsolutions.hdd_monitor.data.Panel
 import com.pqsolutions.hdd_monitor.data.PanelRepository
 import com.pqsolutions.hdd_monitor.data.UserRepository
+import com.pqsolutions.hdd_monitor.data.manager.ListenerManager
 import com.pqsolutions.hdd_monitor.domain.model.UserRole
+import com.pqsolutions.hdd_monitor.esp32.ESP32Repository
 import com.pqsolutions.hdd_monitor.util.Constants.DocumentPrefixes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -24,7 +26,9 @@ import javax.inject.Inject
 class DashboardViewModel @Inject constructor(
     private val panelRepository: PanelRepository,
     private val userRepository: UserRepository,
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    private val listenerManager: ListenerManager,
+    private val esp32Repository: ESP32Repository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -32,7 +36,6 @@ class DashboardViewModel @Inject constructor(
 
     private var panelsJob: Job? = null
     private var currentClientDocName: String? = null
-    private var isInitialized = false
 
     companion object {
         private const val TAG = "DashboardViewModel"
@@ -40,22 +43,53 @@ class DashboardViewModel @Inject constructor(
 
     init {
         Log.d(TAG, "DashboardViewModel initialized")
-        loadPanels()
+        listenerManager.setCurrentScreen("dashboard")
+        initializeDashboard()
     }
 
-    fun loadPanels() {
-        if (isInitialized && panelsJob?.isActive == true) {
-            Log.d(TAG, "Panels already loading, skipping duplicate call")
-            return
-        }
+    fun onScreenVisible() {
+        Log.d(TAG, "Dashboard screen became visible - reactivating listeners")
+        listenerManager.setCurrentScreen("dashboard")
 
-        Log.d(TAG, "loadPanels() called")
+        val currentTime = System.currentTimeMillis()
+        val timeSinceLastUpdate = currentTime - (_uiState.value.lastUpdate)
+
+        if (timeSinceLastUpdate > 30000) {
+            Log.d(TAG, "Refreshing data due to time elapsed: ${timeSinceLastUpdate}ms")
+            refreshPanels()
+        } else {
+            reactivateListeners()
+        }
+    }
+
+    fun onScreenHidden() {
+        Log.d(TAG, "Dashboard screen hidden")
+        listenerManager.setCurrentScreen("other")
+    }
+
+    private fun reactivateListeners() {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "Reactivating listeners without full refresh")
+                panelRepository.clearStaleListeners()
+                startPanelCollection()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error reactivating listeners", e)
+            }
+        }
+    }
+
+    private fun initializeDashboard() {
         _uiState.update { it.copy(isLoading = true, error = null) }
 
         panelsJob?.cancel()
-
         panelsJob = viewModelScope.launch {
             try {
+                Log.d(TAG, "Inicializando dashboard - reiniciando todos los listeners")
+
+                panelRepository.clearStaleListeners()
+                esp32Repository.forceRestart()
+
                 val currentUser = userRepository.getCurrentUser()
                 Log.d(TAG, "Current user: ${currentUser?.documentName}, Role: ${currentUser?.role}")
 
@@ -71,71 +105,62 @@ class DashboardViewModel @Inject constructor(
                         }
                     }
 
-                    startPanelListener(currentClientDocName)
-                    isInitialized = true
+                    startPanelCollection()
 
                 } else {
                     Log.e(TAG, "No authenticated user found")
-                    _uiState.update { it.copy(
-                        isLoading = false,
-                        error = "Error cargando paneles: no hay usuario autenticado"
-                    ) }
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = "Error cargando paneles: no hay usuario autenticado"
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 if (e !is kotlinx.coroutines.CancellationException) {
-                    Log.e(TAG, "Error loading panels", e)
-                    _uiState.update { it.copy(
-                        isLoading = false,
-                        error = e.message ?: "Error desconocido"
-                    ) }
-                } else {
-                    Log.d(TAG, "Panel loading cancelled intentionally")
+                    Log.e(TAG, "Error initializing dashboard", e)
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = e.message ?: "Error desconocido"
+                        )
+                    }
                 }
             }
         }
     }
 
-    private suspend fun startPanelListener(clientDocName: String?) {
-        Log.d(TAG, "Iniciando listener de paneles para cliente: $clientDocName")
+    private suspend fun startPanelCollection() {
+        Log.d(TAG, "Iniciando colección reactiva de paneles para cliente: $currentClientDocName")
 
-        // Cargar nombres de clientes al inicio
-        val clientsMap = loadClientNames(clientDocName)
+        val clientsMap = loadClientNames()
 
-        panelRepository.getPanels(clientDocName)
+        panelRepository.getPanels(currentClientDocName)
             .catch { error ->
-                Log.e(TAG, "Error en listener de paneles", error)
-                _uiState.update { it.copy(
-                    isLoading = false,
-                    error = "Error en listener de paneles: ${error.message}"
-                ) }
+                Log.e(TAG, "Error en flujo de paneles", error)
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        error = "Error en flujo de paneles: ${error.message}"
+                    )
+                }
             }
             .collect { panels ->
-                Log.d(TAG, "Received ${panels.size} panels from repository")
+                Log.d(TAG, "Recibidos ${panels.size} paneles del repository")
 
-                // Deduplicar paneles por documentName
-                val uniquePanels = panels.distinctBy { it.documentName }
-
-                if (panels.size != uniquePanels.size) {
-                    Log.w(TAG, "⚠️ Removed ${panels.size - uniquePanels.size} duplicate panels")
-                }
-
-                // Log de cada panel único
-                uniquePanels.forEach { panel ->
-                    Log.d(TAG, "Panel: ${panel.name} (${panel.documentName}), Relays: ${panel.relays.size}, Active: ${panel.activeRelays.size}, ESP32Status: ${panel.esp32Status}")
-                }
-
-                // Filtrar paneles válidos
-                val validPanels = uniquePanels.filter { panel ->
+                val validPanels = panels.filter { panel ->
                     panel.documentName.startsWith(DocumentPrefixes.PANEL) &&
                             panel.clientName.startsWith(DocumentPrefixes.CLIENT)
                 }
 
-                // Agrupar paneles por cliente
-                val groupedPanels = validPanels.groupBy {
-                    clientsMap[it.clientName] ?: it.clientName
+                val groupedPanels = if (currentClientDocName != null) {
+                    emptyMap()
+                } else {
+                    validPanels.groupBy { panel ->
+                        clientsMap[panel.clientName] ?: panel.clientName
+                    }
                 }
 
-                // Actualizar estado
                 _uiState.update { currentState ->
                     currentState.copy(
                         isLoading = false,
@@ -147,56 +172,27 @@ class DashboardViewModel @Inject constructor(
                     )
                 }
 
-                Log.d(TAG, "Dashboard panels updated successfully: ${validPanels.size} unique panels")
-            }
-    }
+                Log.d(TAG, "Estado del dashboard actualizado: ${validPanels.size} paneles válidos")
 
-    fun refreshPanels() {
-        Log.d(TAG, "Refresh manual solicitado")
-
-        // Solo mostrar loading si no hay paneles
-        val shouldShowLoading = _uiState.value.panels.isEmpty()
-
-        _uiState.update { it.copy(
-            isLoading = shouldShowLoading,
-            error = null
-        ) }
-
-        viewModelScope.launch {
-            try {
-                val clientsMap = loadClientNames(currentClientDocName)
-
-                _uiState.update { currentState ->
-                    currentState.copy(
-                        clientNames = clientsMap,
-                        lastUpdate = System.currentTimeMillis(),
-                        isLoading = false
-                    )
+                validPanels.forEach { panel ->
+                    Log.d(TAG, "Panel: ${panel.name}, Relays: ${panel.relays.size}, Active: ${panel.activeRelays.size}, ESP32: ${panel.esp32Status}")
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error en refresh", e)
-                _uiState.update { it.copy(
-                    isLoading = false,
-                    error = "Error refrescando datos: ${e.message}"
-                ) }
             }
-        }
     }
 
-    private suspend fun loadClientNames(clientDocName: String?): Map<String, String> {
+    private suspend fun loadClientNames(): Map<String, String> {
         return try {
-            if (clientDocName != null) {
-                // Para usuario específico
+            if (currentClientDocName != null) {
                 val clientSnapshot = firestore
                     .collection("hdd-monitor/accounts/clients")
-                    .document(clientDocName)
+                    .document(currentClientDocName!!)
                     .get()
                     .await()
 
                 if (clientSnapshot.exists()) {
                     val clientName = clientSnapshot.getString("name")
                     if (clientName != null) {
-                        mapOf(clientDocName to clientName)
+                        mapOf(currentClientDocName!! to clientName)
                     } else {
                         emptyMap()
                     }
@@ -204,7 +200,6 @@ class DashboardViewModel @Inject constructor(
                     emptyMap()
                 }
             } else {
-                // Para admin (todos los clientes)
                 val clients = mutableMapOf<String, String>()
                 val clientsSnapshot = firestore
                     .collection("hdd-monitor/accounts/clients")
@@ -225,14 +220,26 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
+    fun refreshPanels() {
+        Log.d(TAG, "Refresh manual solicitado - reiniciando dashboard completo")
+        initializeDashboard()
+    }
+
     fun clearError() {
         _uiState.update { it.copy(error = null) }
+    }
+
+    fun retryLoad() {
+        Log.d(TAG, "Reintentar carga solicitado")
+        clearError()
+        initializeDashboard()
     }
 
     override fun onCleared() {
         super.onCleared()
         Log.d(TAG, "DashboardViewModel being cleared")
         panelsJob?.cancel()
+        listenerManager.setCurrentScreen("other")
     }
 
     data class DashboardUiState(

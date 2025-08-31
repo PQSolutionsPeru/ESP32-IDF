@@ -33,14 +33,13 @@ class ListenerManager @Inject constructor(
 ) {
     companion object {
         private const val TAG = "ListenerManager"
-        private const val HEALTH_CHECK_INTERVAL = 60000L
-        private const val DEEP_HEALTH_CHECK_INTERVAL = 300000L
-        private const val CLEANUP_INTERVAL = 900000L
-        private const val MEMORY_CHECK_INTERVAL = 120000L
+        private const val HEALTH_CHECK_INTERVAL = 120000L
+        private const val DEEP_HEALTH_CHECK_INTERVAL = 600000L
+        private const val SELECTIVE_CLEANUP_INTERVAL = 1800000L
+        private const val MEMORY_CHECK_INTERVAL = 180000L
         private const val CONNECTION_TIMEOUT = 30000L
         private const val MAX_MEMORY_USAGE_MB = 512
-        private const val MAX_TOTAL_LISTENERS = 100
-        private const val FORCE_CLEANUP_THRESHOLD = 0.85
+        private const val MAX_TOTAL_LISTENERS = 150
         private const val EMERGENCY_CLEANUP_THRESHOLD = 0.95
         private const val MAX_RECONNECTION_ATTEMPTS = 20
         private const val BACKOFF_BASE_DELAY = 1000L
@@ -51,6 +50,7 @@ class ListenerManager @Inject constructor(
     private val isRunning = AtomicBoolean(false)
     private val lastHealthCheck = AtomicLong(0)
     private val reconnectionAttempts = AtomicLong(0)
+    private var currentScreen = "dashboard"
 
     private val _systemHealth = MutableStateFlow(SystemHealth())
     val systemHealth: StateFlow<SystemHealth> = _systemHealth.asStateFlow()
@@ -66,6 +66,37 @@ class ListenerManager @Inject constructor(
         val repositoryStats: Map<String, Any> = emptyMap(),
         val timestamp: Long = System.currentTimeMillis()
     )
+
+    fun setCurrentScreen(screenName: String) {
+        val previousScreen = currentScreen
+        currentScreen = screenName
+        Log.d(TAG, "Screen changed from: $previousScreen to: $screenName")
+
+        if (screenName == "dashboard" && previousScreen != "dashboard") {
+            Log.d(TAG, "Returning to dashboard - scheduling listener reactivation")
+            managerScope.launch {
+                delay(500)
+                onReturnedToDashboard()
+            }
+        }
+    }
+
+    private suspend fun onReturnedToDashboard() {
+        Log.d(TAG, "Reactivating dashboard listeners after screen change")
+
+        try {
+            panelRepository.clearStaleListeners()
+            esp32Repository.clearStaleListeners()
+
+            if (!checkFirebaseConnection()) {
+                Log.w(TAG, "Firebase connection issue detected, attempting reconnection")
+                handleConnectionLoss()
+            }
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error reactivating dashboard listeners", e)
+        }
+    }
 
     fun optimizeFirebaseForLongRunning() {
         try {
@@ -90,13 +121,13 @@ class ListenerManager @Inject constructor(
             return
         }
 
-        Log.d(TAG, "INICIANDO GESTIÓN 24/7/365")
+        Log.d(TAG, "INICIANDO GESTIÓN 24/7/365 - MODO CONSERVADOR")
 
         optimizeFirebaseForLongRunning()
 
         startHealthMonitoring()
         startMemoryMonitoring()
-        startPeriodicCleanup()
+        startSelectiveCleanup()
         startConnectionMonitoring()
 
         Log.d(TAG, "Sistema de gestión 24/7 iniciado correctamente")
@@ -122,7 +153,7 @@ class ListenerManager @Inject constructor(
                 } catch (e: Exception) {
                     Log.e(TAG, "Error en monitoreo de salud", e)
                     updateHealthError("Health monitoring error: ${e.message}")
-                    delay(5000)
+                    delay(10000)
                 }
             }
         }
@@ -140,29 +171,31 @@ class ListenerManager @Inject constructor(
                             performEmergencyCleanup()
                             forceGarbageCollection()
                         }
-                        memoryUsage > MAX_MEMORY_USAGE_MB * FORCE_CLEANUP_THRESHOLD -> {
-                            Log.w(TAG, "Memoria alta: ${memoryUsage}MB - Limpieza preventiva")
-                            performPreventiveCleanup()
+                        memoryUsage > MAX_MEMORY_USAGE_MB * 0.8 -> {
+                            Log.w(TAG, "Memoria alta: ${memoryUsage}MB - Limpieza selectiva")
+                            performSelectiveCleanup()
                         }
                     }
 
                     delay(MEMORY_CHECK_INTERVAL)
                 } catch (e: Exception) {
                     Log.e(TAG, "Error en monitoreo de memoria", e)
-                    delay(10000)
+                    delay(15000)
                 }
             }
         }
     }
 
-    private fun startPeriodicCleanup() {
+    private fun startSelectiveCleanup() {
         managerScope.launch {
             while (isRunning.get()) {
                 try {
-                    delay(CLEANUP_INTERVAL)
-                    performIntelligentCleanup()
+                    delay(SELECTIVE_CLEANUP_INTERVAL)
+                    if (currentScreen != "dashboard") {
+                        performSelectiveCleanup()
+                    }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error en limpieza periódica", e)
+                    Log.e(TAG, "Error en limpieza selectiva", e)
                 }
             }
         }
@@ -183,7 +216,7 @@ class ListenerManager @Inject constructor(
                     delay(CONNECTION_TIMEOUT)
                 } catch (e: Exception) {
                     Log.e(TAG, "Error en monitoreo de conexión", e)
-                    delay(5000)
+                    delay(10000)
                 }
             }
         }
@@ -227,93 +260,77 @@ class ListenerManager @Inject constructor(
                 Relays: ${relayStats["activeListeners"]}
                 ESP32s: ${esp32Stats["activeListeners"]}
                 Reconexiones: ${reconnectionAttempts.get()}
+                Pantalla actual: $currentScreen
             """.trimIndent())
-
-            if (totalListeners > MAX_TOTAL_LISTENERS * 0.8) {
-                Log.w(TAG, "Alerta: Listeners cerca del límite ($totalListeners)")
-            }
-
-            if (memoryUsage > MAX_MEMORY_USAGE_MB * 0.7) {
-                Log.w(TAG, "Alerta: Memoria alta (${memoryUsage}MB)")
-            }
 
         } catch (e: Exception) {
             Log.e(TAG, "Error en check profundo", e)
         }
     }
 
-    private suspend fun performIntelligentCleanup() {
-        Log.d(TAG, "Iniciando limpieza inteligente")
+    private suspend fun performSelectiveCleanup() {
+        Log.d(TAG, "Iniciando limpieza selectiva - conservando listeners activos")
 
         val beforeStats = getAllRepositoryStats()
         val beforeMemory = getMemoryUsage()
 
         try {
-            cleanupByPriority()
+            if (currentScreen != "dashboard") {
+                cleanupStaleListenersOnly()
+            }
 
-            if (beforeMemory > MAX_MEMORY_USAGE_MB * 0.6) {
+            if (beforeMemory > MAX_MEMORY_USAGE_MB * 0.7) {
                 forceGarbageCollection()
             }
 
             val afterStats = getAllRepositoryStats()
             val afterMemory = getMemoryUsage()
 
-            Log.d(TAG, "Limpieza completada - Memoria: ${beforeMemory}MB → ${afterMemory}MB")
+            Log.d(TAG, "Limpieza selectiva completada - Memoria: ${beforeMemory}MB → ${afterMemory}MB")
 
         } catch (e: Exception) {
-            Log.e(TAG, "Error en limpieza inteligente", e)
+            Log.e(TAG, "Error en limpieza selectiva", e)
         }
     }
 
-    private fun cleanupByPriority() {
+    private fun cleanupStaleListenersOnly() {
         try {
-            panelRepository.clearListeners()
+            Log.d(TAG, "Limpiando solo listeners obsoletos")
+
+            panelRepository.clearStaleListeners()
+            esp32Repository.clearStaleListeners()
+
+            System.gc()
+
         } catch (e: Exception) {
-            Log.e(TAG, "Error limpiando PanelRepository", e)
+            Log.e(TAG, "Error limpiando listeners obsoletos", e)
         }
-
-        try {
-            relayControlRepository.clearListeners()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error limpiando RelayControlRepository", e)
-        }
-
-        if (getMemoryUsage() > MAX_MEMORY_USAGE_MB * 0.5) {
-            try {
-                cleanupESP32RepositorySelective()
-            } catch (e: Exception) {
-                Log.e(TAG, "Error en limpieza selectiva ESP32", e)
-            }
-        }
-    }
-
-    private fun performPreventiveCleanup() {
-        Log.w(TAG, "Ejecutando limpieza preventiva")
-
-        cleanupByPriority()
-        System.gc()
     }
 
     private fun performEmergencyCleanup() {
         Log.e(TAG, "LIMPIEZA DE EMERGENCIA ACTIVADA")
 
         try {
-            panelRepository.clearListeners()
-            relayControlRepository.clearListeners()
+            if (currentScreen != "dashboard") {
+                panelRepository.clearListeners()
+                relayControlRepository.clearListeners()
+            }
+
             notificationRepository.clearListeners()
             eventRepository.clearListeners()
-            esp32Repository.clearListeners()
 
             repeat(3) {
                 System.gc()
                 Thread.sleep(100)
             }
 
-            Log.w(TAG, "Limpieza de emergencia completada, reiniciando listeners esenciales")
+            Log.w(TAG, "Limpieza de emergencia completada")
 
-            managerScope.launch {
-                delay(5000)
-                restartEssentialListeners()
+            if (currentScreen == "dashboard") {
+                managerScope.launch {
+                    delay(5000)
+                    Log.d(TAG, "Listeners esenciales preservados para dashboard")
+                }
             }
 
         } catch (e: Exception) {
@@ -321,22 +338,12 @@ class ListenerManager @Inject constructor(
         }
     }
 
-    private suspend fun restartEssentialListeners() {
-        Log.d(TAG, "Reiniciando listeners esenciales")
-
-        try {
-            Log.d(TAG, "Listeners esenciales reiniciados")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error reiniciando listeners esenciales", e)
-        }
-    }
-
     private suspend fun handleConnectionLoss() {
         val attempts = reconnectionAttempts.incrementAndGet()
 
         if (attempts > MAX_RECONNECTION_ATTEMPTS) {
-            Log.e(TAG, "Máximo de reintentos alcanzado, realizando reset completo")
-            performEmergencyCleanup()
+            Log.e(TAG, "Máximo de reintentos alcanzado, realizando reset selectivo")
+            performSelectiveCleanup()
             reconnectionAttempts.set(0)
             return
         }
@@ -409,7 +416,7 @@ class ListenerManager @Inject constructor(
 
     private fun getRelayControlStats(): Map<String, Any> {
         return try {
-            mapOf("activeListeners" to 0)
+            relayControlRepository.getListenerStats()
         } catch (e: Exception) {
             mapOf("activeListeners" to 0)
         }
@@ -455,14 +462,6 @@ class ListenerManager @Inject constructor(
         }
     }
 
-    private fun cleanupESP32RepositorySelective() {
-        try {
-            esp32Repository.clearListeners()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error en limpieza selectiva ESP32", e)
-        }
-    }
-
     private fun forceGarbageCollection() {
         repeat(2) {
             System.gc()
@@ -488,6 +487,7 @@ class ListenerManager @Inject constructor(
     fun getSystemStats(): Map<String, Any> {
         return mapOf(
             "isRunning" to isRunning.get(),
+            "currentScreen" to currentScreen,
             "totalListeners" to getTotalListenersCount(),
             "memoryUsageMB" to getMemoryUsage(),
             "maxMemoryMB" to MAX_MEMORY_USAGE_MB,
