@@ -873,7 +873,7 @@ static void system_monitor_task(void *pvParameters) {
             LOG_I(TAG, "Processed 1 MQTT message from queue");
         }
         
-        if (cycle_count % 120 == 0 && get_relay_manager_initialized()) {
+        if (cycle_count % 1800 == 0 && get_relay_manager_initialized()) {
             if (task_registered) {
                 watchdog_manager_feed();
             }
@@ -912,7 +912,7 @@ static void system_monitor_task(void *pvParameters) {
             }
         }
         
-        if (cycle_count % 120 == 0) {
+        if (cycle_count % 1800 == 0) {
             debug_connectivity_events();
         }
         
@@ -925,7 +925,7 @@ static void system_monitor_task(void *pvParameters) {
             }
         }
         
-        if (cycle_count % 180 == 0) {
+        if (cycle_count % 1800 == 0) {
             print_memory_info_simple();
         }
         
@@ -992,12 +992,14 @@ static void system_monitor_task(void *pvParameters) {
                     watchdog_manager_report_activity(WATCHDOG_CHECK_MQTT);
                 }
                 
-                if (cycle_count % 36 == 0) {
+                if (cycle_count % 1800 == 0) {
                     LOG_I(TAG, "System OK - WiFi+MQTT connected");
                 }
             } else {
                 if (cycle_count % 36 == 0) {
-                    LOG_I(TAG, "Retrying MQTT connection");
+                    if (cycle_count % 1800 == 0) {
+                        LOG_I(TAG, "Retrying MQTT connection");
+                    }
                     if (esp32_id_manager_get_id(g_esp32_id_buffer, sizeof(g_esp32_id_buffer)) == ESP_OK) {
                         mqtt_manager_set_esp32_id(g_esp32_id_buffer);
                         mqtt_manager_connect();
@@ -1256,7 +1258,7 @@ void app_main(void)
             }
         }
         
-        if (main_cycle % 90 == 0) {
+        if (main_cycle % 450 == 0) {
             size_t free_heap = esp_get_free_heap_size();
             size_t min_heap = esp_get_minimum_free_heap_size();
             LOG_I(TAG, "Main task: heap free=%zu min=%zu", free_heap, min_heap);

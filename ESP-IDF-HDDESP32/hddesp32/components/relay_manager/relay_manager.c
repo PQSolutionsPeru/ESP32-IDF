@@ -1424,7 +1424,7 @@ esp_err_t relay_manager_verify_all_states(void) {
         return ESP_ERR_INVALID_STATE;
     }
     
-    LOG_I(TAG, "Verifying all relay states for consistency");
+    LOG_D(TAG, "Verifying all relay states for consistency");
     
     int corrections_made = 0;
     
@@ -1488,7 +1488,7 @@ esp_err_t relay_manager_verify_all_states(void) {
     if (corrections_made > 0) {
         LOG_I(TAG, "Made %d state corrections", corrections_made);
     } else {
-        LOG_I(TAG, "All relay states are consistent");
+        LOG_D(TAG, "All relay states are consistent");
     }
     
     return ESP_OK;
@@ -1840,7 +1840,7 @@ esp_err_t relay_manager_check_all_states(bool force_report) {
     
     int state_changes = 0;
     
-    LOG_I(TAG, "Manual check starting (force_report=%s)", force_report ? "true" : "false");
+    LOG_D(TAG, "Manual check starting (force_report=%s)", force_report ? "true" : "false");
     
     for (int i = 0; i < RELAY_MANAGER_MAX_RELAYS; i++) {
         relay_config_t *relay = &ctx->relays[i];
@@ -1869,7 +1869,7 @@ esp_err_t relay_manager_check_all_states(bool force_report) {
             
             state_changes++;
             
-            LOG_I(TAG, "Manual check - Relay %s: %s -> %s (GPIO: %d)", 
+            LOG_I(TAG, "Manual check - Relay %s: %s -> %s (GPIO: %d)",
                     relay->relay_id,
                     relay_state_to_string(old_state),
                     relay_state_to_string(current_state),
@@ -1895,7 +1895,7 @@ esp_err_t relay_manager_check_all_states(bool force_report) {
         }
     }
     
-    LOG_I(TAG, "Manual check completed: %d state changes detected", state_changes);
+    LOG_D(TAG, "Manual check completed: %d state changes detected", state_changes);
     
     return ESP_OK;
 }
