@@ -20,4 +20,6 @@ idf_component_register(SRCS "hddesp32_main.c"
                         freertos
                         esp_common
                         driver
-                        heap)
+                        heap
+                        log_storage
+                        log_uploader)
