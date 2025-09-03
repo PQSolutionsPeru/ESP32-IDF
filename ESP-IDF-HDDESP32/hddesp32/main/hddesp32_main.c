@@ -19,6 +19,8 @@
 #include "esp_task_wdt.h"
 #include "config_processor.h"
 #include "esp_timer.h"
+#include "spiffs_log.h"
+#include "log_uploader.h"
 
 static const char *TAG = "HDDESP32";
 
@@ -1028,6 +1030,10 @@ static void system_monitor_task(void *pvParameters) {
 
 void app_main(void)
 {
+    ESP_ERROR_CHECK(log_storage_init());
+    log_storage_rotate();
+    esp_log_set_vprintf(spiffs_vprintf);
+
     LOG_I(TAG, "Starting HDD ESP32 Monitor v2.0 (ESP-IDF v5.4.1)");
 
     LOG_I(TAG, "Phase 1: Basic initialization");
@@ -1099,6 +1105,7 @@ void app_main(void)
     
     ESP_ERROR_CHECK(esp32_id_manager_get_id(g_esp32_id_buffer, sizeof(g_esp32_id_buffer)));
     LOG_I(TAG, "ESP32 ID: %s", g_esp32_id_buffer);
+    log_uploader_start(g_esp32_id_buffer);
     
     char mac_address[ESP32_MAC_STR_LENGTH + 1];
     ESP_ERROR_CHECK(esp32_id_manager_get_mac(mac_address, sizeof(mac_address)));
