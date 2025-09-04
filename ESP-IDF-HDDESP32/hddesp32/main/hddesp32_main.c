@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <inttypes.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_system.h"
@@ -86,7 +88,6 @@ static void debug_connectivity_events(void) {
         LOG_E(TAG, "CRITICAL: Connectivity memory leak - using %zu bytes", memory_used);
     }
     
-    // SOLO loggear si hay actividad o problemas
     if (count > 0 || has_events || total_events > 10) {
         LOG_D(TAG, "Connectivity activity: events=%zu, pending=%zu, memory=%zu", 
               total_events, pending_events, memory_used);
@@ -1031,7 +1032,13 @@ static void system_monitor_task(void *pvParameters) {
 void app_main(void)
 {
     ESP_ERROR_CHECK(log_storage_init());
-    log_storage_rotate();
+    
+    size_t log_size, prev_log_size;
+    if (log_storage_get_info(&log_size, &prev_log_size) == ESP_OK) {
+        ESP_LOGI(TAG, "Log system ready - current: %zu bytes, previous: %zu bytes", 
+                 log_size, prev_log_size);
+    }
+    
     esp_log_set_vprintf(spiffs_vprintf);
 
     LOG_I(TAG, "Starting HDD ESP32 Monitor v2.0 (ESP-IDF v5.4.1)");

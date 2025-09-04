@@ -90,5 +90,7 @@ E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp3
 E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/relay_manager/librelay_manager.a
 E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/config_processor/libconfig_processor.a
 E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/wifi_captive_portal/libwifi_captive_portal.a
+E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/log_storage/liblog_storage.a
+E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/log_uploader/liblog_uploader.a
 E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/watchdog_manager/libwatchdog_manager.a
 E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/main/libmain.a

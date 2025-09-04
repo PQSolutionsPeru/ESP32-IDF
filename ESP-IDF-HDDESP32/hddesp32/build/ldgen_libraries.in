@@ -90,5 +90,7 @@ $<TARGET_FILE:__idf_mqtt_manager>
 $<TARGET_FILE:__idf_relay_manager>
 $<TARGET_FILE:__idf_config_processor>
 $<TARGET_FILE:__idf_wifi_captive_portal>
+$<TARGET_FILE:__idf_log_storage>
+$<TARGET_FILE:__idf_log_uploader>
 $<TARGET_FILE:__idf_watchdog_manager>
 $<TARGET_FILE:__idf_main>

@@ -9,6 +9,8 @@ idf_component_register(SRCS "hddesp32_main.c"
                         wifi_manager 
                         wifi_captive_portal 
                         mqtt_manager 
+                        log_storage 
+                        log_uploader 
                         nvs_flash 
                         esp_wifi 
                         time_manager 
