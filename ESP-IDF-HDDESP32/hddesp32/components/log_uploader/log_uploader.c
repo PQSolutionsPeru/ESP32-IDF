@@ -4,6 +4,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_http_client.h"
@@ -14,37 +15,73 @@
 #include "wifi_manager.h"
 #include "mqtt_manager.h"
 #include "connectivity_monitor.h"
+#include "time_manager.h"
 
 #ifndef CONFIG_LOG_UPLOAD_URL
 #define CONFIG_LOG_UPLOAD_URL "http://34.63.146.196:8080/upload"
 #endif
 
 #define UPLOAD_INTERVAL_HOURS 24
-#define SYSTEM_STABILITY_CHECK_MS 300000  // 5 minutos de estabilidad requerida
-#define CONNECTIVITY_TIMEOUT_MS 5000      // 5 segundos timeout HTTP
+#define SYSTEM_STABILITY_CHECK_MS 300000
+#define CONNECTIVITY_TIMEOUT_MS 5000
 #define MAX_UPLOAD_RETRIES 3
+#define MIN_LOG_SIZE_FOR_ROTATION 10240
 
 static const char *TAG = "LOG_UPLOADER";
 static char s_esp32_id[ESP32_ID_LENGTH + 1];
 static bool s_system_stable = false;
 static bool s_uploader_running = false;
+static bool s_post_restart_check_done = false;
 static int64_t s_last_stability_check = 0;
 
-// Verificar conectividad completa antes de uploads
+// Nueva función para obtener timestamp formateado
+static void get_log_timestamp(char *buffer, size_t size) {
+    if (size < 24) return;  // Mínimo necesario para el formato
+    
+    if (time_manager_is_synchronized()) {
+        time_manager_get_lima_time_str(buffer, size);
+    } else {
+        time_t now = time(NULL);
+        struct tm timeinfo;
+        localtime_r(&now, &timeinfo);
+        int ret = snprintf(buffer, size, "%02d/%02d/%04d, %02d:%02d:%02d",
+                 timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900,
+                 timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+        if (ret >= (int)size) {
+            // Truncación detectada, usar formato más corto
+            snprintf(buffer, size, "%02d:%02d:%02d", 
+                     timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+        }
+    }
+}
+
+// Macro para logs con timestamp
+#define LOG_WITH_TS(level, format, ...) do { \
+    char ts_buffer[64]; \
+    get_log_timestamp(ts_buffer, sizeof(ts_buffer)); \
+    ESP_LOG##level(TAG, "[%s] " format, ts_buffer, ##__VA_ARGS__); \
+} while(0)
+
+static bool check_full_connectivity(void);
+static void check_post_restart_rotation(void);
+static bool check_system_stability(void);
+static esp_err_t send_file_with_verification(const char *path);
+static esp_err_t send_file_with_timestamp(const char *path);
+static int64_t calculate_ms_until_midnight_lima(void);
+static void force_daily_rotation_and_upload(void);
+static void upload_pending_logs(void);
+
 static bool check_full_connectivity(void) {
-    // Verificar WiFi
     if (!wifi_manager_is_connected()) {
         ESP_LOGD(TAG, "WiFi not connected");
         return false;
     }
     
-    // Verificar MQTT
     if (!mqtt_manager_is_connected()) {
         ESP_LOGD(TAG, "MQTT not connected");
         return false;
     }
     
-    // Verificar Internet con ping rápido
     bool has_internet = false;
     esp_err_t ping_ret = connectivity_monitor_check_internet_connectivity(&has_internet);
     if (ping_ret != ESP_OK || !has_internet) {
@@ -52,43 +89,71 @@ static bool check_full_connectivity(void) {
         return false;
     }
     
-    ESP_LOGI(TAG, "Full connectivity confirmed (WiFi + MQTT + Internet)");
+    LOG_WITH_TS(I, "Full connectivity confirmed (WiFi + MQTT + Internet)");
     return true;
 }
 
-// Verificar estabilidad del sistema
+static void check_post_restart_rotation(void) {
+    if (s_post_restart_check_done) {
+        return;
+    }
+    
+    LOG_WITH_TS(I, "Checking for post-restart log rotation...");
+    
+    struct stat st;
+    if (stat("/spiffs/log.txt", &st) != 0) {
+        LOG_WITH_TS(W, "No log.txt found for post-restart rotation");
+        s_post_restart_check_done = true;
+        return;
+    }
+    
+    if (st.st_size >= MIN_LOG_SIZE_FOR_ROTATION) {
+        LOG_WITH_TS(I, "Post-restart: log.txt has %ld bytes, rotating to preserve previous session", st.st_size);
+        
+        esp_err_t rotate_ret = log_storage_force_rotate();
+        if (rotate_ret == ESP_OK) {
+            LOG_WITH_TS(I, "Post-restart log rotation completed successfully");
+        } else {
+            LOG_WITH_TS(W, "Post-restart log rotation failed: %s", esp_err_to_name(rotate_ret));
+        }
+    } else {
+        LOG_WITH_TS(I, "Post-restart: log.txt size (%ld bytes) below rotation threshold (%d bytes)", 
+                st.st_size, MIN_LOG_SIZE_FOR_ROTATION);
+    }
+    
+    s_post_restart_check_done = true;
+}
+
 static bool check_system_stability(void) {
     if (s_system_stable) {
-        return true; // Ya verificado anteriormente
+        return true;
     }
     
     int64_t current_time = esp_timer_get_time() / 1000;
     
-    // Primera verificación de conectividad
     if (!check_full_connectivity()) {
         s_last_stability_check = current_time;
         return false;
     }
     
-    // Si es la primera vez que tenemos conectividad completa
     if (s_last_stability_check == 0) {
         s_last_stability_check = current_time;
-        ESP_LOGI(TAG, "System connectivity established, starting stability timer");
+        LOG_WITH_TS(I, "System connectivity established, starting stability timer");
         return false;
     }
     
-    // Verificar si ha pasado suficiente tiempo de estabilidad
     int64_t stability_time = current_time - s_last_stability_check;
     if (stability_time >= SYSTEM_STABILITY_CHECK_MS) {
-        // Verificar que aún tenemos conectividad
         if (check_full_connectivity()) {
             s_system_stable = true;
-            ESP_LOGI(TAG, "System confirmed stable after %lld ms", stability_time);
+            LOG_WITH_TS(I, "System confirmed stable after %lld ms", stability_time);
+            
+            check_post_restart_rotation();
+            
             return true;
         } else {
-            // Perdimos conectividad, reiniciar timer
             s_last_stability_check = current_time;
-            ESP_LOGW(TAG, "Lost connectivity during stability check, restarting timer");
+            LOG_WITH_TS(W, "Lost connectivity during stability check, restarting timer");
             return false;
         }
     }
@@ -99,266 +164,473 @@ static bool check_system_stability(void) {
 }
 
 static esp_err_t send_file_with_verification(const char *path) {
-    ESP_LOGI(TAG, "Attempting to send file: %s", path);
+    LOG_WITH_TS(I, "Attempting to send file: %s", path);
     
-    // Verificación triple de conectividad antes de enviar
     if (!check_full_connectivity()) {
-        ESP_LOGW(TAG, "No full connectivity available for upload");
+        LOG_WITH_TS(W, "No full connectivity available for upload");
         return ESP_ERR_INVALID_STATE;
     }
     
     struct stat st;
     if (stat(path, &st) != 0) {
-        ESP_LOGW(TAG, "File %s not found", path);
+        LOG_WITH_TS(W, "File %s not found", path);
         return ESP_ERR_NOT_FOUND;
     }
     
     if (st.st_size == 0) {
-        ESP_LOGW(TAG, "File %s is empty, deleting", path);
+        LOG_WITH_TS(W, "File %s is empty, deleting", path);
         unlink(path);
         return ESP_ERR_INVALID_SIZE;
     }
     
-    if (st.st_size > 1024 * 1024) { // 1MB limit
-        ESP_LOGW(TAG, "File %s too large (%ld bytes), deleting", path, st.st_size);
+    if (st.st_size > 350 * 1024) {
+        LOG_WITH_TS(W, "File %s too large (%ld bytes), deleting", path, st.st_size);
         unlink(path);
         return ESP_ERR_INVALID_SIZE;
     }
     
-    ESP_LOGI(TAG, "File %s found, size: %ld bytes", path, st.st_size);
+    LOG_WITH_TS(I, "File %s found, size: %ld bytes - proceeding with upload", path, st.st_size);
     
-    FILE *f = fopen(path, "r");
-    if (!f) {
-        ESP_LOGE(TAG, "Failed to open file %s for reading", path);
-        return ESP_FAIL;
-    }
-
+    size_t free_before = esp_get_free_heap_size();
+    LOG_WITH_TS(I, "Free heap before upload: %zu bytes", free_before);
+    
     const char *filename = strrchr(path, '/');
     filename = filename ? filename + 1 : path;
 
-    ESP_LOGI(TAG, "Preparing HTTP upload for file: %s", filename);
+    LOG_WITH_TS(I, "Preparing streaming HTTP upload for file: %s", filename);
 
     const char *boundary = "----ESP32LogBoundary";
     char header[64];
     snprintf(header, sizeof(header), "multipart/form-data; boundary=%s", boundary);
 
-    int pre_len = snprintf(NULL, 0,
+    char pre_body[512];
+    int pre_len = snprintf(pre_body, sizeof(pre_body),
         "--%s\r\n"
         "Content-Disposition: form-data; name=\"esp32_id\"\r\n\r\n%s\r\n"
         "--%s\r\n"
         "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n"
         "Content-Type: text/plain\r\n\r\n",
         boundary, s_esp32_id, boundary, filename);
-    int post_len = snprintf(NULL, 0, "\r\n--%s--\r\n", boundary);
+    
+    char post_body[64];
+    int post_len = snprintf(post_body, sizeof(post_body), "\r\n--%s--\r\n", boundary);
     int total_len = pre_len + st.st_size + post_len;
 
-    ESP_LOGI(TAG, "HTTP body size: %d bytes (pre: %d, file: %ld, post: %d)", 
-             total_len, pre_len, st.st_size, post_len);
+    LOG_WITH_TS(I, "HTTP body size: %d bytes (streaming mode)", total_len);
 
-    char *body = malloc(total_len);
-    if (!body) {
-        ESP_LOGE(TAG, "Failed to allocate %d bytes for HTTP body", total_len);
-        fclose(f);
-        return ESP_ERR_NO_MEM;
-    }
-    
-    char *p = body;
-    p += sprintf(p,
-        "--%s\r\n"
-        "Content-Disposition: form-data; name=\"esp32_id\"\r\n\r\n%s\r\n"
-        "--%s\r\n"
-        "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n"
-        "Content-Type: text/plain\r\n\r\n",
-        boundary, s_esp32_id, boundary, filename);
-    
-    size_t read_bytes = fread(p, 1, st.st_size, f);
-    fclose(f);
-    
-    if (read_bytes != st.st_size) {
-        ESP_LOGE(TAG, "File read error: expected %ld bytes, got %zu bytes", st.st_size, read_bytes);
-        free(body);
-        return ESP_FAIL;
-    }
-    
-    p += st.st_size;
-    p += sprintf(p, "\r\n--%s--\r\n", boundary);
-
-    // Verificar conectividad una vez más antes del HTTP request
     if (!check_full_connectivity()) {
-        ESP_LOGW(TAG, "Lost connectivity before HTTP request");
-        free(body);
+        LOG_WITH_TS(W, "Lost connectivity before HTTP request");
         return ESP_ERR_INVALID_STATE;
     }
 
-    ESP_LOGI(TAG, "Initializing HTTP client for URL: %s", CONFIG_LOG_UPLOAD_URL);
+    LOG_WITH_TS(I, "Sending streaming HTTP POST to: %s", CONFIG_LOG_UPLOAD_URL);
     
     esp_http_client_config_t cfg = {
         .url = CONFIG_LOG_UPLOAD_URL,
-        .timeout_ms = CONNECTIVITY_TIMEOUT_MS, // 5 segundos timeout
-        .buffer_size = 2048,
-        .buffer_size_tx = 2048
+        .timeout_ms = CONNECTIVITY_TIMEOUT_MS,
+        .buffer_size = 4096,
+        .buffer_size_tx = 4096
     };
     
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     if (!client) {
-        ESP_LOGE(TAG, "Failed to initialize HTTP client");
-        free(body);
+        LOG_WITH_TS(E, "Failed to initialize HTTP client");
         return ESP_FAIL;
     }
     
     esp_http_client_set_method(client, HTTP_METHOD_POST);
     esp_http_client_set_header(client, "Content-Type", header);
-    esp_http_client_set_post_field(client, body, total_len);
+    esp_http_client_set_header(client, "Content-Length", "0");
     
-    ESP_LOGI(TAG, "Performing HTTP POST request...");
-    esp_err_t err = esp_http_client_perform(client);
+    LOG_WITH_TS(I, "Opening HTTP connection...");
+    esp_err_t err = esp_http_client_open(client, total_len);
+    if (err != ESP_OK) {
+        LOG_WITH_TS(E, "Failed to open HTTP connection: %s", esp_err_to_name(err));
+        esp_http_client_cleanup(client);
+        return err;
+    }
     
-    if (err == ESP_OK) {
-        int status_code = esp_http_client_get_status_code(client);
-        int content_length = esp_http_client_get_content_length(client);
-        
-        ESP_LOGI(TAG, "HTTP POST completed - Status: %d, Content-Length: %d", 
-                 status_code, content_length);
-        
-        if (status_code == 200) {
-            ESP_LOGI(TAG, "Upload successful, deleting local file: %s", path);
-            if (unlink(path) == 0) {
-                ESP_LOGI(TAG, "Local file deleted successfully");
-            } else {
-                ESP_LOGW(TAG, "Failed to delete local file after successful upload");
+    LOG_WITH_TS(I, "Sending multipart headers...");
+    int written = esp_http_client_write(client, pre_body, pre_len);
+    if (written != pre_len) {
+        LOG_WITH_TS(E, "Failed to write headers: %d/%d", written, pre_len);
+        esp_http_client_cleanup(client);
+        return ESP_FAIL;
+    }
+    
+    FILE *f = fopen(path, "r");
+    if (!f) {
+        LOG_WITH_TS(E, "Failed to open file for reading");
+        esp_http_client_cleanup(client);
+        return ESP_FAIL;
+    }
+    
+    LOG_WITH_TS(I, "Streaming file content...");
+    char buffer[1024];
+    size_t total_written = 0;
+    
+    while (!feof(f)) {
+        size_t bytes_read = fread(buffer, 1, sizeof(buffer), f);
+        if (bytes_read > 0) {
+            int chunk_written = esp_http_client_write(client, buffer, bytes_read);
+            if (chunk_written != bytes_read) {
+                LOG_WITH_TS(E, "Failed to write file chunk: %d/%zu", chunk_written, bytes_read);
+                fclose(f);
+                esp_http_client_cleanup(client);
+                return ESP_FAIL;
             }
-        } else {
-            ESP_LOGW(TAG, "Upload failed with HTTP status: %d", status_code);
-            err = ESP_FAIL;
+            total_written += bytes_read;
         }
+    }
+    fclose(f);
+    
+    LOG_WITH_TS(I, "Sending multipart footer...");
+    written = esp_http_client_write(client, post_body, post_len);
+    if (written != post_len) {
+        LOG_WITH_TS(E, "Failed to write footer: %d/%d", written, post_len);
+        esp_http_client_cleanup(client);
+        return ESP_FAIL;
+    }
+    
+    LOG_WITH_TS(I, "Fetching response...");
+    int content_length = esp_http_client_fetch_headers(client);
+    int status_code = esp_http_client_get_status_code(client);
+    
+    LOG_WITH_TS(I, "HTTP response - Status: %d, Content-Length: %d", status_code, content_length);
+    
+    if (status_code == 200) {
+        LOG_WITH_TS(I, "Upload successful! Deleting local file: %s", path);
+        if (unlink(path) == 0) {
+            LOG_WITH_TS(I, "Local file deleted successfully");
+        } else {
+            LOG_WITH_TS(W, "Failed to delete local file after successful upload");
+        }
+        err = ESP_OK;
     } else {
-        ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));
+        LOG_WITH_TS(W, "Upload failed with HTTP status: %d", status_code);
+        err = ESP_FAIL;
     }
     
     esp_http_client_cleanup(client);
-    free(body);
+    
+    size_t free_after = esp_get_free_heap_size();
+    LOG_WITH_TS(I, "Free heap after upload: %zu bytes (delta: %+ld)", 
+             free_after, (long)(free_after - free_before));
+    
     return err;
 }
 
+static esp_err_t send_file_with_timestamp(const char *path) {
+    return send_file_with_verification(path);
+}
+
+// Función corregida para calcular tiempo hasta medianoche Lima (GMT-5)
+static int64_t calculate_ms_until_midnight_lima(void) {
+    time_t now;
+    struct tm timeinfo;
+    
+    // Usar tiempo sincronizado si está disponible
+    if (time_manager_is_synchronized()) {
+        now = time_manager_get_time();
+    } else {
+        time(&now);
+    }
+    
+    // Convertir a tiempo Lima (GMT-5)
+    now -= 5 * 3600;  // Restar 5 horas para GMT-5
+    gmtime_r(&now, &timeinfo);
+    
+    // Calcular segundos desde medianoche
+    int seconds_since_midnight = timeinfo.tm_hour * 3600 + timeinfo.tm_min * 60 + timeinfo.tm_sec;
+    int seconds_until_midnight = 86400 - seconds_since_midnight;
+    
+    // Asegurar que no sea negativo
+    if (seconds_until_midnight <= 0) {
+        seconds_until_midnight = 86400;  // 24 horas
+    }
+    
+    // Mostrar hora actual Lima
+    LOG_WITH_TS(I, "Current Lima time: %02d:%02d:%02d, seconds until midnight: %d",
+             timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec, seconds_until_midnight);
+    
+    return (int64_t)seconds_until_midnight * 1000;
+}
+
+static void force_daily_rotation_and_upload(void) {
+    LOG_WITH_TS(I, "=== FORCING DAILY LOG ROTATION AND UPLOAD (MIDNIGHT LIMA) ===");
+    
+    struct stat st;
+    if (stat("/spiffs/log.txt", &st) == 0 && st.st_size > 0) {
+        LOG_WITH_TS(I, "Current log.txt exists (%ld bytes), forcing rotation", st.st_size);
+        
+        esp_err_t rotate_ret = log_storage_force_rotate();
+        if (rotate_ret == ESP_OK) {
+            LOG_WITH_TS(I, "Daily log rotation successful");
+        } else {
+            LOG_WITH_TS(W, "Daily log rotation failed: %s", esp_err_to_name(rotate_ret));
+        }
+    } else {
+        LOG_WITH_TS(I, "No current log to rotate");
+    }
+    
+    upload_pending_logs();
+    
+    LOG_WITH_TS(I, "=== DAILY ROTATION AND UPLOAD COMPLETED ===");
+}
+
 static void upload_pending_logs(void) {
-    ESP_LOGI(TAG, "Checking for pending log uploads...");
+    LOG_WITH_TS(I, "=== STARTING LOG UPLOAD CHECK ===");
     
     if (!check_system_stability()) {
         ESP_LOGD(TAG, "System not stable yet, skipping upload");
         return;
     }
     
+    // Buscar archivos log con timestamp y log.prev
     struct stat st;
-    if (stat("/spiffs/log.prev", &st) != 0) {
-        ESP_LOGD(TAG, "No log.prev found, nothing to upload");
-        return;
+    char log_files[10][64];
+    int file_count = 0;
+    
+    // Primero buscar log.prev (compatibilidad)
+    if (stat("/spiffs/log.prev", &st) == 0 && st.st_size > 0) {
+        strcpy(log_files[file_count], "/spiffs/log.prev");
+        file_count++;
+        LOG_WITH_TS(I, "Found legacy log.prev for upload, size: %ld bytes", st.st_size);
     }
     
-    ESP_LOGI(TAG, "Found log.prev, size: %ld bytes", st.st_size);
+    // Buscar archivos con formato log_YYYYMMDD_HHMMSS.txt
+    // Para simplicidad, buscaremos archivos que empiecen con "log_" y terminen con ".txt"
+    // En una implementación completa usaríamos opendir/readdir, pero por ahora
+    // intentaremos encontrar el archivo recién creado basándonos en la rotación
     
-    if (st.st_size == 0) {
-        ESP_LOGW(TAG, "log.prev is empty, deleting");
-        unlink("/spiffs/log.prev");
-        return;
+    // Verificar si acabamos de hacer rotación post-restart
+    // El archivo timestamped debería existir si se hizo rotación
+    char potential_files[5][64];
+    int potential_count = 0;
+    
+    // Generar posibles nombres de archivos basados en tiempo actual ±2 minutos
+    time_t now;
+    if (time_manager_is_synchronized()) {
+        now = time_manager_get_time();
+    } else {
+        time(&now);
     }
+    now -= 5 * 3600;  // GMT-5
     
-    ESP_LOGI(TAG, "Starting HTTP upload process...");
-    
-    int retry_count = 0;
-    while (retry_count < MAX_UPLOAD_RETRIES) {
-        // Verificar conectividad antes de cada intento
-        if (!check_full_connectivity()) {
-            ESP_LOGW(TAG, "Lost connectivity, aborting upload attempts");
-            break;
-        }
+    for (int offset = -120; offset <= 0; offset += 60) {
+        time_t check_time = now + offset;
+        struct tm timeinfo;
+        gmtime_r(&check_time, &timeinfo);
         
-        esp_err_t err = send_file_with_verification("/spiffs/log.prev");
-        if (err == ESP_OK) {
-            ESP_LOGI(TAG, "Upload completed successfully on attempt %d", retry_count + 1);
-            return;
-        } else if (err == ESP_ERR_NOT_FOUND) {
-            ESP_LOGI(TAG, "File was deleted during upload process");
-            return;
-        } else if (err == ESP_ERR_INVALID_STATE) {
-            ESP_LOGW(TAG, "No connectivity available, will retry later");
-            break;
-        } else {
-            retry_count++;
-            ESP_LOGW(TAG, "Upload failed on attempt %d: %s", retry_count, esp_err_to_name(err));
+        snprintf(potential_files[potential_count], sizeof(potential_files[0]), 
+                 "/spiffs/log_%04d%02d%02d_%02d%02d%02d.txt",
+                 timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+                 timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+        
+        if (stat(potential_files[potential_count], &st) == 0) {
+            strcpy(log_files[file_count], potential_files[potential_count]);
+            file_count++;
+            LOG_WITH_TS(I, "Found timestamped log file: %s, size: %ld bytes", 
+                        potential_files[potential_count], st.st_size);
+        }
+        potential_count++;
+        
+        if (potential_count >= 5) break;
+    }
+    
+    // Si no encontramos archivos timestamped, buscar cualquier archivo log_*.txt
+    if (file_count == 0) {
+        // Método alternativo: buscar archivos con patrón conocido
+        // Intentar algunos nombres basados en tiempo reciente
+        for (int i = 0; i < 10; i++) {
+            time_t check_time = now - (i * 60);  // Revisar últimos 10 minutos
+            struct tm timeinfo;
+            gmtime_r(&check_time, &timeinfo);
             
-            if (retry_count < MAX_UPLOAD_RETRIES) {
-                ESP_LOGI(TAG, "Retrying upload in 30 seconds...");
-                vTaskDelay(pdMS_TO_TICKS(30000));
+            char test_file[64];
+            snprintf(test_file, sizeof(test_file), 
+                     "/spiffs/log_%04d%02d%02d_%02d%02d%02d.txt",
+                     timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+                     timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+            
+            if (stat(test_file, &st) == 0) {
+                strcpy(log_files[file_count], test_file);
+                file_count++;
+                LOG_WITH_TS(I, "Found recent timestamped file: %s, size: %ld bytes", test_file, st.st_size);
+                break;  // Solo tomar el primero encontrado
             }
         }
     }
     
-    if (retry_count >= MAX_UPLOAD_RETRIES) {
-        ESP_LOGE(TAG, "Failed to upload after %d attempts, giving up for this cycle", MAX_UPLOAD_RETRIES);
+    // Si TODAVÍA no encontramos archivos para subir, y hay log.txt actual significativo
+    if (file_count == 0) {
+        LOG_WITH_TS(I, "No timestamped log files found - checking current log");
+        
+        if (stat("/spiffs/log.txt", &st) == 0) {
+            LOG_WITH_TS(I, "Current log.txt size: %ld bytes", st.st_size);
+            
+            // Siempre rotar si hay contenido, sin límite mínimo
+            if (st.st_size > 0) {
+                LOG_WITH_TS(I, "Found current log with content, forcing rotation for upload");
+                esp_err_t rotate_ret = log_storage_force_rotate();
+                if (rotate_ret == ESP_OK) {
+                    LOG_WITH_TS(I, "Log rotation successful, rechecking for files");
+                    // Después de rotar, verificar archivos nuevamente
+                    if (stat("/spiffs/log.prev", &st) == 0) {
+                        strcpy(log_files[file_count], "/spiffs/log.prev");
+                        file_count++;
+                    }
+                } else {
+                    LOG_WITH_TS(W, "Log rotation failed: %s", esp_err_to_name(rotate_ret));
+                    return;
+                }
+            } else {
+                LOG_WITH_TS(I, "Current log is empty - no upload needed");
+                return;
+            }
+        } else {
+            LOG_WITH_TS(I, "No log files found at all");
+            return;
+        }
     }
+    
+    if (file_count == 0) {
+        LOG_WITH_TS(W, "No log files available for upload after all checks");
+        return;
+    }
+    
+    LOG_WITH_TS(I, "=== STARTING HTTP UPLOAD PROCESS ===");
+    LOG_WITH_TS(I, "Found %d log file(s) for upload", file_count);
+    
+    // Subir todos los archivos encontrados
+    int successful_uploads = 0;
+    for (int i = 0; i < file_count; i++) {
+        LOG_WITH_TS(I, "Processing file %d/%d: %s", i+1, file_count, log_files[i]);
+        
+        int retry_count = 0;
+        bool upload_success = false;
+        
+        while (retry_count < MAX_UPLOAD_RETRIES && !upload_success) {
+            LOG_WITH_TS(I, "Upload attempt %d/%d for %s", retry_count + 1, MAX_UPLOAD_RETRIES, log_files[i]);
+            
+            if (!check_full_connectivity()) {
+                LOG_WITH_TS(W, "Lost connectivity, aborting upload attempts");
+                break;
+            }
+            
+            esp_err_t err = send_file_with_timestamp(log_files[i]);
+            if (err == ESP_OK) {
+                LOG_WITH_TS(I, "Upload completed successfully for %s on attempt %d", log_files[i], retry_count + 1);
+                upload_success = true;
+                successful_uploads++;
+            } else if (err == ESP_ERR_NOT_FOUND) {
+                LOG_WITH_TS(I, "File %s was deleted during upload process", log_files[i]);
+                upload_success = true;  // Considerar como éxito
+                successful_uploads++;
+            } else if (err == ESP_ERR_INVALID_STATE) {
+                LOG_WITH_TS(W, "No connectivity available, will retry later");
+                break;
+            } else {
+                retry_count++;
+                LOG_WITH_TS(W, "Upload failed for %s on attempt %d: %s", log_files[i], retry_count, esp_err_to_name(err));
+                
+                if (retry_count < MAX_UPLOAD_RETRIES) {
+                    LOG_WITH_TS(I, "Retrying upload in 30 seconds...");
+                    vTaskDelay(pdMS_TO_TICKS(30000));
+                }
+            }
+        }
+        
+        if (!upload_success) {
+            LOG_WITH_TS(E, "Failed to upload %s after %d attempts", log_files[i], MAX_UPLOAD_RETRIES);
+        }
+    }
+    
+    LOG_WITH_TS(I, "=== UPLOAD PROCESS COMPLETED ===");
+    LOG_WITH_TS(I, "Successfully uploaded %d/%d files", successful_uploads, file_count);
 }
 
 static void uploader_task(void *arg) {
-    ESP_LOGI(TAG, "Log uploader task started");
+    LOG_WITH_TS(I, "Log uploader task started - waiting for internet connectivity");
     s_uploader_running = true;
     
-    // Esperar más tiempo inicial para que el sistema se estabilice
-    ESP_LOGI(TAG, "Waiting for system stabilization...");
-    vTaskDelay(pdMS_TO_TICKS(120000)); // 2 minutos inicial
+    bool initial_upload_done = false;
     
     while (s_uploader_running) {
-        // Verificar estabilidad del sistema
         if (check_system_stability()) {
-            // Solo subir logs pendientes si el sistema está estable
-            ESP_LOGI(TAG, "System is stable, checking for pending log uploads");
-            
-            // Intentar subir logs existentes (no forzar rotación)
-            upload_pending_logs();
+            if (!initial_upload_done) {
+                LOG_WITH_TS(I, "System is stable, checking for post-restart uploads");
+                upload_pending_logs();
+                initial_upload_done = true;
+                
+                // Calcular tiempo hasta la PRÓXIMA medianoche Lima
+                int64_t ms_until_midnight = calculate_ms_until_midnight_lima();
+                LOG_WITH_TS(I, "Post-restart upload complete, next scheduled at midnight Lima (GMT-5)");
+                vTaskDelay(pdMS_TO_TICKS(ms_until_midnight));
+            } else {
+                // Rotación diaria exacta a medianoche Lima
+                char current_time[32];
+                get_log_timestamp(current_time, sizeof(current_time));
+                LOG_WITH_TS(I, "Daily upload triggered at midnight Lima");
+                
+                force_daily_rotation_and_upload();
+                
+                // Esperar hasta la siguiente medianoche
+                int64_t ms_until_next_midnight = calculate_ms_until_midnight_lima();
+                vTaskDelay(pdMS_TO_TICKS(ms_until_next_midnight));
+            }
         } else {
-            ESP_LOGD(TAG, "System not stable yet, skipping log operations");
+            if (check_full_connectivity()) {
+                int64_t current_time = esp_timer_get_time() / 1000;
+                if (s_last_stability_check > 0) {
+                    int64_t elapsed = current_time - s_last_stability_check;
+                    int64_t remaining = (SYSTEM_STABILITY_CHECK_MS - elapsed) / 1000;
+                    LOG_WITH_TS(I, "Internet connected, waiting %lld seconds for stability", remaining);
+                } else {
+                    LOG_WITH_TS(I, "Internet connected, starting 5-minute stability timer");
+                }
+            } else {
+                LOG_WITH_TS(I, "Waiting for internet connectivity, rechecking in 2 minutes");
+            }
+            vTaskDelay(pdMS_TO_TICKS(120000));
         }
-        
-        // Esperar el intervalo completo de upload
-        ESP_LOGD(TAG, "Next upload check in %d hours", UPLOAD_INTERVAL_HOURS);
-        vTaskDelay(pdMS_TO_TICKS(UPLOAD_INTERVAL_HOURS * 3600 * 1000));
     }
     
-    ESP_LOGI(TAG, "Log uploader task ended");
+    LOG_WITH_TS(I, "Log uploader task ended");
     vTaskDelete(NULL);
 }
 
 void log_uploader_start(const char *esp32_id) {
     if (s_uploader_running) {
-        ESP_LOGW(TAG, "Log uploader already running");
+        LOG_WITH_TS(W, "Log uploader already running");
         return;
     }
     
     if (esp32_id) {
         strlcpy(s_esp32_id, esp32_id, sizeof(s_esp32_id));
-        ESP_LOGI(TAG, "Log uploader initialized with ESP32 ID: %s", s_esp32_id);
+        LOG_WITH_TS(I, "Log uploader initialized with ESP32 ID: %s", s_esp32_id);
     } else {
         s_esp32_id[0] = '\0';
-        ESP_LOGW(TAG, "Log uploader started without ESP32 ID");
+        LOG_WITH_TS(W, "Log uploader started without ESP32 ID");
     }
     
-    // Resetear estado de estabilidad
     s_system_stable = false;
     s_last_stability_check = 0;
+    s_post_restart_check_done = false;
     
-    BaseType_t result = xTaskCreate(uploader_task, "log_uploader", 6144, NULL, 3, NULL);
+    BaseType_t result = xTaskCreate(uploader_task, "log_uploader", 8192, NULL, 3, NULL);
     if (result == pdPASS) {
-        ESP_LOGI(TAG, "Log uploader task created successfully");
+        LOG_WITH_TS(I, "Log uploader task created successfully");
     } else {
-        ESP_LOGE(TAG, "Failed to create log uploader task");
+        LOG_WITH_TS(E, "Failed to create log uploader task");
         s_uploader_running = false;
     }
 }
 
 void log_uploader_stop(void) {
     if (s_uploader_running) {
-        ESP_LOGI(TAG, "Stopping log uploader...");
+        LOG_WITH_TS(I, "Stopping log uploader...");
         s_uploader_running = false;
-        // La tarea se detendrá en su próxima iteración
     }
 }
 
@@ -367,7 +639,8 @@ bool log_uploader_is_system_stable(void) {
 }
 
 void log_uploader_reset_stability(void) {
-    ESP_LOGI(TAG, "Resetting system stability state");
+    LOG_WITH_TS(I, "Resetting system stability state");
     s_system_stable = false;
     s_last_stability_check = 0;
+    s_post_restart_check_done = false;
 }

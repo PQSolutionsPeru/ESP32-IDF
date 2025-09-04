@@ -23,6 +23,7 @@
 #include "esp_timer.h"
 #include "spiffs_log.h"
 #include "log_uploader.h"
+#include "driver/uart.h"
 
 static const char *TAG = "HDDESP32";
 
@@ -52,6 +53,31 @@ typedef struct {
 } deferred_mqtt_message_t;
 
 static QueueHandle_t g_mqtt_message_queue = NULL;
+
+static bool get_wifi_connected(void);
+static bool get_mqtt_connected(void);
+static bool get_relay_manager_initialized(void);
+static void process_debug_commands(void);
+
+static void setup_emergency_debug_support(void) {
+    gpio_config_t debug_pin = {
+        .pin_bit_mask = (1ULL << GPIO_NUM_0),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+    };
+    gpio_config(&debug_pin);
+    
+    if (gpio_get_level(GPIO_NUM_0) == 0) {
+        vTaskDelay(pdMS_TO_TICKS(200));
+        if (gpio_get_level(GPIO_NUM_0) == 0) {
+            esp_log_level_set("*", ESP_LOG_DEBUG);
+            LOG_I(TAG, "=== EMERGENCY BOOT DEBUG MODE ACTIVATED ===");
+            LOG_I(TAG, "GPIO0 was pressed during boot - ALL components in DEBUG mode");
+        }
+    }
+    
+    gpio_reset_pin(GPIO_NUM_0);
+}
 
 static void debug_connectivity_events(void) {
     int count = connectivity_monitor_get_pending_event_count();
@@ -144,6 +170,67 @@ static void set_relay_manager_initialized(bool initialized) {
     if (xSemaphoreTake(g_global_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
         g_relay_manager_initialized = initialized;
         xSemaphoreGive(g_global_state_mutex);
+    }
+}
+
+static void process_debug_commands(void) {
+    char rx_buffer[64];
+    int len = uart_read_bytes(UART_NUM_0, rx_buffer, sizeof(rx_buffer) - 1, 50);
+    
+    if (len > 0) {
+        rx_buffer[len] = '\0';
+        
+        for (int i = 0; i < len; i++) {
+            if (rx_buffer[i] == '\n' || rx_buffer[i] == '\r') {
+                rx_buffer[i] = '\0';
+                break;
+            }
+        }
+        
+        if (strcmp(rx_buffer, "debug") == 0) {
+            esp_log_level_set("*", ESP_LOG_DEBUG);
+            printf("\n=== DEBUG MODE ACTIVATED - ALL COMPONENTS ===\n");
+            printf("All ESP32 components will now show DEBUG logs\n");
+            printf("Components: HDDESP32, RELAY_MGR, WIFI_MGR, MQTT_MGR, TIME_MGR, etc.\n\n");
+        }
+        else if (strcmp(rx_buffer, "info") == 0) {
+            esp_log_level_set("*", ESP_LOG_INFO);
+            printf("\n=== INFO MODE ACTIVATED - ALL COMPONENTS ===\n");
+            printf("Back to normal: INFO, WARNING and ERROR logs only\n\n");
+        }
+        else if (strcmp(rx_buffer, "quiet") == 0) {
+            esp_log_level_set("*", ESP_LOG_WARN);
+            printf("\n=== QUIET MODE ACTIVATED - ALL COMPONENTS ===\n");
+            printf("Only WARNING and ERROR logs will be shown\n\n");
+        }
+        else if (strcmp(rx_buffer, "verbose") == 0) {
+            esp_log_level_set("*", ESP_LOG_VERBOSE);
+            printf("\n=== VERBOSE MODE ACTIVATED - ALL COMPONENTS ===\n");
+            printf("Maximum verbosity - ALL log levels will be shown\n\n");
+        }
+        else if (strcmp(rx_buffer, "help") == 0) {
+            printf("\n=== ESP32 DEBUG COMMANDS ===\n");
+            printf("debug   - Enable DEBUG logs for all components\n");
+            printf("info    - Normal mode (INFO, WARN, ERROR)\n");
+            printf("quiet   - Only WARN and ERROR logs\n");
+            printf("verbose - Maximum verbosity (all logs)\n");
+            printf("status  - Show current system status\n");
+            printf("help    - Show this help\n\n");
+        }
+        else if (strcmp(rx_buffer, "status") == 0) {
+            printf("\n=== SYSTEM STATUS ===\n");
+            printf("WiFi: %s\n", get_wifi_connected() ? "CONNECTED" : "DISCONNECTED");
+            printf("MQTT: %s\n", get_mqtt_connected() ? "CONNECTED" : "DISCONNECTED");
+            printf("Relay Manager: %s\n", get_relay_manager_initialized() ? "INITIALIZED" : "NOT READY");
+            printf("Memory: %lu bytes free\n", (unsigned long)esp_get_free_heap_size());
+            
+            if (get_relay_manager_initialized()) {
+                uint32_t total_interrupts = 0;
+                relay_manager_get_interrupt_stats(&total_interrupts, NULL, NULL);
+                printf("Relay interrupts: %lu total\n", total_interrupts);
+            }
+            printf("\n");
+        }
     }
 }
 
@@ -876,6 +963,10 @@ static void system_monitor_task(void *pvParameters) {
             LOG_I(TAG, "Processed 1 MQTT message from queue");
         }
         
+        if (cycle_count % 5 == 0) {
+            process_debug_commands();
+        }
+        
         if (cycle_count % 1800 == 0 && get_relay_manager_initialized()) {
             if (task_registered) {
                 watchdog_manager_feed();
@@ -1041,7 +1132,20 @@ void app_main(void)
     
     esp_log_set_vprintf(spiffs_vprintf);
 
+    uart_config_t uart_config = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_DEFAULT,
+    };
+
+    uart_param_config(UART_NUM_0, &uart_config);
+    uart_driver_install(UART_NUM_0, 512, 0, 0, NULL, 0);
+
     LOG_I(TAG, "Starting HDD ESP32 Monitor v2.0 (ESP-IDF v5.4.1)");
+    LOG_I(TAG, "UART driver initialized for debug commands");
 
     LOG_I(TAG, "Phase 1: Basic initialization");
 
@@ -1121,6 +1225,8 @@ void app_main(void)
     if (main_task_registered) {
         watchdog_manager_feed();
     }
+    
+    setup_emergency_debug_support();
     
     LOG_I(TAG, "Phase 2: Manager initialization");
     

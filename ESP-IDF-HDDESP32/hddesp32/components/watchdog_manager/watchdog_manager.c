@@ -251,25 +251,36 @@ static watchdog_health_status_t check_memory_health(void) {
     
     static int critical_count = 0;
     static int warning_count = 0;
+    static bool was_critical = false;
     
-    if (free_heap < critical_threshold || min_free < critical_threshold) {
+    // Solo usar free_heap actual para determinar estado crítico
+    // min_free solo para logging/información
+    if (free_heap < critical_threshold) {
         critical_count++;
         if (critical_count >= 5) {
-            LOG_E(TAG, "CRITICAL memory confirmed: free=%zu min=%zu threshold=%" PRIu32 " (count=%d)", 
-                    free_heap, min_free, critical_threshold, critical_count);
+            if (!was_critical) {
+                LOG_E(TAG, "CRITICAL memory confirmed: free=%zu min_historical=%zu threshold=%" PRIu32 " (count=%d)", 
+                        free_heap, min_free, critical_threshold, critical_count);
+                was_critical = true;
+            }
             return WATCHDOG_HEALTH_CRITICAL;
         } else {
             LOG_W(TAG, "Critical memory detected but not confirmed: count=%d/5", critical_count);
             return WATCHDOG_HEALTH_WARNING;
         }
     } else {
+        // Memoria actual está bien - resetear contadores
+        if (was_critical && critical_count > 0) {
+            LOG_I(TAG, "Memory recovered: free=%zu (was critical for %d checks)", free_heap, critical_count);
+            was_critical = false;
+        }
         critical_count = 0;
     }
     
-    if (free_heap < warning_threshold || min_free < warning_threshold) {
+    if (free_heap < warning_threshold) {
         warning_count++;
         if (warning_count >= 8) {
-            LOG_W(TAG, "Low memory confirmed: free=%zu min=%zu threshold=%" PRIu32,
+            LOG_W(TAG, "Low memory confirmed: free=%zu min_historical=%zu threshold=%" PRIu32,
                     free_heap, min_free, warning_threshold);
             return WATCHDOG_HEALTH_WARNING;
         }

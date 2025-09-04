@@ -408,14 +408,12 @@ static esp_err_t verify_interrupt_system_safe(void) {
     int64_t current_time = esp_timer_get_time() / 1000;
     int64_t time_since_last = current_time - s_last_interrupt_time;
     
-    // Si hemos tenido interrupts recientes (últimas 2 horas), el sistema funciona bien
-    if (s_last_interrupt_time > 0 && time_since_last < 7200000) {  // 2 horas
+    if (s_last_interrupt_time > 0 && time_since_last < 7200000) {
         s_interrupt_system_verified = true;
         LOG_I(TAG, "Recent interrupt activity detected - system OK");
         return ESP_OK;
     }
     
-    // Verificación física de GPIOs activos
     bool any_gpio_functional = false;
     int active_relays = 0;
     int functional_gpios = 0;
@@ -429,7 +427,6 @@ static esp_err_t verify_interrupt_system_safe(void) {
         
         active_relays++;
         
-        // Verificación de múltiples lecturas para asegurar estabilidad
         int level1 = gpio_get_level(relay->gpio_pin);
         vTaskDelay(pdMS_TO_TICKS(10));
         int level2 = gpio_get_level(relay->gpio_pin);
@@ -440,7 +437,6 @@ static esp_err_t verify_interrupt_system_safe(void) {
             functional_gpios++;
             any_gpio_functional = true;
             
-            // Verificar consistencia de lecturas
             if (level1 == level2 && level2 == level3) {
                 LOG_D(TAG, "GPIO %d functional and stable: level=%d", relay->gpio_pin, level1);
             } else {
@@ -455,21 +451,18 @@ static esp_err_t verify_interrupt_system_safe(void) {
     LOG_I(TAG, "GPIO verification: %d/%d functional (active relays: %d)", 
           functional_gpios, active_relays, active_relays);
     
-    // Si todos los GPIOs activos son funcionales, el sistema está bien
     if (any_gpio_functional && functional_gpios == active_relays && active_relays > 0) {
         s_interrupt_system_verified = true;
         LOG_I(TAG, "All active GPIOs functional - no reconfiguration needed");
         return ESP_OK;
     }
     
-    // Si no hay relés activos, no podemos verificar pero tampoco es problema
     if (active_relays == 0) {
         LOG_W(TAG, "No active relays configured - cannot verify interrupt system");
         s_interrupt_system_verified = false;
         return ESP_FAIL;
     }
     
-    // Si algunos GPIOs fallan, el sistema necesita reparación
     if (functional_gpios < active_relays) {
         LOG_W(TAG, "Some GPIOs non-functional (%d/%d) - system needs repair", 
               functional_gpios, active_relays);
@@ -477,7 +470,6 @@ static esp_err_t verify_interrupt_system_safe(void) {
         return ESP_FAIL;
     }
     
-    // Caso por defecto - mejor prevenir
     LOG_W(TAG, "GPIO verification inconclusive - assuming system needs repair");
     s_interrupt_system_verified = false;
     return ESP_FAIL;
@@ -985,7 +977,6 @@ static void relay_event_task(void *pvParameters) {
         
         int64_t current_time = esp_timer_get_time();
         
-        // CORREGIDO: Verificación de salud del sistema de interrupts cada 60 segundos
         if ((current_time - last_interrupt_check) > RELAY_MANAGER_INTERRUPT_CHECK_INTERVAL_MS) {
             last_interrupt_check = current_time;
             
@@ -995,12 +986,10 @@ static void relay_event_task(void *pvParameters) {
             
             int64_t time_since_last_interrupt = (current_time / 1000) - last_interrupt_time;
             
-            // CORREGIDO: Ahora usa 24 horas en lugar de 2 minutos
             if (last_interrupt_time > 0 && time_since_last_interrupt > RELAY_MANAGER_INTERRUPT_SILENCE_THRESHOLD_MS) {
                 LOG_W(TAG, "No interrupts in %lld ms (%.1f hours) - checking panel health", 
                       time_since_last_interrupt, (float)time_since_last_interrupt / 3600000.0);
                 
-                // Verificación inteligente antes de reconfigurar
                 esp_err_t health_check = verify_interrupt_system_safe();
                 if (health_check != ESP_OK) {
                     LOG_W(TAG, "Interrupt system health check failed - performing reconfiguration");
@@ -1014,13 +1003,11 @@ static void relay_event_task(void *pvParameters) {
                     LOG_I(TAG, "No interrupts but system verified OK - panel in normal operation");
                 }
             } else if (last_interrupt_time > 0 && time_since_last_interrupt > 3600000) {
-                // Log informativo cada hora sin interrupts (normal para paneles contra incendios)
-                LOG_I(TAG, "Panel quiet for %.1f hours - normal operation", 
+                LOG_D(TAG, "Panel quiet for %.1f hours - normal operation", 
                       (float)time_since_last_interrupt / 3600000.0);
             }
         }
         
-        // Verificación automática de estados cada 5 segundos (sin cambios)
         if ((current_time - last_auto_check) > (RELAY_MANAGER_AUTO_CHECK_INTERVAL_MS * 1000)) {
             last_auto_check = current_time;
             
@@ -1076,7 +1063,6 @@ static void relay_event_task(void *pvParameters) {
             }
         }
         
-        // Procesamiento de eventos de interrupt (sin cambios - funciona perfectamente)
         if (xQueueReceive(ctx->gpio_event_queue, &gpio_event, pdMS_TO_TICKS(200)) == pdTRUE) {
             idle_cycles = 0;
             ctx->total_events_processed++;
