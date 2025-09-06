@@ -1043,7 +1043,7 @@ esp_err_t mqtt_manager_send_network_info(void) {
     
     LOG_I(TAG, "Sending network info to esp32/network_info (len=%d)", len);
     
-    esp_err_t result = mqtt_manager_publish("esp32/network_info", network_info_buffer, len, 1, false);
+    esp_err_t result = mqtt_manager_publish("esp32/network_info", network_info_buffer, len, 0, false);
     
     xSemaphoreGive(network_buffer_mutex);
     

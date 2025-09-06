@@ -398,17 +398,7 @@ static void upload_pending_logs(void) {
         LOG_WITH_TS(I, "Found legacy log.prev for upload, size: %ld bytes", st.st_size);
     }
     
-    // Buscar archivos con formato log_YYYYMMDD_HHMMSS.txt
-    // Para simplicidad, buscaremos archivos que empiecen con "log_" y terminen con ".txt"
-    // En una implementación completa usaríamos opendir/readdir, pero por ahora
-    // intentaremos encontrar el archivo recién creado basándonos en la rotación
-    
-    // Verificar si acabamos de hacer rotación post-restart
-    // El archivo timestamped debería existir si se hizo rotación
-    char potential_files[5][64];
-    int potential_count = 0;
-    
-    // Generar posibles nombres de archivos basados en tiempo actual ±2 minutos
+    // Buscar archivos con formato log_YYYYMMDD_HHMMSS.txt usando búsqueda ampliada
     time_t now;
     if (time_manager_is_synchronized()) {
         now = time_manager_get_time();
@@ -417,47 +407,64 @@ static void upload_pending_logs(void) {
     }
     now -= 5 * 3600;  // GMT-5
     
-    for (int offset = -120; offset <= 0; offset += 60) {
-        time_t check_time = now + offset;
+    // Expandir la búsqueda a las últimas 2 horas para mayor probabilidad de encontrar archivos
+    for (int i = 0; i < 120; i++) {  // Buscar en los últimos 120 minutos
+        time_t check_time = now - (i * 60);
         struct tm timeinfo;
         gmtime_r(&check_time, &timeinfo);
         
-        snprintf(potential_files[potential_count], sizeof(potential_files[0]), 
+        char test_file[64];
+        snprintf(test_file, sizeof(test_file), 
                  "/spiffs/log_%04d%02d%02d_%02d%02d%02d.txt",
                  timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
                  timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
         
-        if (stat(potential_files[potential_count], &st) == 0) {
-            strcpy(log_files[file_count], potential_files[potential_count]);
+        if (stat(test_file, &st) == 0) {
+            strcpy(log_files[file_count], test_file);
             file_count++;
-            LOG_WITH_TS(I, "Found timestamped log file: %s, size: %ld bytes", 
-                        potential_files[potential_count], st.st_size);
+            LOG_WITH_TS(I, "Found timestamped log file: %s, size: %ld bytes", test_file, st.st_size);
+            break;  // Solo tomar el primero encontrado para evitar duplicados
         }
-        potential_count++;
-        
-        if (potential_count >= 5) break;
     }
     
-    // Si no encontramos archivos timestamped, buscar cualquier archivo log_*.txt
+    // También buscar con segundos variantes (±5 segundos) del tiempo actual
     if (file_count == 0) {
-        // Método alternativo: buscar archivos con patrón conocido
-        // Intentar algunos nombres basados en tiempo reciente
-        for (int i = 0; i < 10; i++) {
-            time_t check_time = now - (i * 60);  // Revisar últimos 10 minutos
-            struct tm timeinfo;
-            gmtime_r(&check_time, &timeinfo);
-            
+        struct tm current_time;
+        gmtime_r(&now, &current_time);
+        
+        for (int sec_offset = -5; sec_offset <= 5; sec_offset++) {
             char test_file[64];
+            int test_sec = current_time.tm_sec + sec_offset;
+            int test_min = current_time.tm_min;
+            int test_hour = current_time.tm_hour;
+            
+            // Ajustar si los segundos se salen del rango
+            if (test_sec < 0) {
+                test_sec += 60;
+                test_min -= 1;
+                if (test_min < 0) {
+                    test_min += 60;
+                    test_hour -= 1;
+                }
+            } else if (test_sec >= 60) {
+                test_sec -= 60;
+                test_min += 1;
+                if (test_min >= 60) {
+                    test_min -= 60;
+                    test_hour += 1;
+                }
+            }
+            
             snprintf(test_file, sizeof(test_file), 
                      "/spiffs/log_%04d%02d%02d_%02d%02d%02d.txt",
-                     timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
-                     timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+                     current_time.tm_year + 1900, current_time.tm_mon + 1, current_time.tm_mday,
+                     test_hour, test_min, test_sec);
             
             if (stat(test_file, &st) == 0) {
                 strcpy(log_files[file_count], test_file);
                 file_count++;
-                LOG_WITH_TS(I, "Found recent timestamped file: %s, size: %ld bytes", test_file, st.st_size);
-                break;  // Solo tomar el primero encontrado
+                LOG_WITH_TS(I, "Found timestamped file with time variance: %s, size: %ld bytes", test_file, st.st_size);
+                break;
             }
         }
     }
