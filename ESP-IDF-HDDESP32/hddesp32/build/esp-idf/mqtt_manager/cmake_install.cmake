@@ -1,4 +1,4 @@
-# Install script for directory: E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/components/mqtt_manager
+# Install script for directory: E:/PQSolutions/HDD-Monitor/ESP32-IDF/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/components/mqtt_manager
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

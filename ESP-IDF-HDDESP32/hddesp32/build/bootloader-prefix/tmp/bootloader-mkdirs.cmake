@@ -10,18 +10,18 @@ if(NOT EXISTS "C:/Espressif/frameworks/esp-idf-v5.4.1/components/bootloader/subp
   file(MAKE_DIRECTORY "C:/Espressif/frameworks/esp-idf-v5.4.1/components/bootloader/subproject")
 endif()
 file(MAKE_DIRECTORY
-  "E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/bootloader"
-  "E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix"
-  "E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/tmp"
-  "E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src/bootloader-stamp"
-  "E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src"
-  "E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src/bootloader-stamp"
+  "E:/PQSolutions/HDD-Monitor/ESP32-IDF/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/bootloader"
+  "E:/PQSolutions/HDD-Monitor/ESP32-IDF/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix"
+  "E:/PQSolutions/HDD-Monitor/ESP32-IDF/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/tmp"
+  "E:/PQSolutions/HDD-Monitor/ESP32-IDF/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src/bootloader-stamp"
+  "E:/PQSolutions/HDD-Monitor/ESP32-IDF/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src"
+  "E:/PQSolutions/HDD-Monitor/ESP32-IDF/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src/bootloader-stamp"
 )
 
 set(configSubDirs )
 foreach(subDir IN LISTS configSubDirs)
-    file(MAKE_DIRECTORY "E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src/bootloader-stamp/${subDir}")
+    file(MAKE_DIRECTORY "E:/PQSolutions/HDD-Monitor/ESP32-IDF/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src/bootloader-stamp/${subDir}")
 endforeach()
 if(cfgdir)
-  file(MAKE_DIRECTORY "E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src/bootloader-stamp${cfgdir}") # cfgdir has leading slash
+  file(MAKE_DIRECTORY "E:/PQSolutions/HDD-Monitor/ESP32-IDF/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/bootloader-prefix/src/bootloader-stamp${cfgdir}") # cfgdir has leading slash
 endif()

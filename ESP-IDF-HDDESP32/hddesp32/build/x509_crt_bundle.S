@@ -1,4 +1,4 @@
-/* * Data converted from E:/PQSolutions/HDD-Monitor/HDD-Monitor-GitHub/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/mbedtls/x509_crt_bundle
+/* * Data converted from E:/PQSolutions/HDD-Monitor/ESP32-IDF/ESP32-IDF/ESP-IDF-HDDESP32/hddesp32/build/esp-idf/mbedtls/x509_crt_bundle
  */
 .data
 #if !defined (__APPLE__) && !defined (__linux__)
