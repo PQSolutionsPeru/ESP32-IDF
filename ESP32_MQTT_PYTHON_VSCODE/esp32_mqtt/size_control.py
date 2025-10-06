@@ -1,1 +1,0 @@
-### aqui se trabajará el monitoreo de memoria interna del ESP32 (esto para evitar que se llene y se cuelgue)
