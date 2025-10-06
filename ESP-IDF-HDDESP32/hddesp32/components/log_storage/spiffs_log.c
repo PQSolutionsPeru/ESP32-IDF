@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <dirent.h>
+#include <errno.h>
+#include <string.h>
 #include "esp_spiffs.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -315,34 +318,136 @@ esp_err_t log_storage_rotate_if_needed(void) {
     }
 }
 
+// Helper function to clean old log files if space is insufficient
+static esp_err_t cleanup_old_logs(size_t needed_space) {
+    DIR *dir = opendir("/spiffs");
+    if (!dir) {
+        LOG_WITH_TS(E, "Failed to open /spiffs directory for cleanup (errno=%d)", errno);
+        return ESP_FAIL;
+    }
+
+    struct dirent *entry;
+    char oldest_file[64] = {0};
+    time_t oldest_time = 0;
+    size_t total_freed = 0;
+
+    // Find oldest timestamped log file
+    while ((entry = readdir(dir)) != NULL) {
+        // Look for timestamped log files: log_YYYYMMDD_HHMMSS.txt
+        if (strncmp(entry->d_name, "log_", 4) == 0 && strstr(entry->d_name, ".txt")) {
+            // Check filename length before processing
+            size_t name_len = strnlen(entry->d_name, 256);
+            if (name_len > 54) {
+                LOG_WITH_TS(W, "Skipping file with too long name: %.20s...", entry->d_name);
+                continue; // "/spiffs/" (8) + name (54) + null (1) = 63 max
+            }
+
+            char filepath[64];
+            int written = snprintf(filepath, sizeof(filepath), "/spiffs/%s", entry->d_name);
+            if (written < 0 || written >= sizeof(filepath)) {
+                LOG_WITH_TS(E, "Path truncated for file: %s", entry->d_name);
+                continue;
+            }
+
+            struct stat st;
+            if (stat(filepath, &st) == 0) {
+                // Track oldest file by modification time
+                if (oldest_time == 0 || st.st_mtime < oldest_time) {
+                    oldest_time = st.st_mtime;
+                    strncpy(oldest_file, filepath, sizeof(oldest_file) - 1);
+                }
+            }
+        }
+    }
+    closedir(dir);
+
+    // Delete oldest file if found
+    if (oldest_file[0] != '\0') {
+        struct stat st;
+        if (stat(oldest_file, &st) == 0) {
+            size_t file_size = st.st_size;
+            if (unlink(oldest_file) == 0) {
+                LOG_WITH_TS(I, "Deleted old log file: %s (%zu bytes freed)", oldest_file, file_size);
+                total_freed = file_size;
+            } else {
+                LOG_WITH_TS(E, "Failed to delete old log file: %s (errno=%d)", oldest_file, errno);
+            }
+        }
+    } else {
+        LOG_WITH_TS(W, "No old timestamped log files found to cleanup");
+    }
+
+    return (total_freed >= needed_space) ? ESP_OK : ESP_FAIL;
+}
+
 esp_err_t log_storage_force_rotate(void) {
     if (!s_log_initialized) {
         LOG_WITH_TS(E, "Log storage not initialized");
         return ESP_ERR_INVALID_STATE;
     }
-    
+
     LOG_WITH_TS(I, "Forcing log rotation...");
-    
+
     if (xSemaphoreTake(s_log_mutex, pdMS_TO_TICKS(5000)) != pdTRUE) {
         LOG_WITH_TS(E, "Failed to acquire mutex for forced rotation");
         return ESP_ERR_TIMEOUT;
     }
-    
+
     struct stat st;
     if (stat(LOG_FILE, &st) != 0) {
         LOG_WITH_TS(W, "No log.txt found for forced rotation");
         xSemaphoreGive(s_log_mutex);
         return ESP_ERR_NOT_FOUND;
     }
-    
+
     if (st.st_size == 0) {
         LOG_WITH_TS(W, "log.txt is empty, skipping forced rotation");
         xSemaphoreGive(s_log_mutex);
         return ESP_ERR_INVALID_SIZE;
     }
-    
-    LOG_WITH_TS(I, "Forcing rotation of log.txt (%ld bytes)", st.st_size);
-    
+
+    size_t log_file_size = st.st_size;
+    LOG_WITH_TS(I, "Forcing rotation of log.txt (%zu bytes)", log_file_size);
+
+    // Check available space BEFORE attempting rotation
+    size_t total = 0, used = 0;
+    esp_err_t space_check = esp_spiffs_info(NULL, &total, &used);
+    if (space_check == ESP_OK) {
+        size_t available = total - used;
+        // Need at least 1.2x the log file size for safe rotation (file + metadata)
+        size_t needed = (log_file_size * 12) / 10;
+
+        LOG_WITH_TS(I, "SPIFFS space check: %zu KB total, %zu KB used, %zu KB available, %zu KB needed",
+                    total/1024, used/1024, available/1024, needed/1024);
+
+        if (available < needed) {
+            LOG_WITH_TS(W, "Insufficient space for rotation (%zu < %zu bytes), attempting cleanup",
+                        available, needed);
+
+            esp_err_t cleanup_result = cleanup_old_logs(needed - available);
+            if (cleanup_result != ESP_OK) {
+                LOG_WITH_TS(E, "Cleanup failed, rotation aborted to prevent corruption");
+                xSemaphoreGive(s_log_mutex);
+                return ESP_ERR_NO_MEM;
+            }
+
+            // Re-check space after cleanup
+            space_check = esp_spiffs_info(NULL, &total, &used);
+            available = total - used;
+            LOG_WITH_TS(I, "After cleanup: %zu KB available", available/1024);
+
+            if (available < needed) {
+                LOG_WITH_TS(E, "Still insufficient space after cleanup (%zu < %zu), aborting rotation",
+                            available, needed);
+                xSemaphoreGive(s_log_mutex);
+                return ESP_ERR_NO_MEM;
+            }
+        }
+    } else {
+        LOG_WITH_TS(W, "Could not check SPIFFS space: %s, proceeding with caution",
+                    esp_err_to_name(space_check));
+    }
+
     // Generar nombre con timestamp para rotación forzada
     char timestamped_file[64];
     esp_err_t ret = generate_timestamped_filename(timestamped_file, sizeof(timestamped_file));
@@ -351,13 +456,15 @@ esp_err_t log_storage_force_rotate(void) {
         // Fallback a formato anterior
         if (access(PREV_LOG_FILE, F_OK) == 0) {
             LOG_WITH_TS(I, "Removing existing log.prev for forced rotation");
-            unlink(PREV_LOG_FILE);
+            if (unlink(PREV_LOG_FILE) != 0) {
+                LOG_WITH_TS(E, "Failed to unlink log.prev (errno=%d)", errno);
+            }
         }
-        
+
         if (rename(LOG_FILE, PREV_LOG_FILE) == 0) {
             LOG_WITH_TS(I, "Forced log rotation completed successfully (legacy format)");
         } else {
-            LOG_WITH_TS(E, "Failed to perform forced rotation");
+            LOG_WITH_TS(E, "Failed to perform forced rotation to legacy (errno=%d)", errno);
             xSemaphoreGive(s_log_mutex);
             return ESP_FAIL;
         }
@@ -365,33 +472,47 @@ esp_err_t log_storage_force_rotate(void) {
         // Usar nombre con timestamp
         if (access(timestamped_file, F_OK) == 0) {
             LOG_WITH_TS(I, "Removing existing timestamped file for forced rotation: %s", timestamped_file);
-            unlink(timestamped_file);
+            if (unlink(timestamped_file) != 0) {
+                LOG_WITH_TS(E, "Failed to unlink timestamped file (errno=%d)", errno);
+            }
         }
-        
+
         if (rename(LOG_FILE, timestamped_file) == 0) {
             LOG_WITH_TS(I, "Forced log rotation completed successfully to: %s", timestamped_file);
         } else {
-            LOG_WITH_TS(E, "Failed to rotate to timestamped file, trying legacy");
-            // Fallback a formato anterior
-            if (access(PREV_LOG_FILE, F_OK) == 0) {
-                unlink(PREV_LOG_FILE);
-            }
-            if (rename(LOG_FILE, PREV_LOG_FILE) == 0) {
-                LOG_WITH_TS(I, "Forced log rotation completed successfully (legacy fallback)");
+            int rename_errno = errno;
+            LOG_WITH_TS(E, "Failed to rotate to timestamped file (errno=%d), trying legacy", rename_errno);
+
+            // Fallback a formato anterior - pero solo si el archivo original aún existe
+            if (access(LOG_FILE, F_OK) == 0) {
+                if (access(PREV_LOG_FILE, F_OK) == 0) {
+                    if (unlink(PREV_LOG_FILE) != 0) {
+                        LOG_WITH_TS(E, "Failed to unlink log.prev for fallback (errno=%d)", errno);
+                    }
+                }
+                if (rename(LOG_FILE, PREV_LOG_FILE) == 0) {
+                    LOG_WITH_TS(I, "Forced log rotation completed successfully (legacy fallback)");
+                } else {
+                    LOG_WITH_TS(E, "Failed to perform forced rotation completely (errno=%d)", errno);
+                    xSemaphoreGive(s_log_mutex);
+                    return ESP_FAIL;
+                }
             } else {
-                LOG_WITH_TS(E, "Failed to perform forced rotation completely");
+                LOG_WITH_TS(E, "LOG_FILE disappeared during rotation, cannot complete");
                 xSemaphoreGive(s_log_mutex);
                 return ESP_FAIL;
             }
         }
     }
-    
+
     FILE *new_log = fopen(LOG_FILE, "w");
     if (new_log) {
         fclose(new_log);
         LOG_WITH_TS(I, "New log.txt created after forced rotation");
+    } else {
+        LOG_WITH_TS(E, "Failed to create new log.txt after rotation (errno=%d)", errno);
     }
-    
+
     xSemaphoreGive(s_log_mutex);
     return ESP_OK;
 }
