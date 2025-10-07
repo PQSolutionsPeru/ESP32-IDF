@@ -1,0 +1,520 @@
+ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0030,len:6276
+load:0x40078000,len:15748
+load:0x40080400,len:4
+ho 8 tail 4 room 4
+load:0x40080404,len:3860
+entry 0x4008063c
+I (31) boot: ESP-IDF v5.4.1 2nd stage bootloader
+I (31) boot: compile time Oct  6 2025 12:59:17
+I (31) boot: Multicore bootloader
+I (32) boot: chip revision: v3.1
+I (35) boot.esp32: SPI Speed      : 40MHz
+I (39) boot.esp32: SPI Mode       : DIO
+I (43) boot.esp32: SPI Flash Size : 4MB
+I (46) boot: Enabling RNG early entropy source...
+I (51) boot: Partition Table:
+I (53) boot: ## Label            Usage          Type ST Offset   Length
+I (60) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (66) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (73) boot:  2 factory          factory app      00 00 00010000 00300000
+I (79) boot:  3 nvs_config       WiFi data        01 02 00310000 00010000
+I (86) boot:  4 storage          Unknown data     01 82 00320000 000e0000
+I (92) boot: End of partition table
+I (95) esp_image: segment 0: paddr=00010020 vaddr=3f400020 size=3e314h (254740) map
+I (190) esp_image: segment 1: paddr=0004e33c vaddr=3ff80000 size=0001ch (    28) load
+I (190) esp_image: segment 2: paddr=0004e360 vaddr=3ffb0000 size=01cb8h (  7352) load
+I (197) esp_image: segment 3: paddr=00050020 vaddr=400d0020 size=b2974h (731508) map
+I (451) esp_image: segment 4: paddr=0010299c vaddr=3ffb1cb8 size=02150h (  8528) load
+I (455) esp_image: segment 5: paddr=00104af4 vaddr=40080000 size=16f78h ( 94072) load
+I (503) boot: Loaded app from partition at offset 0x10000
+I (503) boot: Disabling RNG early entropy source...
+I (513) cpu_start: Multicore app
+I (521) cpu_start: Pro cpu start user code
+I (521) cpu_start: cpu freq: 240000000 Hz
+I (521) app_init: Application information:
+I (522) app_init: Project name:     hddesp32
+I (525) app_init: App version:      94697dc0-dirty
+I (530) app_init: Compile time:     Oct  6 2025 12:59:04
+I (535) app_init: ELF file SHA256:  4a7f1bd29...
+I (539) app_init: ESP-IDF:          v5.4.1
+I (543) efuse_init: Min chip rev:     v0.0
+I (547) efuse_init: Max chip rev:     v3.99 
+I (551) efuse_init: Chip rev:         v3.1
+I (555) heap_init: Initializing. RAM available for dynamic allocation:
+I (561) heap_init: At 3FFAE6E0 len 00001920 (6 KiB): DRAM
+I (566) heap_init: At 3FFBBCD8 len 00024328 (144 KiB): DRAM
+I (572) heap_init: At 3FFE0440 len 00003AE0 (14 KiB): D/IRAM
+I (577) heap_init: At 3FFE4350 len 0001BCB0 (111 KiB): D/IRAM
+I (582) heap_init: At 40096F78 len 00009088 (36 KiB): IRAM
+I (589) spi_flash: detected chip: generic
+I (591) spi_flash: flash io: dio
+I (595) main_task: Started on CPU0
+I (605) main_task: Calling app_main()
+I (645) LOG_STORAGE: [01/01/1970, 00:00:00] SPIFFS: 816 KB total, 15 KB used
+I (655) LOG_STORAGE: [01/01/1970, 00:00:00] Log storage initialized successfully
+I (69I (695) HDDESP32: [108 ms] Starting HDD ESP32 Monitor v2.0 (ESP-IDF v5.4.1)
+I (715) HDDESP32: [132 ms] UART driver initialized for debug commands
+I (715) HDDESP32: [136 ms] Phase 1: Basic initialization
+I (725) WATCHDOG_MGR: [141 ms] Initializing Watchdog Manager
+I (725) WATCHDOG_MGR: [146 ms] Watchdog configurations initialized
+I (745) WATCHDOG_MGR: [161 ms] TWDT reconfigured with 25000ms timeout
+I (745) WATCHDOG_MGR: [166 ms] Watchdog Manager initialized successfully with TWDT active
+I (755) HDDESP32: [171 ms] Watchdog manager initialized successfully
+I (1755) WATCHDOG_MGR: [1167 ms] Registered task: app_main (1/10) in TWDT
+I (1765) HDDESP32: [1181 ms] Main task registered in watchdog manager
+I (1765) CONFIG_MGR: Initializing configuration manager with wear protection
+I (1795) CONFIG_MGR: Configuration manager initialized with wear leveling protection
+I (1805) ESP32_ID_MGR: Initializing ESP32 ID Manager
+I (1805) ESP32_ID_MGR: MAC Address: A0B7652842A8
+I (1815) ESP32_ID_MGR: Loaded existing ID: 42A8ACA0
+I (1815) ESP32_ID_MGR: ESP32 ID Manager initialized successfully with ID: 42A8ACA0
+I (1835) HDDESP32: [1251 ms] ESP32 ID: 42A8ACA0
+I (1835) LOG_UPLOADER: [01/01/1970, 00:00:01] Log uploader initialized with ESP32 ID: 42A8ACA0
+I (1845) LOG_UPLOADER: [01/01/1970, 00:00:01] Log uploader task started - waiting for internet connectivity
+I (1855) LOG_UPLOADER: [01/01/1970, 00:00:01] Log uploader task created successfully
+I (1865) LOG_UPLOADER: [01/01/1970, 00:00:01] Waiting for internet connectivity, rechecking in 2 minutes
+I (1875) HDDESP32: [1289 ms] MAC: A0B7652842A8
+I (1875) gpio: GPIO[0]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (1895) gpio: GPIO[0]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (1895) HDDESP32: [1315 ms] Phase 2: Manager initialization
+I (1905) WIFI_MGR: [1320 ms] Initializing WiFi Manager
+I (1905) WIFI_MGR: [1324 ms] Initializing TCP/IP stack
+I (1925) WIFI_MGR: [1341 ms] Creating WiFi station netif
+I (1925) WIFI_MGR: [1347 ms] Creating WiFi AP netif
+I (1945) wifi:wifi driver task: 3ffcf63c, prio:23, stack:6656, core=0
+I (1975) wifi:wifi firmware version: 79fa3f41ba
+I (1995) wifi:wifi certification version: v7.0
+I (2015) wifi:config NVS flash: enabled
+I (2025) wifi:config nano formatting: disabled
+I (2055) wifi:Init data frame dynamic rx buffer num: 16
+I (2075) wifi:Init static rx mgmt buffer num: 5
+I (2085) wifi:Init management short buffer num: 32
+I (2105) wifi:Init dynamic tx buffer num: 16
+I (2135) wifi:Init static rx buffer size: 1600
+I (2145) wifi:Init static rx buffer num: 8
+I (2165) wifi:Init dynamic rx buffer num: 16
+I (2175) wifi_init: rx ba win: 8
+I (2195) wifi_init: accept mbox: 6
+I (2195) wifi_init: tcpip mbox: 48
+I (2205) wifi_init: udp mbox: 24
+I (2205) wifi_init: tcp mbox: 24
+I (2225) wifi_init: tcp tx win: 8192
+I (2225) wifi_init: tcp rx win: 8192
+I (2235) wifi_init: tcp mss: 1440
+I (2235) wifi_init: WiFi IRAM OP enabled
+I (2255) wifi_init: WiFi RX IRAM OP enabled
+I (2255) WIFI_MGR: [1672 ms] Registering event handlers
+I (2265) WIFI_MGR: [1678 ms] Setting WiFi to station mode
+I (2265) phy_init: phy_version 4860,6b7a6e5,Feb  6 2025,14:47:07
+I (2355) wifi:mode : sta (a0:b7:65:28:42:a8)
+I (2375) wifi:enable tsf
+I (2405) WIFI_MGR: [1818 ms] Found saved WiFi credentials for SSID: PABLO-2.4G
+I (2405) WIFI_MGR: [1824 ms] WiFi Manager initialized successfully
+I (2425) TIME_MGR: Initializing Time Manager
+I (2425) TIME_MGR: Timezone set to Lima, Peru (UTC-5)
+I (2435) TIME_MGR: Time Manager initialized
+I (2435) MQTT_MGR: [1854 ms] Initializing MQTT Manager
+I (2455) MQTT_MGR: [1869 ms] MQTT Manager initialized
+I (2455) CONN_MON: [1874 ms] Initializing connectivity monitor (RAM-only version)
+I (2465) CONN_MON: [1880 ms] Connectivity monitor initialized (RAM-only)
+I (2465) HDDESP32: [1885 ms] Connectivity monitor initialized
+I (2485) HDDESP32: [1899 ms] Phase 3: Callback configuration
+I (2485) MQTT_MGR: [1904 ms] Setting credentials for ESP32 ID: 42A8ACA0
+I (2495) MQTT_MGR: [1910 ms] Credentials configured
+I (2495) HDDESP32: [1915 ms] Phase 4: WiFi connection
+I (2515) WIFI_MGR: [1930 ms] Connecting with saved credentials, SSID: PABLO-2.4G
+I (2515) WIFI_MGR: [1935 ms] Connecting to WiFi network: PABLO-2.4G
+I (2835) wifi:new:<8,0>, old:<1,0>, ap:<255,255>, sta:<8,0>, prof:1, snd_ch_cfg:0x0
+I (2855) wifi:state: init -> auth (0xb0)
+I (2885) wifi:state: auth -> assoc (0x0)
+I (2915) wifi:state: assoc -> init (0x2a0)
+I (2945) wifi:new:<8,0>, old:<8,0>, ap:<255,255>, sta:<8,0>, prof:1, snd_ch_cfg:0x0
+E (27505) task_wdt: Task watchdog got triggered. The following tasks/users did not reset the watchdog in time:
+E (27505) task_wdt:  - main (CPU 0)
+E (27505) task_wdt: Tasks currently running:
+E (27505) task_wdt: CPU 0: IDLE0
+E (27505) task_wdt: CPU 1: IDLE1
+E (27505) task_wdt: Print CPU 0 (current core) backtrace
+
+
+Backtrace: 0x400F1F30:0x3FFB2030 0x40083179:0x3FFB2060 0x40087ED3:0x3FFC0000 0x400D4AF6:0x3FFC0020 0x4008B69F:0x3FFC0040
+
+W (32745) WATCHDOG_MGR: [32157 ms] No tasks have fed watchdog recently
+W (32825) WIFI_MGR: [32237 ms] Connection attempt timed out
+I (32835) WIFI_MGR: [32251 ms] Generated AP SSID: FirePanel_A8ACA0
+I (32835) HDDESP32: [32257 ms] No saved credentials - starting captive portal: FirePanel_A8ACA0
+I (32845) WIFI_MGR: [32262 ms] Starting WiFi STA+AP mode with AP: FirePanel_A8ACA0
+I (32855) wifi:mode : sta (a0:b7:65:28:42:a8) + softAP (a0:b7:65:28:42:a9)
+I (32875) wifi:Total power save buffer number: 8
+I (32905) wifi:Init max length of beacon: 752/752
+I (32925) wifi:Init max length of beacon: 752/752
+I (32955) esp_netif_lwip: DHCP server started on interface WIFI_AP_DEF with IP: 192.168.4.1
+I (32965) wifi:Total power save buffer number: 8I (32975) WIFI_MGR: [32387 ms] Access Point started
+
+I (32995) HDDESP32: [32410 ms] WiFi AP mode active
+I (32995) WIFI_MGR: [32416 ms] WiFi STA+AP mode started successfully
+I (32995) WIFI_MGR: [32416 ms] Access Point stopped
+I (33015) esp_netif_lwip: DHCP server started on interface WIFI_AP_DEF with IP: 192.168.4.1
+I (33025) WIFI_MGR: [32442 ms] Access Point started
+I (33035) HDDESP32: [32447 ms] WiFi AP mode active
+I (33035) DNS_SERVER: DNS Server started on port 53
+I (33035) WIFI_PORTAL: DNS server started successfully
+I (33055) WIFI_PORTAL: Starting HTTP server on port: 80 with optimized stack
+I (33065) SIMPLE_HTTP: Socket listening on port 80
+I (33075) WIFI_PORTAL: HTTP server started successfully with 5120 bytes stack
+I (33075) WIFI_PORTAL: Captive portal started successfully with optimized memory usage
+I (33085) HDDESP32: [32502 ms] Phase 5: Creating system monitor task
+I (33085) HDDESP32: [32507 ms] System monitor task started
+I (35095) HDDESP32: [34507 ms] System initialization completed successfully
+I (35105) WATCHDOG_MGR: [34517 ms] Registered task: sys_monitor (2/10) in TWDT
+I (35105) HDDESP32: [34527 ms] System monitor task registered in watchdog manager
+W (36745) WATCHDOG_MGR: [36157 ms] Significant memory decrease detected: 153728 -> 124124
+W (36755) MQTT_MGR: [36172 ms] Performing emergency memory cleanup
+I (36755) MQTT_MGR: [36177 ms] Memory cleanup completed, free heap: 124124
+I (55115) HDDESP32: [54527 ms] WiFi disconnected - running recovery cycle
+I (55125) WIFI_MGR: [54542 ms] WiFi recovery cycle 1, reconnection attempt 1 (cleanup cycle: 1)
+I (55125) WIFI_MGR: [54547 ms] Connecting with saved credentials, SSID: PABLO-2.4G
+I (55135) WIFI_MGR: [54553 ms] Connecting to WiFi network: PABLO-2.4G
+I (55455) WIFI_MGR: [54867 ms] Updating STA configuration in STA+AP mode
+I (55475) wifi:ap channel adjust o:1,1 n:8,2
+I (55505) wifi:new:<8,0>, old:<1,1>, ap:<8,2>, sta:<8,0>, prof:1, snd_ch_cfg:0x0
+I (55525) wifi:state: init -> auth (0xb0)
+I (55555) wifi:state: auth -> assoc (0x0)
+I (55595) wifi:state: assoc -> run (0x10)
+I (55645) wifi:connected with PABLO-2.4G, aid = 99, channel 8, BW20, bssid = e8:6d:e9:55:91:dc
+I (55665) wifi:security: WPA2-PSK, phy: bgn, rssi: -36
+I (55685) wifi:pm start, type: 1
+
+I (55715) wifi:dp: 1, bi: 102400, li: 3, scale listen interval from 307200 us to 307200 us
+I (55745) wifi:AP's beacon interval = 102400 us, DTIM period = 1
+I (56785) esp_netif_handlers: sta ip: 192.168.18.38, mask: 255.255.255.0, gw: 192.168.18.1
+I (56795) WIFI_MGR: [56212 ms] Got IP address: 192.168.18.38
+I (56805) HDDESP32: [56218 ms] WiFi connected
+I (56805) WIFI_MGR: [56218 ms] Successfully connected to WiFi network
+I (56805) TIME_MGR: Starting NTP synchronization
+I (56825) TIME_MGR: Initializing SNTP
+I (56835) TIME_MGR: SNTP initialized
+I (57485) TIME_MGR: NTP synchronized successfully
+I (57495) TIME_MGR: Time synchronized successfully
+I (57495) TIME_MGR: Lima time: 06/10/2025, 17:09:06
+I (57505) MQTT_MGR: [06/10/2025, 17:09:06] Setting credentials for ESP32 ID: 42A8ACA0
+I (57525) MQTT_MGR: [06/10/2025, 17:09:06] Credentials configured
+I (57525) MQTT_MGR: [06/10/2025, 17:09:06] Connecting to MQTT broker
+I (57535) MQTT_MGR: [06/10/2025, 17:09:06] Testing DNS resolution for: node02.myqtthub.com
+I (57545) MQTT_MGR: [06/10/2025, 17:09:06] DNS resolution successful for node02.myqtthub.com
+I (57555) MQTT_MGR: [06/10/2025, 17:09:06] Connecting to URI: mqtts://node02.myqtthub.com:8883
+I (57565) MQTT_SSL: Setting up CERT_NONE SSL configuration (equivalent to MicroPython)
+I (57565) MQTT_SSL: Memory before SSL setup - Free: 122824 bytes, Largest block: 110592 bytes
+I (57585) MQTT_SSL: CERT_NONE SSL configuration applied successfully (with certificate bundle)
+I (57595) MQTT_SSL: Memory after SSL setup - Free: 122824 bytes
+I (58105) wifi:<ba-add>idx:0 (ifx:0, e8:6d:e9:55:91:dc), tid:0, ssn:5, winSize:64
+I (58255) esp-x509-crt-bundle: Certificate validated
+I (58925) HDDESP32: [06/10/2025, 17:09:07] Sending network info
+I (58935) MQTT_MGR: [06/10/2025, 17:09:07] Sending network info to esp32/network_info (len=147)
+I (59545) MQTT_MGR: [06/10/2025, 17:09:08] MQTT connected
+I (59555) MQTT_MGR: [06/10/2025, 17:09:08] MQTT connected successfully
+I (59555) HDDESP32: [06/10/2025, 17:09:08] MQTT connected
+I (59565) HDDESP32: [06/10/2025, 17:09:08] Initializing Relay Manager after MQTT connection
+I (59585) RELAY_MGR: [06/10/2025, 17:09:08] Initializing Relay Manager with 6 relays
+I (59585) RELAY_MGR: [06/10/2025, 17:09:08] === LOADING RELAY CONFIG FROM NVS ===
+W (59595) RELAY_MGR: [06/10/2025, 17:09:08] Failed to load active states from NVS: ESP_ERR_NVS_NOT_FOUND (size: 6/6)
+W (59615) RELAY_MGR: [06/10/2025, 17:09:08] All relays will remain INACTIVE (default state)
+W (59625) RELAY_MGR: [06/10/2025, 17:09:08] Failed to load contact types from NVS: ESP_ERR_NVS_NOT_FOUND
+I (59625) RELAY_MGR: [06/10/2025, 17:09:08] === RELAY CONFIG LOAD COMPLETED ===
+I (59645) RELAY_MGR: [06/10/2025, 17:09:08] GPIO ISR service ready
+I (59645) gpio: GPIO[32]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (59755) RELAY_MGR: [06/10/2025, 17:09:08] Relay relay_1 (GPIO 32): Relay 1, Type: NC, Active: NO, Initial: DISC (GPIO=1)
+I (59765) gpio: GPIO[33]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (59875) RELAY_MGR: [06/10/2025, 17:09:08] Relay relay_2 (GPIO 33): Relay 2, Type: NC, Active: NO, Initial: OK (GPIO=0)
+I (59885) gpio: GPIO[25]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (59995) RELAY_MGR: [06/10/2025, 17:09:08] Relay relay_3 (GPIO 25): Relay 3, Type: NC, Active: NO, Initial: OK (GPIO=0)
+I (60035) gpio: GPIO[26]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (60165) RELAY_MGR: [06/10/2025, 17:09:08] Relay relay_4 (GPIO 26): Relay 4, Type: NC, Active: NO, Initial: OK (GPIO=0)
+I (60205) gpio: GPIO[27]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (60335) RELAY_MGR: [06/10/2025, 17:09:09] Relay relay_5 (GPIO 27): Relay 5, Type: NC, Active: NO, Initial: OK (GPIO=0)
+I (60375) gpio: GPIO[14]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (60505) RELAY_MGR: [06/10/2025, 17:09:09] Relay relay_6 (GPIO 14): Relay 6, Type: NC, Active: NO, Initial: OK (GPIO=0)
+I (60545) RELAY_MGR: [06/10/2025, 17:09:09] Relay event task created with 8KB stack
+I (60545) RELAY_MGR: [06/10/2025, 17:09:09] Relay event task started (optimized for panels)
+W (60745) WATCHDOG_MGR: [06/10/2025, 17:09:09] Significant memory decrease detected: 124124 -> 63684
+W (60785) MQTT_MGR: [06/10/2025, 17:09:09] Performing emergency memory cleanup
+I (60815) MQTT_MGR: [06/10/2025, 17:09:09] Cleared 1 pending messages
+I (60845) MQTT_MGR: [06/10/2025, 17:09:09] Memory cleanup completed, free heap: 63668
+I (60985) RELAY_MGR: [06/10/2025, 17:09:09] Relay Manager initialized successfully
+I (61045) HDDESP32: [06/10/2025, 17:09:09] Full connectivity detected, starting verification timer
+I (62525) RELAY_MGR: [06/10/2025, 17:09:11] Detecting post-restart relay changes
+W (62565) RELAY_MGR: [06/10/2025, 17:09:11] No previous relay states found, assuming first boot
+I (62595) RELAY_MGR: [06/10/2025, 17:09:11] Reporting initial relay states after configuration
+I (62635) RELAY_MGR: [06/10/2025, 17:09:11] Initial relay states reported
+I (62675) HDDESP32: [06/10/2025, 17:09:11] Relay Manager initialized andconfiguratio ready for ns
+I (62705) HDDESP32: [06/10/2025, 17:09:11] System stable - starting connectivity monitoring
+I (62735) CONN_MON: [06/10/2025, 17:09:11] Starting monitor task with 15000 ms stabilization period
+I (62765) CONN_MON: [06/10/2025, 17:09:11] Connectivity monitor started (RAM-only)
+I (62765) CONN_MON: [06/10/2025, 17:09:11] Monitor task started, waiting for stabilization period
+I (62795) HDDESP32: [06/10/2025, 17:09:11] Connectivity monitoring started successfully
+I (64855) HDDESP32: [06/10/2025, 17:09:13] Checking for pending RAM connectivity events after MQTT connection
+I (64895) HDDESP32: [06/10/2025, 17:09:13] Event count: 0, has_events: false
+I (64925) HDDESP32: [06/10/2025, 17:09:13] No RAM connectivity events to process
+I (65955) MQTT_MGR: [06/10/2025, 17:09:14] Sending network info to esp32/network_info (len=147)
+I (68995) WATCHDOG_MGR: [06/10/2025, 17:09:17] Changing mode from 0 to 1
+I (69035) WATCHDOG_MGR: [06/10/2025, 17:09:17] TWDT reconfigured for mode 1 with 15000ms timeout
+I (69075) HDDESP32: [06/10/2025, 17:09:17] Watchdog safely transitioned to running mode
+I (69105) HDDESP32: [06/10/2025, 17:09:17] Suscrito a topics generales del ESP32
+I (69145) MQTT_MGR: [06/10/2025, 17:09:17] No saved panel config found, skipping panel subscriptions
+I (69475) MQTT_MGR: [06/10/2025, 17:09:18] MQTT subscribed, msg_id=15362
+I (69775) MQTT_MGR: [06/10/2025, 17:09:18] MQTT subscribed, msg_id=11106
+I (69825) MQTT_MGR: [06/10/2025, 17:09:18] MQTT subscribed, msg_id=2923
+I (69865) MQTT_MGR: [06/10/2025, 17:09:18] MQTT subscribed, msg_id=53656
+I (77825) CONN_MON: [06/10/2025, 17:09:26] Stabilization period complete, starting connectivity monitoring
+I (87285) HDDESP32: [06/10/2025, 17:09:36] Restart in 3 seconds
+I (92025) HDDESP32: [06/10/2025, 17:09:40] Configuration complete - restarting to STA mode
+I (94065) wifi:state: run -> init (0x0)
+I (94165) wifi:pm stop, total sleep time: 32236355 us / 38452045 us
+
+I (94265) wifi:<ba-del>idx:0, tid:0
+I (94355) wifi:new:<8,0>, old:<8,0>, ap:<8,2>, sta:<8,0>, prof:1, snd_ch_cfg:0x0
+I (94445) wifi:ieee80211_send_beacon mode switch cause ap destroyedE (94485) esp-tls-mbedtls: read error :-0x004C
+I (94495) WIFI_MGR: [06/10/2025, 17:09:43] Access Point stopped
+
+E (94595) transport_base: esp_tls_conn_read error, errno=Software caused connection abort
+E (94625) mqtt_client: esp_mqtt_handle_transport_read_error: transport_read() error: errno=113
+I (94635) wifi:E (94655) MQTT_MGR: [06/10/2025, 17:09:43] MQTT error
+I (94685) CONN_MON: [06/10/2025, 17:09:43] MQTT status change reported: connected -> disconnected
+E (94715) mqtt_client: mqtt_process_receive: mqtt_message_receive() returned -2
+flush txqW (94745) MQTT_MGR: [06/10/2025, 17:09:43] MQTT disconnected
+
+I (94835) wifi:stop sw txq
+I (94925) wifi:lmac stop hw txq
+ets Jul 29 2019 12:21:46
+
+rst:0xc (SW_CPU_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0030,len:6276
+load:0x40078000,len:15748
+load:0x40080400,len:4
+ho 8 tail 4 room 4
+load:0x40080404,len:3860
+entry 0x4008063c
+I (31) boot: ESP-IDF v5.4.1 2nd stage bootloader
+I (31) boot: compile time Oct  6 2025 12:59:17
+I (31) boot: Multicore bootloader
+I (32) boot: chip revision: v3.1
+I (35) boot.esp32: SPI Speed      : 40MHz
+I (39) boot.esp32: SPI Mode       : DIO
+I (42) boot.esp32: SPI Flash Size : 4MB
+I (46) boot: Enabling RNG early entropy source...
+I (51) boot: Partition Table:
+I (53) boot: ## Label            Usage          Type ST Offset   Length
+I (59) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (66) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (72) boot:  2 factory          factory app      00 00 00010000 00300000
+I (79) boot:  3 nvs_config       WiFi data        01 02 00310000 00010000
+I (86) boot:  4 storage          Unknown data     01 82 00320000 000e0000
+I (92) boot: End of partition table
+I (95) esp_image: segment 0: paddr=00010020 vaddr=3f400020 size=3e314h (254740) map
+I (190) esp_image: segment 1: paddr=0004e33c vaddr=3ff80000 size=0001ch (    28) load
+I (190) esp_image: segment 2: paddr=0004e360 vaddr=3ffb0000 size=01cb8h (  7352) load
+I (196) esp_image: segment 3: paddr=00050020 vaddr=400d0020 size=b2974h (731508) map
+I (451) esp_image: segment 4: paddr=0010299c vaddr=3ffb1cb8 size=02150h (  8528) load
+I (454) esp_image: segment 5: paddr=00104af4 vaddr=40080000 size=16f78h ( 94072) load
+I (502) boot: Loaded app on at offsefrom partitit 0x10000
+I (503) boot: Disabling RNG early entropy source...
+I (513) cpu_start: Multicore app
+I (521) cpu_start: Pro cpu start user code
+I (521) cpu_start: cpu freq: 240000000 Hz
+I (521) app_init: Application information:
+I (521) app_init: Project name:     hddesp32
+I (525) app_init: App version:      94697dc0-dirty
+I (530) app_init: Compile time:     Oct  6 2025 12:59:04
+I (535) app_init: ELF file SHA256:  4a7f1bd29...
+I (539) app_init: ESP-IDF:          v5.4.1
+I (543) efuse_init: Min chip rev:     v0.0
+I (547) efuse_init: Max chip rev:     v3.99 
+I (551) efuse_init: Chip rev:         v3.1
+I (555) heap_init: Initializing. RAM available for dynamic allocation:
+I (561) heap_init: At 3FFAE6E0 len 00001920 (6 KiB): DRAM
+I (566) heap_init: At 3FFBBCD8 len 00024328 (144 KiB): DRAM
+I (571) heap_init: At 3FFE0440 len 00003AE0 (14 KiB): D/IRAM
+I (577) heap_init: At 3FFE4350 len 0001BCB0 (111 KiB): D/IRAM
+I (582) heap_init: At 40096F78 len 00009088 (36 KiB): IRAM
+I (589) spi_flash: detected chip: generic
+I (591) spi_flash: flash io: dio
+I (595) main_task: Started on CPU0
+I (605) main_task: Calling app_main()
+I (645) LOG_STORAGE: [06/10/2025, 22:09:44] SPIFFS: 816 KB total, 30 KB used
+I (655) LOG_STORAGE: [06/10/2025, 22:09:44] Log storage initialized successfully
+I (69I (695) HDDESP32: [113 ms] Starting HDD ESP32 Monitor v2.0 (ESP-IDF v5.4.1)
+I (755) HDDESP32: [170 ms] UART driver initialized for debug commands
+I (785) HDDESP32: [200 ms] Phase 1: Basic initialization
+I (815) WATCHDOG_MGR: [230 ms] Initializing Watchdog Manager
+I (845) WATCHDOG_MGR: [260 ms] Watchdog configurations initialized
+I (875) WATCHDOG_MGR: [290 ms] TWDT reconfigured with 25000ms timeout
+I (905) WATCHDOG_MGR: [320 ms] Watchdog Manager initialized successfully with TWDT active
+I (935) HDDESP32: [350 ms] Watchdog manager initialized successfully
+I (1965) WATCHDOG_MGR: [1377 ms] Registered task: app_main (1/10) in TWDT
+I (2005) HDDESP32: [1420 ms] Main task registered in watchdog manager
+I (2035) CONFIG_MGR: Initializing configuration manager with wear protection
+I (2085) CONFIG_MGR: Configuration manager initialized with wear leveling protection
+I (2125) ESP32_ID_MGR: Initializing ESP32 ID Manager
+I (2155) ESP32_ID_MGR: MAC Address: A0B7652842A8
+I (2185) ESP32_ID_MGR: Loaded existing ID: 42A8ACA0
+I (2215) ESP32_ID_MGR: ESP32 ID Manager initialized successfully with ID: 42A8ACA0
+I (2245) HDDESP32: [1660 ms] ESP32 ID: 42A8ACA0
+I (2275) LOG_UPLOADER: [06/10/2025, 22:09:46] Log uploader initialized with ESP32 ID: 42A8ACA0
+I (2305) LOG_UPLOADER: [06/10/2025, 22:09:46] Log uploader task started - waiting for internet connectivity
+I (2325) LOG_UPLOADER: [06/10/2025, 22:09:46] Log uploader task created successfully
+I (2335) LOG_UPLOADER: [06/10/2025, 22:09:46] Waiting for internet connectivity, rechecking in 2 minutes
+I (2395) HDDESP32: [1810 ms] MAC: A0B7652842A8
+I (2425) gpio: GPIO[0]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (2455) gpio: GPIO[0]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (2485) HDDESP32: [1900 ms] Phase 2: Manager initialization
+I (2515) WIFI_MGR: [1930 ms] Initializing WiFi Manager
+I (2545) WIFI_MGR: [1960 ms] Initializing TCP/IP stack
+I (2575) WIFI_MGR: [1991 ms] Creating WiFi station netif
+I (2605) WIFI_MGR: [2021 ms] Creating WiFi AP netif
+I (2645) wifi:wifi driver task: 3ffcf63c, prio:23, stack:6656, core=0
+I (2745) wifi:wifi firmware version: 79fa3f41ba
+I (2835) wifi:wifi certification version: v7.0
+I (2925) wifi:config NVS flash: enabled
+I (3015) wifi:config nano formatting: disabled
+I (3105) wifi:Init data frame dynamic rx buffer num: 16
+I (3195) wifi:Init static rx mgmt buffer num: 5
+I (3285) wifi:Init management short buffer num: 32
+I (3375) wifi:Init dynamic tx buffer num: 16
+I (3465) wifi:Init static rx buffer size: 1600
+I (3555) wifi:Init static rx buffer num: 8
+I (3645) wifi:Init dynamic rx buffer num: 16
+I (3735) wifi_init: rx ba win: 8
+I (3765) wifi_init: accept mbox: 6
+I (3795) wifi_init: tcpip mbox: 48
+I (3825) wifi_init: udp mbox: 24
+I (3855) wifi_init: tcp mbox: 24
+I (3885) wifi_init: tcp tx win: 8192
+I (3915) wifi_init: tcp rx win: 8192
+I (3945) wifi_init: tcp mss: 1440
+I (3975) wifi_init: WiFi IRAM OP enabled
+I (4005) wifi_init: WiFi RX IRAM OP enabled
+I (4035) WIFI_MGR: [3450 ms] Registering event handlers
+I (4065) WIFI_MGR: [3480 ms] Setting WiFi to station mode
+I (4095) phy_init: phy_version 4860,6b7a6e5,Feb  6 2025,14:47:07
+I (4195) phy_init: Saving new calibration data due to checksum failure or outdated calibration data, mode(0)
+I (4255) wifi:mode : sta (a0:b7:65:28:42:a8)
+I (4355) wifi:enable tsf
+I (4445) WIFI_MGR: [3863 ms] Found saved WiFi credentials for SSID: PABLO-2.4G
+I (4485) WIFI_MGR: [3900 ms] WiFi Manager initialized successfully
+I (4515) TIME_MGR: Initializing Time Manager
+I (4545) TIME_MGR: Timezone set to Lima, Peru (UTC-5)
+I (4575) TIME_MGR: Time Manager initialized
+I (4605) MQTT_MGR: [4020 ms] Initializing MQTT Manager
+I (4635) MQTT_MGR: [4050 ms] MQTT Manager initialized
+I (4665) CONN_MON: [4080 ms] Initializing connectivity monitor (RAM-only version)
+I (4695) CONN_MON: [4110 ms] Connectivity monitor initialized (RAM-only)
+I (4725) HDDESP32: [4140 ms] Connectivity monitor initialized
+I (4755) HDDESP32: [4170 ms] Phase 3: Callback configuration
+I (4785) MQTT_MGR: [4200 ms] Setting credentials for ESP32 ID: 42A8ACA0
+I (4815) MQTT_MGR: [4230 ms] Credentials configured
+I (4845) HDDESP32: [4260 ms] Phase 4: WiFi connection
+I (4875) WIFI_MGR: [4290 ms] Connecting with saved credentials, SSID: PABLO-2.4G
+I (4905) WIFI_MGR: [4320 ms] Connecting to WiFi network: PABLO-2.4G
+I (5275) wifi:new:<8,0>, old:<1,0>, ap:<255,255>, sta:<8,0>, prof:1, snd_ch_cfg:0x0
+I (5375) wifi:state: init -> auth (0xb0)
+I (5475) wifi:state: auth -> assoc (0x0)
+I (5575) wifi:state: assoc -> run (0x10)
+I (5685) wifi:connected with PABLO-2.4G, aid = 102, channel 8, BW20, bssid = e8:6d:e9:55:91:dc
+I (5785) wifi:security: WPA2-PSK, phy: bgn, rssi: -46
+I (5875) wifi:pm start, type: 1
+
+I (5965) wifi:dp: 1, bi: 102400, li: 3, scale listen interval from 307200 us to 307200 us
+I (6055) wifi:AP's beacon interval = 102400 us, DTIM period = 1
+I (7185) esp_netif_handlers: sta ip: 192.168.18.38, mask: 255.255.255.0, gw: 192.168.18.1
+I (7225) WIFI_MGR: [6640 ms] Got IP address: 192.168.18.38
+I (7255) HDDESP32: [6670 ms] WiFi connected
+I (7275) WIFI_MGR: [6693 ms] Successfully connected to WiFi network
+I (7285) TIME_MGR: Starting NTP synchronization
+I (7315) TIME_MGR: Initializing SNTP
+I (7345) TIME_MGR: SNTP initialized
+I (7395) HDDESP32: [6812 ms] WiFi connection initiated - will connect in background
+I (7435) HDDESP32: [6850 ms] Phase 5: Creating system monitor task
+I (7465) HDDESP32: [6880 ms] System monitor task started
+I (9485) HDDESP32: [8897 ms] System initialization completed successfully
+I (9495) WATCHDOG_MGR: [8907 ms] Registered task: sys_monitor (2/10) in TWDT
+I (9555) HDDESP32: [8970 ms] System monitor task registered in watchdog manager
+I (10185) TIME_MGR: NTP synchronized successfully
+I (10235) TIME_MGR: Time synchronized successfully
+I (10235) TIME_MGR: Lima time: 06/10/2025, 17:09:54
+I (10265) MQTT_MGR: [06/10/2025, 17:09:54] Setting credentials for ESP32 ID: 42A8ACA0
+I (10325) MQTT_MGR: [06/10/2025, 17:09:54] Credentials configured
+I (10355) MQTT_MGR: [06/10/2025, 17:09:54] Connecting to MQTT broker
+I (10385) MQTT_MGR: [06/10/2025, 17:09:54] Testing DNS resolution for: node02.myqtthub.com
+I (10415) MQTT_MGR: [06/10/2025, 17:09:54] DNS resolution successful for node02.myqtthub.com
+I (10455) MQTT_MGR: [06/10/2025, 17:09:54] Connecting to URI: mqtts://node02.myqtthub.com:8883
+I (10485) MQTT_SSL: Setting up CERT_NONE SSL configuration (equivalent to MicroPython)
+I (10515) MQTT_SSL: Memory before SSL setup - Free: 139628 bytes, Largest block: 110592 bytes
+I (10545) MQTT_SSL: CERT_NONE SSL configuration applied successfully (with certificate bundle)
+I (10575) MQTT_SSL: Memory after SSL setup - Free: 139628 bytes
+I (11215) wifi:<ba-add>idx:0 (ifx:0, e8:6d:e9:55:91:dc), tid:0, ssn:5, winSize:64
+I (11625) esp-x509-crt-bundle: Certificate validated
+I (11785) HDDESP32: [06/10/2025, 17:09:55] Sending network info
+I (11825) MQTT_MGR: [06/10/2025, 17:09:55] Sending network info to esp32/network_info (len=147)
+I (12955) MQTT_MGR: [06/10/2025, 17:09:56] MQTT connected
+I (12995) MQTT_MGR: [06/10/2025, 17:09:56] MQTT connected successfully
+I (12995) HDDESP32: [06/10/2025, 17:09:56] MQTT connected
+I (13055) HDDESP32: [06/10/2025, 17:09:56] Initializing Relay Manager after MQTT connection
+I (13085) RELAY_MGR: [06/10/2025, 17:09:56] Initializing Relay Manager with 6 relays
+I (13115) RELAY_MGR: [06/10/2025, 17:09:56] === LOADING RELAY CONFIG FROM NVS ===
+W (13145) RELAY_MGR: [06/10/2025, 17:09:56] Failed to load active states from NVS: ESP_ERR_NVS_NOT_FOUND (size: 6/6)
+W (13175) RELAY_MGR: [06/10/2025, 17:09:57] All relays will remain INACTIVE (default state)
+W (13205) RELAY_MGR: [06/10/2025, 17:09:57] Failed to load contact types from NVS: ESP_ERR_NVS_NOT_FOUND
+I (13235) RELAY_MGR: [06/10/2025, 17:09:57] === RELAY CONFIG LOAD COMPLETED ===
+I (13265) RELAY_MGR: [06/10/2025, 17:09:57] GPIO ISR service ready
+I (13295) gpio: GPIO[32]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (13425) RELAY_MGR: [06/10/2025, 17:09:57] Relay relay_1 (GPIO 32): Relay 1, Type: NC, Active: NO, Initial: DISC (GPIO=1)
+I (13465) gpio: GPIO[33]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (13595) RELAY_MGR: [06/10/2025, 17:09:57] Relay relay_2 (GPIO 33): Relay 2, Type: NC, Active: NO, Initial: OK (GPIO=0)
+I (13635) gpio: GPIO[25]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (13765) RELAY_MGR: [06/10/2025, 17:09:57] Relay relay_3 (GPIO 25): Relay 3, Type: NC, Active: NO, Initial: OK (GPIO=0)
+I (13805) gpio: GPIO[26]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (13935) RELAY_MGR: [06/10/2025, 17:09:57] Relay relay_4 (GPIO 26): Relay 4, Type: NC, Active: NO, Initial: OK (GPIO=0)
+I (13975) gpio: GPIO[27]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (14105) RELAY_MGR: [06/10/2025, 17:09:57] Relay relay_5 (GPIO 27): Relay 5, Type: NC, Active: NO, Initial: OK (GPIO=0)
+I (14145) gpio: GPIO[14]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (14275) RELAY_MGR: [06/10/2025, 17:09:58] Relay relay_6 (GPIO 14): Relay 6, Type: NC, Active: NO, Initial: OK (GPIO=0)
+I (14315) RELAY_MGR: [06/10/2025, 17:09:58] Relay event task created with 8KB stack
+I (14315) RELAY_MGR: [06/10/2025, 17:09:58] Relay event task started (optimized for panels)
+I (14745) RELAY_MGR: [06/10/2025, 17:09:58] Relay Manager initialized successfully
+I (16285) RELAY_MGR: [06/10/2025, 17:10:00] Detecting post-restart relay changes
+W (16325) RELAY_MGR: [06/10/2025, 17:10:00] Nrelay states found, assuming first boot
+I (16355) RELAY_MGo previous R: [06/10/2025, 17:10:00] Reporting initial relay states after configuration
+I (16385) RELAY_MGR: [06/10/2025, 17:10:00] Initial relay states reported
+I (16415) HDDESP32: [06/10/2025, 17:10:00] Relay Manager initialized and ready for configurations
+I (16445) HDDESP32: [06/10/2025, 17:10:00] System stable - starting connectivity monitoring
+I (16475) CONN_MON: [06/10/2025, 17:10:00] Starting monitor task with 15000 ms stabilization period
+I (16505) CONN_MON: [06/10/2025, 17:10:00] Connectivity monitor started (RAM-only)
+I (16505) CONN_MON: [06/10/2025, 17:10:00] Monitor task started, waiting for stabilization period
+I (16535) HDDESP32: [06/10/2025, 17:10:00] Connectivity monitoring started successfully
+I (18565) HDDESP32: [06/10/2025, 17:10:02] Checking for pending RAM connectivity events after MQTT connection
+I (18605) HDDESP32: [06/10/2025, 17:10:02] Event count: 0, has_events: false
+I (18635) HDDESP32: [06/10/2025, 17:10:02] No RAM connectivity events to process
+I (19665) MQTT_MGR: [06/10/2025, 17:10:03] Sending network info to esp32/network_info (len=147)
+I (22705) WATCHDOG_MGR: [06/10/2025, 17:10:06] Changing mode from 0 to 1
+I (22745) WATCHDOG_MGR: [06/10/2025, 17:10:06] TWDT reconfigured for mode 1 with 15000ms timeout
+I (22775) HDDESP32: [06/10/2025, 17:10:06] Watchdog safely transitioned to running mode
+I (22815) HDDESP32: [06/10/2025, 17:10:06] Suscrito a topics generales del ESP32
+I (22845) MQTT_MGR: [06/10/2025, 17:10:06] No saved panel config found, skipping panel subscriptions
+I (23395) MQTT_MGR: [06/10/2025, 17:10:07] MQTT subscribed, msg_id=25046
+I (23445) MQTT_MGR: [06/10/2025, 17:10:07] MQTT subscribed, msg_id=5737
+I (23475) MQTT_MGR: [06/10/2025, 17:10:07] MQTT subscribed, msg_id=2682
+I (23515) MQTT_MGR: [06/10/2025, 17:10:07] MQTT subscribed, msg_id=13584
+W (30775) WATCHDOG_MGR: [06/10/2025, 17:10:14] Significant memory decrease detected: 87580 -> 75192
+W (30815) MQTT_MGR: [06/10/2025, 17:10:14] Performing emergency memory cleanup
+I (30845) MQTT_MGR: [06/10/2025, 17:10:14] Memory cleanup completed, free heap: 75192
+I (31595) CONN_MON: [06/10/2025, 17:10:15] Stabilization period complete, starting connectivity monitoring
+I (61955) wifi:<ba-add>idx:1 (ifx:0, e8:6d:e9:55:91:dc), tid:5, ssn:5, winSize:64
