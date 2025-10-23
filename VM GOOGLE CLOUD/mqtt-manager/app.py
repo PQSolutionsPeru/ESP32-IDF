@@ -4,12 +4,14 @@ MQTT Manager Web Interface
 Flask API para gestionar usuarios MQTT en Mosquitto
 """
 
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 from flask_cors import CORS
+from werkzeug.security import check_password_hash, generate_password_hash
+from functools import wraps
 import subprocess
 import re
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 
 # Configurar logging
@@ -19,10 +21,39 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 
+# Configuración de sesión
+app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', os.urandom(24).hex())
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
+
+# Credenciales de login (DEBE configurar ADMIN_PASSWORD_HASH en variables de entorno)
+# Para generar un hash: python3 -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('tu_password'))"
+# ADVERTENCIA: Si no configuras ADMIN_PASSWORD_HASH, el login quedará DESHABILITADO por seguridad
+LOGIN_CREDENTIALS = {
+    'pqsowner': os.environ.get('ADMIN_PASSWORD_HASH', generate_password_hash(os.urandom(32).hex()))
+}
+
 # Configuración
 MOSQUITTO_PASSWD_FILE = '/etc/mosquitto/passwd'
 MOSQUITTO_PASSWD_CMD = '/usr/bin/mosquitto_passwd'
 SYSTEMCTL_CMD = '/bin/systemctl'
+
+# ============================================================================
+# AUTENTICACIÓN
+# ============================================================================
+
+def login_required(f):
+    """Decorator para proteger rutas que requieren autenticación"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'logged_in' not in session or not session['logged_in']:
+            if request.is_json or request.path.startswith('/api/'):
+                return jsonify({
+                    'success': False,
+                    'error': 'Authentication required'
+                }), 401
+            return redirect(url_for('login_page'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 # ============================================================================
 # UTILIDADES
@@ -128,16 +159,77 @@ def restart_mosquitto():
 # RUTAS WEB
 # ============================================================================
 
+@app.route('/login')
+def login_page():
+    """Página de login"""
+    # Si ya está autenticado, redirigir al dashboard
+    if session.get('logged_in'):
+        return redirect(url_for('index'))
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    """Cerrar sesión"""
+    session.clear()
+    return redirect(url_for('login_page'))
+
 @app.route('/')
+@login_required
 def index():
-    """Página principal - Interfaz web"""
-    return render_template('index.html')
+    """Página principal - Interfaz web (protegida)"""
+    return render_template('index.html', username=session.get('username', 'admin'))
 
 # ============================================================================
 # API REST
 # ============================================================================
 
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    """POST - Autenticar usuario"""
+    data = request.get_json()
+
+    if not data or 'username' not in data or 'password' not in data:
+        return jsonify({
+            'success': False,
+            'error': 'Missing username or password'
+        }), 400
+
+    username = data['username'].strip()
+    password = data['password']
+
+    # Verificar credenciales
+    if username in LOGIN_CREDENTIALS:
+        password_hash = LOGIN_CREDENTIALS[username]
+        if check_password_hash(password_hash, password):
+            session.permanent = True
+            session['logged_in'] = True
+            session['username'] = username
+            session['login_time'] = datetime.now().isoformat()
+
+            logger.info(f"Successful login: {username}")
+            return jsonify({
+                'success': True,
+                'message': 'Login successful',
+                'username': username
+            })
+
+    logger.warning(f"Failed login attempt: {username}")
+    return jsonify({
+        'success': False,
+        'error': 'Invalid credentials'
+    }), 401
+
+@app.route('/api/auth/check', methods=['GET'])
+def check_auth():
+    """GET - Verificar si está autenticado"""
+    return jsonify({
+        'success': True,
+        'authenticated': session.get('logged_in', False),
+        'username': session.get('username')
+    })
+
 @app.route('/api/mqtt/users', methods=['GET'])
+@login_required
 def get_users():
     """GET - Lista todos los usuarios MQTT"""
     result = parse_passwd_file()
@@ -156,6 +248,7 @@ def get_users():
     })
 
 @app.route('/api/mqtt/users', methods=['POST'])
+@login_required
 def create_user():
     """POST - Crea un nuevo usuario MQTT (ESP32)"""
     data = request.get_json()
@@ -209,6 +302,7 @@ def create_user():
     }), 201
 
 @app.route('/api/mqtt/users/<username>', methods=['DELETE'])
+@login_required
 def delete_user(username):
     """DELETE - Elimina un usuario MQTT"""
     username = username.upper().strip()
@@ -259,6 +353,7 @@ def delete_user(username):
     })
 
 @app.route('/api/mqtt/status', methods=['GET'])
+@login_required
 def get_status():
     """GET - Estado del broker Mosquitto"""
     result = execute_command(['sudo', SYSTEMCTL_CMD, 'is-active', 'mosquitto'], check=False)

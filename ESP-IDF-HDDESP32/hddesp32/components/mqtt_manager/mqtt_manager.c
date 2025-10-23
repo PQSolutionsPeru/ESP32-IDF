@@ -32,7 +32,7 @@
 #define MQTT_DISCONNECTED_BIT BIT1
 #define MQTT_ERROR_BIT BIT2
 
-#define DEFAULT_BROKER "node02.myqtthub.com"
+#define DEFAULT_BROKER "hddm.pqsolutionsperu.com"
 #define DEFAULT_PORT 8883
 #define DEFAULT_KEEPALIVE 120
 #define DEFAULT_RECONNECT_TIMEOUT_MS 30000

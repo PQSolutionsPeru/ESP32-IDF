@@ -82,16 +82,18 @@ PID: 553915
 - Archivo principal: `/etc/mosquitto/mosquitto.conf`
 - Configuración HDD: `/etc/mosquitto/conf.d/hdd-monitor.conf`
 - Usuarios: `/etc/mosquitto/passwd`
-- Certificados: `/etc/mosquitto/certs/`
-  - `server.crt`
-  - `server.key`
-  - `ca.crt`
+- Certificados SSL: **Let's Encrypt**
+  - `/etc/letsencrypt/live/hddm.pqsolutionsperu.com/cert.pem`
+  - `/etc/letsencrypt/live/hddm.pqsolutionsperu.com/privkey.pem`
+  - `/etc/letsencrypt/live/hddm.pqsolutionsperu.com/chain.pem`
 
 **Características**:
-- TLS v1.2
+- TLS v1.2 con Let's Encrypt (certificados renovables automáticamente)
+- Verificación de certificados habilitada
 - Autenticación requerida (`allow_anonymous false`)
 - Persistencia: `/var/lib/mosquitto/`
-- Logs: `/var/log/mosquitto/mosquitto.log`
+- Logs verbosos: `/var/log/mosquitto/mosquitto.log` (`log_type all`)
+- Conexión ESP32: `mqtts://hddm.pqsolutionsperu.com:8883`
 
 ### 2. **ESP32 Log Server**
 
@@ -128,19 +130,25 @@ PID: 557314
 - Servidor de archivos estáticos
 - Terminación SSL/TLS
 
-### 4. **MQTT Manager Web UI** (NUEVO - en configuración)
+### 4. **MQTT Manager Web UI** ✅ EN PRODUCCIÓN
 
 ```bash
-Tipo: Flask + Gunicorn
+Service: mqtt-manager.service
+Tipo: Flask + Gunicorn (2 workers)
 Puerto: 5000 (interno)
 Proxy: Nginx → https://hddm.pqsolutionsperu.com
 Venv: /home/pqsolutions/mqtt-manager-venv
+Status: Active (running)
 ```
 
 **Función**:
 - CRUD de usuarios MQTT en `/etc/mosquitto/passwd`
 - Interfaz web para gestionar ESP32 devices
-- Auto-registro de nuevos ESP32
+- Sistema de autenticación seguro (Flask sessions)
+- Usuario: `pqsowner`
+- Password hashing con Werkzeug (scrypt)
+- Todas las rutas protegidas con @login_required
+- Sesiones con expiración de 24 horas
 
 ---
 
@@ -177,10 +185,12 @@ Werkzeug==3.1.3
 Flask==3.1.2
 flask-cors==6.0.1
 gunicorn==23.0.0
+Werkzeug==3.1.3
 ```
 
 **Usado por**:
 - `/home/pqsolutions/mqtt-manager/`
+- Servicio: `mqtt-manager.service`
 
 ---
 
@@ -218,7 +228,9 @@ Status: active
 /home/pqsolutions/venv/         # pqsolutions:pqsolutions
 /home/pqsolutions/mqtt-manager-venv/  # pqsolutionsperu:pqsolutionsperu
 /etc/mosquitto/passwd           # mosquitto:mosquitto (644)
-/etc/mosquitto/certs/           # mosquitto:mosquitto (755)
+/etc/letsencrypt/live/hddm.pqsolutionsperu.com/    # root:mosquitto
+/etc/letsencrypt/archive/hddm.pqsolutionsperu.com/ # root:mosquitto
+  privkey*.pem                  # 640 (mosquitto needs read access)
 ```
 
 ---
@@ -256,15 +268,18 @@ log_server.py
 ```
 Admin Web Browser
   ↓ (HTTPS 443)
-Nginx Reverse Proxy
+Nginx Reverse Proxy (hddm.pqsolutionsperu.com)
   ↓ (HTTP 5000)
 Flask API (mqtt-manager)
-  ↓ (Execute)
-mosquitto_passwd CLI
-  ↓ (Update)
-/etc/mosquitto/passwd
-  ↓ (Reload)
-Mosquitto Broker
+  ├─ Login: POST /api/auth/login
+  ├─ Session validation: @login_required
+  └─ (Authenticated requests)
+      ↓ (Execute)
+    mosquitto_passwd CLI
+      ↓ (Update)
+    /etc/mosquitto/passwd
+      ↓ (Reload)
+    Mosquitto Broker
 ```
 
 ---
@@ -320,6 +335,10 @@ sudo nano /etc/mosquitto/passwd
 
 # Reiniciar Mosquitto después de cambios
 sudo systemctl restart mosquitto
+
+# Ver logs en tiempo real (incluye mensajes publicados)
+sudo journalctl -u mosquitto -f
+sudo tail -f /var/log/mosquitto/mosquitto.log
 ```
 
 ### Monitoreo
@@ -366,15 +385,65 @@ deactivate
 
 ---
 
-## 🔮 Próximas Implementaciones
+## 🔐 Configuración SSL/TLS
 
-- [ ] MQTT Manager Web UI en `hddm.pqsolutionsperu.com`
-- [ ] Certificados SSL Let's Encrypt para `hddm.pqsolutionsperu.com`
-- [ ] Auto-registro de ESP32 en primera conexión
-- [ ] Dashboard de monitoreo en tiempo real
-- [ ] Sistema de alertas vía notificaciones push
+### ESP32 → Mosquitto
+
+**Broker**: `mqtts://hddm.pqsolutionsperu.com:8883`
+
+**ESP32 SSL Configuration**:
+- Usa **ESP-IDF Certificate Bundle** (`esp_crt_bundle_attach`)
+- Incluye automáticamente CAs confiables (Let's Encrypt, etc.)
+- Verificación de dominio habilitada (`skip_cert_common_name_check = false`)
+- No requiere certificado embebido manualmente
+
+**Archivos ESP32**:
+- `mqtt_manager.c:35` - Define broker como `hddm.pqsolutionsperu.com`
+- `mqtt_ssl_setup.c:33` - Configura `crt_bundle_attach`
+- `CMakeLists.txt` - No incluye `EMBED_FILES` (ya no necesario)
+
+**Mosquitto SSL Configuration** (`/etc/mosquitto/conf.d/hdd-monitor.conf`):
+```conf
+listener 8883 0.0.0.0
+certfile /etc/letsencrypt/live/hddm.pqsolutionsperu.com/cert.pem
+keyfile /etc/letsencrypt/live/hddm.pqsolutionsperu.com/privkey.pem
+cafile /etc/letsencrypt/live/hddm.pqsolutionsperu.com/chain.pem
+require_certificate false
+allow_anonymous false
+password_file /etc/mosquitto/passwd
+log_type all
+```
+
+**Renovación Automática**:
+- Certbot timer activo para renovación automática
+- Verificar: `sudo systemctl status certbot.timer`
+- Test: `sudo certbot renew --dry-run`
 
 ---
 
-**Última actualización**: 2025-10-06
+## 🎉 Sistema Completado
+
+- [x] Certificados SSL Let's Encrypt para `hddm.pqsolutionsperu.com` ✅
+- [x] ESP32 con verificación SSL completa (ESP-IDF Certificate Bundle) ✅
+- [x] MQTT Manager Web UI en `hddm.pqsolutionsperu.com` ✅
+- [x] Sistema de login seguro (Flask sessions + Werkzeug) ✅
+- [x] Usuario: `pqsowner` con password hasheado ✅
+- [x] Todas las rutas API protegidas ✅
+- [x] Documentación completa ✅
+
+## 🔮 Próximas Mejoras (Opcionales)
+
+- [ ] Auto-registro de ESP32 en primera conexión
+- [ ] Dashboard de monitoreo en tiempo real
+- [ ] Sistema de alertas vía notificaciones push
+- [ ] Rate limiting en Nginx
+- [ ] Headers de seguridad adicionales
+- [ ] Múltiples usuarios administrativos
+- [ ] Logs de auditoría en base de datos
+
+---
+
+**Última actualización**: 2025-10-07
+**Estado**: ✅ Sistema completamente funcional en producción
+**URL producción**: https://hddm.pqsolutionsperu.com
 **Mantenido por**: PQ Solutions Peru
