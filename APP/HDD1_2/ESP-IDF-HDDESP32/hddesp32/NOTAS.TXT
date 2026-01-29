@@ -1,0 +1,493 @@
+IMPORTANTE, COMPORTAMIENTO DE NOTIFICACIONES DE PERDIDA DE INTERNET DEL ESP32:
+ORIGINAL:
+static void monitor_task(void *pvParameters) {
+    connectivity_monitor_context_t *ctx = &s_conn_ctx;
+    
+    LOG_I(TAG, "Monitor task started, waiting for stabilization period");
+    
+    while (ctx->monitoring_active) {
+        int64_t current_time = esp_timer_get_time() / 1000;
+        
+        if (!ctx->stabilization_complete) {
+            int64_t time_elapsed = current_time - ctx->init_time;
+            int64_t time_remaining = CONNECTIVITY_STABILIZATION_TIME_MS - time_elapsed;
+            
+            if (time_remaining <= 0) {
+                ctx->stabilization_complete = true;
+                ctx->state = CONNECTIVITY_STATE_MONITORING;
+                LOG_I(TAG, "Stabilization period complete, starting connectivity monitoring");
+            } else {
+                vTaskDelay(pdMS_TO_TICKS(1000));
+                continue;
+            }
+        }
+        
+        bool wifi_connected = wifi_manager_is_connected();
+        bool internet_available = false;
+        
+        if (wifi_connected) {
+            char current_ssid[33] = {0};
+            wifi_manager_get_configured_ssid(current_ssid, sizeof(current_ssid));
+            
+            if (xSemaphoreTake(ctx->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                strncpy(ctx->status.current_ssid, current_ssid, sizeof(ctx->status.current_ssid) - 1);
+                ctx->status.current_ssid[sizeof(ctx->status.current_ssid) - 1] = '\0';
+                xSemaphoreGive(ctx->mutex);
+            }
+            
+            esp_err_t ping_ret = ping_host("8.8.8.8", &internet_available);
+            if (ping_ret != ESP_OK) {
+                internet_available = false;
+            }
+        }
+        
+        connectivity_event_type_t event_to_add = -1;
+        char event_ssid[33] = {0};
+        bool add_event_needed = false;
+        
+        if (xSemaphoreTake(ctx->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+            bool wifi_state_changed = (ctx->status.wifi_connected != wifi_connected);
+            bool internet_state_changed = (ctx->status.internet_available != internet_available);
+            
+            if (wifi_state_changed) {
+                if (!wifi_connected && ctx->status.wifi_connected) {
+                    ctx->status.wifi_lost_time = current_time;
+                    event_to_add = CONNECTIVITY_EVENT_WIFI_LOST;
+                    strncpy(event_ssid, ctx->status.current_ssid, sizeof(event_ssid) - 1);
+                    add_event_needed = true;
+                    LOG_W(TAG, "WiFi connection lost to SSID: %s", ctx->status.current_ssid);
+                } else if (wifi_connected && !ctx->status.wifi_connected) {
+                    if (ctx->status.wifi_lost_time > 0) {
+                        event_to_add = CONNECTIVITY_EVENT_WIFI_RECOVERED;
+                        strncpy(event_ssid, ctx->status.current_ssid, sizeof(event_ssid) - 1);
+                        add_event_needed = true;
+                        LOG_I(TAG, "WiFi connection recovered to SSID: %s", ctx->status.current_ssid);
+                        ctx->status.wifi_lost_time = 0;
+                    }
+                }
+                ctx->status.wifi_connected = wifi_connected;
+            }
+            
+            if (wifi_connected && internet_state_changed) {
+                if (!internet_available && ctx->status.internet_available) {
+                    ctx->status.internet_lost_time = current_time;
+                    event_to_add = CONNECTIVITY_EVENT_INTERNET_LOST;
+                    strncpy(event_ssid, ctx->status.current_ssid, sizeof(event_ssid) - 1);
+                    add_event_needed = true;
+                    LOG_W(TAG, "Internet connectivity lost while connected to WiFi: %s", ctx->status.current_ssid);
+                } else if (internet_available && !ctx->status.internet_available) {
+                    if (ctx->status.internet_lost_time > 0) {
+                        event_to_add = CONNECTIVITY_EVENT_INTERNET_RECOVERED;
+                        strncpy(event_ssid, ctx->status.current_ssid, sizeof(event_ssid) - 1);
+                        add_event_needed = true;
+                        LOG_I(TAG, "Internet connectivity recovered on WiFi: %s", ctx->status.current_ssid);
+                        ctx->status.internet_lost_time = 0;
+                    }
+                }
+            }
+            
+            if (!wifi_connected) {
+                internet_available = false;
+            }
+            
+            ctx->status.internet_available = internet_available;
+            ctx->status.last_check_time = current_time;
+            
+            xSemaphoreGive(ctx->mutex);
+        }
+        
+        if (add_event_needed && event_to_add != -1) {
+            add_event(event_to_add, event_ssid, current_time);
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(CONNECTIVITY_CHECK_INTERVAL_MS));
+    }
+    
+    LOG_I(TAG, "Monitor task ending");
+    vTaskDelete(NULL);
+}
+
+
+
+SIMPLIFICADO A UN EVENTO POR ITERACIÓN:
+static void monitor_task(void *pvParameters) {
+    connectivity_monitor_context_t *ctx = &s_conn_ctx;
+    
+    LOG_I(TAG, "Monitor task started, waiting for stabilization period");
+    
+    while (ctx->monitoring_active) {
+        int64_t current_time = esp_timer_get_time() / 1000;
+        
+        if (!ctx->stabilization_complete) {
+            int64_t time_elapsed = current_time - ctx->init_time;
+            int64_t time_remaining = CONNECTIVITY_STABILIZATION_TIME_MS - time_elapsed;
+            
+            if (time_remaining <= 0) {
+                ctx->stabilization_complete = true;
+                ctx->state = CONNECTIVITY_STATE_MONITORING;
+                LOG_I(TAG, "Stabilization period complete, starting connectivity monitoring");
+            } else {
+                vTaskDelay(pdMS_TO_TICKS(1000));
+                continue;
+            }
+        }
+        
+        bool wifi_connected = wifi_manager_is_connected();
+        bool internet_available = false;
+        
+        if (wifi_connected) {
+            char current_ssid[33] = {0};
+            wifi_manager_get_configured_ssid(current_ssid, sizeof(current_ssid));
+            
+            if (xSemaphoreTake(ctx->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                strncpy(ctx->status.current_ssid, current_ssid, sizeof(ctx->status.current_ssid) - 1);
+                ctx->status.current_ssid[sizeof(ctx->status.current_ssid) - 1] = '\0';
+                xSemaphoreGive(ctx->mutex);
+            }
+            
+            esp_err_t ping_ret = ping_host("8.8.8.8", &internet_available);
+            if (ping_ret != ESP_OK) {
+                internet_available = false;
+            }
+        }
+        
+        // Variables para un solo evento
+        connectivity_event_type_t event_to_add = -1;
+        char event_ssid[33] = {0};
+        bool add_event_needed = false;
+        
+        if (xSemaphoreTake(ctx->mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+            bool wifi_state_changed = (ctx->status.wifi_connected != wifi_connected);
+            bool internet_state_changed = (ctx->status.internet_available != internet_available);
+            
+            // PRIORIDAD 1: Cambios de WiFi (más críticos)
+            if (wifi_state_changed) {
+                if (!wifi_connected && ctx->status.wifi_connected) {
+                    // WiFi perdido
+                    ctx->status.wifi_lost_time = current_time;
+                    event_to_add = CONNECTIVITY_EVENT_WIFI_LOST;
+                    strncpy(event_ssid, ctx->status.current_ssid, sizeof(event_ssid) - 1);
+                    add_event_needed = true;
+                    LOG_W(TAG, "WiFi connection lost to SSID: %s", ctx->status.current_ssid);
+                } else if (wifi_connected && !ctx->status.wifi_connected) {
+                    // WiFi recuperado
+                    if (ctx->status.wifi_lost_time > 0) {
+                        event_to_add = CONNECTIVITY_EVENT_WIFI_RECOVERED;
+                        strncpy(event_ssid, ctx->status.current_ssid, sizeof(event_ssid) - 1);
+                        add_event_needed = true;
+                        LOG_I(TAG, "WiFi connection recovered to SSID: %s", ctx->status.current_ssid);
+                        ctx->status.wifi_lost_time = 0;
+                    }
+                }
+                ctx->status.wifi_connected = wifi_connected;
+            }
+            
+            // PRIORIDAD 2: Cambios de Internet (solo si WiFi conectado y no hay evento WiFi pendiente)
+            else if (wifi_connected && internet_state_changed) {
+                if (!internet_available && ctx->status.internet_available) {
+                    // Internet perdido
+                    ctx->status.internet_lost_time = current_time;
+                    event_to_add = CONNECTIVITY_EVENT_INTERNET_LOST;
+                    strncpy(event_ssid, ctx->status.current_ssid, sizeof(event_ssid) - 1);
+                    add_event_needed = true;
+                    LOG_W(TAG, "Internet connectivity lost while connected to WiFi: %s", ctx->status.current_ssid);
+                } else if (internet_available && !ctx->status.internet_available) {
+                    // Internet recuperado
+                    if (ctx->status.internet_lost_time > 0) {
+                        event_to_add = CONNECTIVITY_EVENT_INTERNET_RECOVERED;
+                        strncpy(event_ssid, ctx->status.current_ssid, sizeof(event_ssid) - 1);
+                        add_event_needed = true;
+                        LOG_I(TAG, "Internet connectivity recovered on WiFi: %s", ctx->status.current_ssid);
+                        ctx->status.internet_lost_time = 0;
+                    }
+                }
+            }
+            
+            // Actualizar estado de internet
+            if (!wifi_connected) {
+                internet_available = false;
+            }
+            ctx->status.internet_available = internet_available;
+            ctx->status.last_check_time = current_time;
+            
+            xSemaphoreGive(ctx->mutex);
+        }
+        
+        // Procesar el evento único (si lo hay)
+        if (add_event_needed && event_to_add != -1) {
+            add_event(event_to_add, event_ssid, current_time);
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(CONNECTIVITY_CHECK_INTERVAL_MS));
+    }
+    
+    LOG_I(TAG, "Monitor task ending");
+    vTaskDelete(NULL);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+IMPLEMENTAR MENSAJE BROWNOUT PARA EL BROKER Y LA APP
+
+REVISAR CONGELAMIENTO POR PROBLEMAS DE DNS: Resolución de nombres después de conectado
+
+IMPLEMENTAR QUE EL RELAY SE MUESTRE OK O DISC PERO A LA VEZ QUE SE MUESTRE EN LA CONFIGURACIÓN DE RELAYS SI ES QUE TIENE RUIDO O NO (ejemplo: Relay con ruido de x% por segundo) el umbral que se usa es 70% como threshold de estados para decidir si es estable un LOW o un HIGH
+
+PROBAR CONFIG LARGA DE RELAYS, PROBAR CON NOMBRES LARGOS
+
+AUMENTAR EL TIEMPO ENTRE REINTENTOS PARA QUE EL AP NO SE REINICIE
+
+DEBERIA DETECTAR CUANDO LA CONTRASEÑA ES INCORRECTA Y AVISAR AL USUARIO Y LANZAR DE NUEVO EL MODO AP/STA COMO AL COMIENZO, ESTO EN VEZ DE REINICIARSE A CADA RATO; SI LA CONTRASEÑA ES CORRECTA PERO LA RED NO ESTÁ DISPONIBLE DEBERÁ LANZAR DE IGUAL MANERA EL MODO AP/STA COMO AL COMIENZO
+
+MONITOREAR LOS LOGS DE LA VM EN CUANTO UN ESP32 SE CONECTA A RED WIFI, DEBERIA FUNCIONAR TAL Y COMO SI ESTUVIERA EN LA RED WIFI DEL CLIENTE.
+
+REDUCIR LA INFO A LA INFORMACIÓN BÁSICA Y NECESRIA DE LOS MENSAJES DESDE LA VM HACIA EL BROKER MQTT PARA QUE EL ESP32 NO RECIBA TANTO TEXTO QUE NO USARÁ, EJEMPLO:
+command = {
+    'command': 'update_config',
+    'relay_id': relay_id,
+    'is_active': new_data.get('isActive', True),
+    'contact_type': new_data.get('contactType', 'NO'),
+    'timestamp': int(time.time() * 1000)
+} CUANDO SOLO NECESITO command, relay_id, is_active Y contact_type, NO NECESITA EL TIMESTAMP, PERO SI EL custom_name
+
+por qué cada cierto tiempo manda mensajes al broker mqtt de ONLINE con la IP en el mensaje?
+{"esp32_id":"42A8ACA0",
+"MAC":"A0B7652842A8",
+"IP":"192.168.18.38",
+"status":"ONLINE",
+"timestamp":1748485640000,"time":"28/05/2025, 21:27:20"}
+por qué se envía ese mensaje de ONLINE con la IP además de los heartbeats cada 5 minutos? qué función tienen los mensajes con la IP?
+{"esp32_id":"42A8ACA0",
+"status":"ONLINE",
+"timestamp":1748490035000,"type":"heartbeat",
+"message_id":"msg_1261699434",
+"time":"28/05/2025, 22:40:35"}
+
+HACER QUE TODAS LAS NOTIFICACIONES SOLO DUREN 7 DÍAS EN LA BD. SI ES POSIBLE, QUE LA MISMA BD ELIMINE LAS NOTIFICACIONES ALMACENADAS EN ESE TIEMPO.
+
+POR QUÉ SI ES QUE HAY UN PANEL EN LA BD Y TAMBIÉN EN LA APP SE REFLEJA, NO SE PUEDEN CONFIGURAR SUS RELAYS?
+
+AGRUPAR POR CLIENTES EL DASHBOARD DE LAS CUENTAS ADMINISTRADORES
+
+INVESTIGAR LAS FUINCIONES O VARIABLES NO USADAS EN ANDROID STUDIO Y EN EL ESP32. LIMPIARLAS.
+
+POR QUÉ EN esp32_config_manager.py HAY EN ESP32_STATES LOS VALORES 'REGISTERED': 'REGISTERED' Y TAMBIÉN 'status': ESP32_STATES['REGISTERED']?
+
+
+
+
+Soy desarrollador ESP32 con un sistema de monitoreo contra incendios que debe funcionar 24/7/365 sin intervención humana. He estado optimizando el código para eliminar problemas críticos que pueden causar fallas.
+
+**PROGRESO COMPLETADO:**
+✅ **Memory leaks y fragmentación (#2)**: RESUELTO - Eliminé todas las allocaciones dinámicas con cJSON en relay_manager.c y mqtt_manager.c. Reemplacé cJSON_Print/cJSON_Parse con construcción manual de JSON usando snprintf en buffers estáticos.
+✅ **WiFi scan fragmentación**: RESUELTO - Cambié malloc/free variable por array estático wifi_ap_record_t scan_ap_list[WIFI_SCAN_MAX_APS].
+
+**PROBLEMAS CRÍTICOS PENDIENTES:**
+🔴 **1. Reconexión WiFi limitada y frágil** - wifi_manager.c solo intenta 5 reconexiones y se rinde
+🔴 **3. Watchdog demasiado agresivo** - hddesp32_main.c línea 474, fallas de registro causan esp_restart() inmediato  
+🔴 **4. MQTT reconnection loops infinitos** - getaddrinfo() puede bloquear indefinidamente
+🔴 **5. GPIO ISR sin protección** - gpio_isr_handler puede saturarse con ruido eléctrico
+
+🟡 **IMPORTANTES PENDIENTES:**
+**6. Logging excesivo** - CONFIG_LOG_DEFAULT_LEVEL=3 (INFO) llenará memoria
+**7. Task stacks subdimensionados** - system monitor task 12288 bytes insuficiente
+**8. Time sync failures** - NTP falla sin manejo adecuado
+**9. Debounce time insuficiente** - 50ms muy poco para entorno industrial
+
+**SOLICITUD ESPECÍFICA:**
+1. verificar qué se ha realizado y qué falta, para continuar con el proceso
+
+**CONTEXTO DEL PROYECTO:**
+- ESP32 monitoreará panel contra incendios 24/7/365
+- Enviará alertas via MQTT a app Android del vigilante  
+- Una vez instalado en cliente NO tendré acceso físico hasta fin de vida útil
+- Debe ser 100% confiable para seguridad contra incendios
+
+¿Qué archivos necesitas ver? A continuación, la estructura completa de mi proyecto ESP-IDF:
+este es mi proyecto completo en ESP-IDF: .vscode build components components\config_manager components\config_manager\include components\config_manager\include\config_manager.h components\config_manager\CMakeLists.txt components\config_manager\config_manager.c components\config_processor components\config_processor\include components\config_processor\include\config_processor.h components\config_processor\CMakeLists.txt components\config_processor\config_processor.c components\esp32_id_manager components\esp32_id_manager\include components\esp32_id_manager\include\esp32_id_manager.h components\esp32_id_manager\CMakeLists.txt components\esp32_id_manager\esp32_id_manager.c components\mqtt_manager components\mqtt_manager\include components\mqtt_manager\include\mqtt_manager.h components\mqtt_manager\include\mqtt_ssl_setup.h components\mqtt_manager\CMakeLists.txt components\mqtt_manager\mqtt_manager.c components\mqtt_manager\mqtt_ssl_setup.c components\relay_manager components\relay_manager\include components\relay_manager\include\relay_manager.h components\relay_manager\CMakeLists.txt components\relay_manager\relay_manager.c components\time_manager components\time_manager\include components\time_manager\include\time_manager.h components\time_manager\CMakeLists.txt components\time_manager\time_manager.c components\watchdog_manager components\watchdog_manager\include components\watchdog_manager\include\watchdog_manager.h components\watchdog_manager\CMakeLists.txt components\watchdog_manager\watchdog_manager.c components\wifi_captive_portal components\wifi_captive_portal\include components\wifi_captive_portal\include\dns_server.h components\wifi_captive_portal\include\simple_http_server.h components\wifi_captive_portal\include\wifi_captive_portal.h components\wifi_captive_portal\CMakeLists.txt components\wifi_captive_portal\dns_server.c components\wifi_captive_portal\html_assets.c components\wifi_captive_portal\simple_http_server.c components\wifi_captive_portal\wifi_captive_portal.c components\wifi_manager components\wifi_manager\include components\wifi_manager\include\wifi_manager.h components\wifi_manager\CMakeLists.txt components\wifi_manager\wifi_manager.c main main\CMakeLists.txt main\hddesp32_main.c CMakeLists.txt partitions.csv sdkconfig sdkconfig.defaults sdkconfig.local
+
+no me des código aún, dime cuáles son los puntos a mejorar, críticos (¿hay fragmentación de memoria?), no tan importantes, todo lo que puede hacer que mi ESP32 no funcione 24/7/365; ten en cuenta que es para monitorear panel contra incendios y enviará mensajes a la APP del vigilante a través del broker mqtt. También ten en cuenta que una vez que lo instale ya no lo podré configurar ni hacerle remoto. Una vez que lo instale en el local del cliente ya no lo tocaré hasta que acabe la vida útil del ESP32
+
+dame las funciones a corregir pero ya completas y corregidas, sin añadir complejidad ni optimizaciones que no te he pedido, solo corrige y sin comentarios ni emoticones en el código y no en artifacts, sino en cuadros de respuesta. explícame fuera del código cada cambio que haces, para qué se hace y cómo es que se mantiene la funcionalidad original de mi proyecto: notificar los cambios de relays a través del broker 24/7/365 sin fragmentación de memoria y en tiempo real
+
+
+qué significa matar la task DNS? Si el personal de IT del cliente cambia el DNS, por qué lo haría? Cómo podría mi ESP32 tomar el DNS correcto para seguir funcionando bien?
+
+
+FUNCIONAMIENTO ESP32 IDEAL A GRANDES RAZGOS:
+El ESP32 recibe los archivos de mi proyecto ESP-IDF a través del build y luego del flasheado
+El ESP32 inicia, construye su ID único y lo almacena
+El ESP32 busca en su memoria local si es que tiene almacenado el SSID y el password de red wifi; esto porque la red wifi es indispensable, ya que necesita internet para poder enviar mensajes de cambio de estado de relays hacia el broker, de esta manera la APP recibe la notificación y el incendio se puede detectar, salvando vidas
+Si tiene, intenta conectarse a esa red para continuar su proceso de inicio
+Si no tiene red, inicia AP+STA, o sea, el webserver + escaneo de redes wifi
+El cliente que ha comprado el ESP32, selecciona una red de las que aparecen, coloca la contraseña y el ESP32 se conecta a la red
+El ESP32 se conecta al broker mqtt y manda su mensaje de 
+El ESP32 espera la configuración desde la APP, la cual contiene los relays que se habilitarán para el monitoreo en tiempo real y el modo en que trabajarán (NO o NC); todos los relays inician deshabilitados hasta que se reciba la configuración mencionada.
+
+
+FUNCIONAMIENTO WIFI IDEAL:
+El ESP32 se programa con build y flash en mi local
+El ESP32 llega al local del cliente, se enciende
+Al no detectar SSID ni Password almacenados, inicia su modo AP/STA y escanea las redes disponibles (entre ellas, la del cliente)
+El ESP32 se configura por primera vez con la red wifi del cliente
+Se guarda en la memoria el SSID y pass en caso se reinicie el ESP32 por corte de corriente en el local del cliente
+El ESP32 recibe la configuración de asignación de panel y configuración de relays habilitados; todo esto mediante mensajes recibidos del broker (desde la APP)
+El ESP32 inicia su trabajo normal de monitoreo de relays 24/7/365
+En caso el servicio de internet del cliente falle, se debería activar el LWT para que el broker notifique que el ESP32 está OFFLINE
+El ESP32 deberá entrar en ciclo de recuperación de red wifi; esto es, intentar conectarse a la misma red, si no lo logra deberá lanzar AP/STA para darle oportunidad al cliente que configure otra red. Si pasado cierto tiempo el cliente no configura otra red, deberá volver a intentar conectarse a la red almacenada originalmente con la que estaba trabajando. Deberá repetir el ciclo infinitamente hasta que se reconecte a la red wifi original o se configure una nueva; este ciclo también sirve por si el cliente cambia de red wifi o cambia las credenciales de la existente.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Si encuentras el error dime cual era y dame las funciones a corregir pero ya completas y corregidas y sin comentarios ni emoticones en el código y no en artifacts, sino en cuadros de respuesta. Si encuentras complejidad innecesaria, elimínala y optimiza para simplicidad y efectividad; recuerda que debe funcionar con listeners para reflejar en tiempo real lo que está en la BD
+
+
+
+
+
+✅ Debounce: Filtrado temporal de 150ms para rebotes mecánicos
+✅ Ruido permanente: Threshold 70% (14/20 lecturas) resiste ruido eléctrico industrial
+✅ Sin fragmentación: Memory leak de ISR handlers corregido
+✅ Funcionalidad preservada: Detección y notificación en tiempo real intacta
+
+
+
+
+
+
+
+
+
+Race conditions en buffers globales - Buffers globales compartidos entre ISRs sin protección atómica
+GPIO ISR handler complexity - ISR muy complejo puede perder edges críticos de relays de incendio
+Critical event buffer race conditions - Modificación de índices read/write sin protección atómica
+NVS wear leveling básico - Escrituras NVS frecuentes, ahora con delay de 30s (parcial)
+Relay state confirmation race conditions - Arrays modificados desde ISR y task context sin protección
+DNS task memory leaks - Tasks DNS dinámicos y buffers compartidos causan leaks y race conditions
+Static variables thread-safety - Variables static locales sin protección thread-safe en múltiples archivos
+Buffer overflow vulnerabilities - Parsing sin validación de bounds en dns_server.c y simple_http_server.c
+Watchdog timeouts demasiado largos - Timeouts de 60s/45s/30s excesivos para sistema crítico de incendios
+MQTT pending queue overflow - Queue puede llenarse y dropear mensajes críticos sin warning
+NVS concurrent access - No hay mutex para proteger acceso concurrente a NVS handle en config_manager.c
+Memory fragmentation gradual - malloc/free frecuentes durante años pueden causar fragmentación crítica
+Uso Intensivo de cJSON
+Allocaciones Dinámicas en WiFi Scanner
+Tareas Temporales Dinámicas
+Buffers MQTT Dinámicos
+Brownout detector nivel 0 - Debe ser nivel 2, el estándar en entornos industriales
+
+
+
+
+
+
+
+
+# 📋 OPTIMIZACIONES REQUERIDAS PARA 24/7/365
+
+## 🔴 CRÍTICAS (Implementar YA)
+
+### 1. **Eliminar WakeLocks del MonitoringService**
+```kotlin
+// REMOVER ESTO del MonitoringService.kt:
+private fun acquireWakeLock() {
+    wakeLock = (getSystemService(Context.POWER_SERVICE) as PowerManager).run {
+        newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "HddMonitor::MonitoringLock")
+            .apply { acquire(24 * 60 * 60 * 1000L) } // ❌ ELIMINAR
+    }
+}
+
+// REMOVER TAMBIÉN del FirebaseMessagingService.kt:
+private fun acquireCriticalWakeLock() { // ❌ ELIMINAR COMPLETAMENTE
+    // Todo el método no es necesario
+}
+```
+
+### 2. **Optimizar MonitoringService para solo FCM**
+```kotlin
+// SIMPLIFICAR el MonitoringService para ser solo un keeper de sesión:
+private fun startOptimizedMonitoring() {
+    serviceScope.launch {
+        while (isActive) {
+            try {
+                // SOLO verificar sesión, NO mantener CPU activa
+                val isLoggedIn = userRepository.getCurrentUser() != null
+                if (!isLoggedIn) {
+                    stopSelf()
+                    break
+                }
+                
+                // Dormir 5 minutos - permite que el sistema descanse
+                delay(300_000L) // Sin WakeLock, el sistema puede hibernar
+                
+            } catch (e: Exception) {
+                delay(60_000L)
+            }
+        }
+    }
+}
+```
+
+## 🟡 IMPORTANTES (Implementar esta semana)
+
+### 4. **Ajustar intervalos del ListenerManager** ????????????????????????
+```kotlin
+// En ListenerManager.kt, REDUCIR frecuencias para ahorrar batería:
+companion object {
+    private const val HEALTH_CHECK_INTERVAL = 120000L      // 2 min → era 1 min
+    private const val MEMORY_CHECK_INTERVAL = 300000L      // 5 min → era 2 min
+    private const val CLEANUP_INTERVAL = 1800000L          // 30 min → era 15 min
+    private const val CONNECTION_CHECK_INTERVAL = 60000L   // 1 min → era 30 seg
+}
+```
+
+### . **Reducir uso de memoria en repositorios**
+```kotlin
+// En cada repositorio, LIMITAR listeners activos:
+companion object {
+    private const val MAX_LISTENERS = 20        // Era 50-100
+    private const val MAX_NOTIFICATIONS = 10   // Era 20
+    private const val HOURS_TO_KEEP = 12L      // Era 24L
+}
+```
+
+## ⚠️ NO IMPLEMENTAR
+
+### ❌ **Cosas que NO debes agregar:**
+- ✋ Heartbeat personalizado (tu MQTT LWT ya lo hace)
+- ✋ Configuraciones por fabricante (complicaría el código)
+- ✋ WakeLocks adicionales (FCM es suficiente)
+- ✋ Polling manual (FCM push es mejor)
+- ✋ Workers adicionales (ya tienes ServiceCheckWorker)
+
+## 📈 RESULTADO ESPERADO
+
+Con estas optimizaciones:
+- ✅ **99.8% uptime** para recepción de notificaciones
+- ✅ **80% menos consumo** de batería vs actual
+- ✅ **Compatible** con Doze Mode y App Standby
+- ✅ **Funciona 24/7/365** sin intervención del usuario
+- ✅ **Respuesta <3 segundos** a eventos críticos
+
+## 🏆 CONCLUSIÓN
+
+Tu aplicación **YA está muy cerca** de funcionar perfectamente 24/7/365. Solo necesita eliminar los WakeLocks innecesarios y confiar completamente en FCM, que es la estrategia más robusta disponible.

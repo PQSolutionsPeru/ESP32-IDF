@@ -104,6 +104,18 @@ android {
                 "META-INF/io.netty.versions.properties"
             )
         }
+        // Configuración para compatibilidad con dispositivos de 16 KB page size
+        jniLibs {
+            useLegacyPackaging = false
+        }
+    }
+
+    // ⭐ CAMBIO DE NOMBRE DEL APK
+    applicationVariants.all {
+        outputs.all {
+            val output = this as? com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            output?.outputFileName = "HDD-Monitor-${versionName}-${buildType.name}.apk"
+        }
     }
 }
 

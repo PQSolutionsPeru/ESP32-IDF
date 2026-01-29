@@ -95,11 +95,18 @@ class NotificationRepository @Inject constructor(
                                     val timestampValue = doc.getTimestamp("lastUpdate")?.toDate()?.time
                                         ?: System.currentTimeMillis()
                                     this["timestamp"] = timestampValue
+                                    Log.w(TAG, "Documento ${doc.id} no tenía timestamp, se asignó: $timestampValue")
                                 }
                             }
 
                             val notification = Notification.fromMap(notificationMap)
-                            if (notification.isValid()) notification else null
+                            if (notification.isValid()) {
+                                Log.d(TAG, "✓ Notificación válida: ${doc.id} (timestamp: ${notification.timestamp})")
+                                notification
+                            } else {
+                                Log.w(TAG, "✗ Notificación INVÁLIDA filtrada: ${doc.id} - type: ${notification.type}, connectivity_type: ${notification.connectivityType}, message: ${notification.message.take(50)}")
+                                null
+                            }
                         } catch (e: Exception) {
                             Log.e(TAG, "Error procesando documento ${doc.id}", e)
                             null
@@ -107,6 +114,9 @@ class NotificationRepository @Inject constructor(
                     }
 
                     Log.d(TAG, "Enviando ${notifications.size} notificaciones al flow")
+                    notifications.forEach { n ->
+                        Log.d(TAG, "  → ${n.documentName} | timestamp: ${n.timestamp} | type: ${n.type ?: "N/A"} | connectivity: ${n.connectivityType ?: "N/A"}")
+                    }
                     trySend(notifications)
                 } catch (e: Exception) {
                     Log.e(TAG, "Error procesando snapshot", e)
@@ -171,10 +181,22 @@ class NotificationRepository @Inject constructor(
                                 val notificationMap = data.toMutableMap().apply {
                                     this["documentName"] = doc.id
                                     this["clientDocName"] = clientDocName
+                                    if (!containsKey("timestamp")) {
+                                        val timestampValue = doc.getTimestamp("lastUpdate")?.toDate()?.time
+                                            ?: System.currentTimeMillis()
+                                        this["timestamp"] = timestampValue
+                                        Log.w(TAG, "Admin: Documento ${doc.id} no tenía timestamp, se asignó: $timestampValue")
+                                    }
                                 }
 
                                 val notification = Notification.fromMap(notificationMap)
-                                if (notification.isValid()) notification else null
+                                if (notification.isValid()) {
+                                    Log.d(TAG, "✓ Admin: Notificación válida: ${doc.id} (client: $clientDocName, timestamp: ${notification.timestamp})")
+                                    notification
+                                } else {
+                                    Log.w(TAG, "✗ Admin: Notificación INVÁLIDA filtrada: ${doc.id} (client: $clientDocName) - type: ${notification.type}, connectivity_type: ${notification.connectivityType}")
+                                    null
+                                }
                             } catch (e: Exception) {
                                 Log.e(TAG, "Error procesando documento admin ${doc.id}", e)
                                 null
@@ -182,6 +204,9 @@ class NotificationRepository @Inject constructor(
                         }
 
                         Log.d(TAG, "Enviando ${notifications.size} notificaciones admin al flow")
+                        notifications.forEach { n ->
+                            Log.d(TAG, "  → ${n.documentName} | client: ${n.clientDocName} | timestamp: ${n.timestamp} | type: ${n.type ?: "N/A"} | connectivity: ${n.connectivityType ?: "N/A"}")
+                        }
                         trySend(notifications)
                     } catch (e: Exception) {
                         Log.e(TAG, "Error procesando snapshot (admin)", e)

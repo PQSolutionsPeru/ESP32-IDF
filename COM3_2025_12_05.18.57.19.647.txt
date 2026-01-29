@@ -1,0 +1,206 @@
+I (2705) HDDESP32: [2117 ms] UART driver initialized for debug commands
+I (2955) HDDESP32: [2367 ms] Phase 1: Basic initialization
+I (3185) WATCHDOG_MGR: [2597 ms] Initializing Watchdog Manager
+W (3225) SPIFFS: Failed to update mtime (-10001)
+I (5205) WATCHDOG_MGR: [4620 ms] Watchdog configurations initialized
+I (6275) WATCHDOG_MGR: [5687 ms] TWDT reconfigured with 25000ms timeout
+I (8105) WATCHDOG_MGR: [7520 ms] Watchdog Manager initialized successfully with TWDT active
+I (10035) HDDESP32: [9447 ms] Watchdog manager initialized successfully
+I (11035) WAT ms] RMGtered taskR: [10447_main (1/10) in TWDT
+I (1egis: appCHDOG_1035) HDDESP32: [10447 ms] Main task registered in watchdog manager
+I (11035) CONFIG_MGR: Initializing configuration manager with wear protection
+I (11065) CONFIG_MGR: Configuration manager initialized with wear leveling protection
+I (11065) ESP32_ID_MGR: Initializing ESP32 ID Manager
+I (11065) ESP32_ID_MGR: MAC Address: A842E3AB1694
+I (11075) ESP32_ID_MGR: Loaded existing ID: 1694ACA8
+I (11075) ESP32_ID_MGR: ESP32 ID Manager initialized successfully with ID: 1694ACA8
+I (11085) HDDESP32: [10500 ms] ESP32 ID: 1694ACA8
+I (11085) LOG_UPLOADER: [01/01/1970, 00:00:10] Log uploader initialized with ESP32 ID: 1694ACA8
+I (11095) LOG_UPLOADER: [01/01/1970, 00:00:10] Log uploader task started - waiting for internet connectivity
+I (11105) LOG_UPLOADER: [01/01/1970, 00:00:10] Waiting for internet connectivity, rechecking in 2 minutes
+I (11115) LOG_UPLOADER: [01/01/1970, 00:00:10] Log uploader task created successfully
+I (11125) HDDESP32: [10539 ms] MAC: A842E3AB1694
+I (11125) gpio: GPIO[0]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (11135) gpio: GPIO[0]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (11145) HDDESP32: [10560 ms] Phase 2: Manager initialization
+I (11145) WIFI_MGR: [10566 ms] Initializing WiFi Manager
+I (11155) WIFI_MGR: [10571 ms] Initializing TCP/IP stack
+I (11165) WIFI_MGR: [10577 ms] Creating WiFi station netif
+I (11165) WIFI_MGR: [10582 ms] Creating WiFi AP netif
+I (11185) wifi:wifi driver task: 3ffd0000, prio:23, stack:6656, core=0
+I (11195) wifi:wifi firmware version: 79fa3f41ba
+I (11195) wifi:wifi certification version: v7.0
+I (11195) wifi:config NVS flash: enabled
+I (11195) wifi:config nano formatting: disabled
+I (11195) wifi:Init data frame dynamic rx buffer num: 16
+I (11205) wifi:Init static rx mgmt buffer num: 5
+I (11205) wifi:Init management short buffer num: 32
+I (11215) wifi:Init dynamic tx buffer num: 16
+I (11215) wifi:Init static rx buffer size: 1600
+I (11225) wifi:Init static rx buffer num: 8
+I (11225) wifi:Init dynamic rx buffer num: 16
+I (11235) wifi_init: rx ba win: 8
+I (11235) wifi_init: accept mbox: 6
+I (11235) wifi_init: tcpip mbox: 48
+I (11235) wifi_init: udp mbox: 24
+I (11245) wifi_init: tcp mbox: 24
+I (11245) wifi_init: tcp tx win: 8192
+I (11245) wifi_init: tcp rx win: 8192
+I (11255) wifi_init: tcp mss: 1440
+I (11255) wifi_init: WiFi IRAM OP enabled
+I (11255) wifi_init: WiFi RX IRAM OP enabled
+I (11265) WIFI_MGR: [10679 ms] Registering event handlers
+I (11265) WIFI_MGR: [10685 ms] Setting WiFi to station mode
+I (11285) phy_init: phy_version 4860,6b7a6e5,Feb  6 2025,14:47:07
+I (11345) wifi:mode : sta (a8:42:e3:ab:16:94)
+I (11355) wifi:enable tsf
+I (11355) WIFI_MGR: [10771 ms] Found saved WiFi credentials for SSID: PABLO-2.4G
+I (11355) WIFI_MGR: [10772 ms] WiFi Manager initialized successfully
+I (11355) TIME_MGR: Initializing Time Manager
+I (11365) TIME_MGR: Timezone set to Lima, Peru (UTC-5)
+I (11365) TIME_MGR: Time Manager initialized
+I (11375) MQTT_MGR: [10788 ms] Initializing MQTT Manager
+I (11375) MQTT_MGR: [10794 ms] MQTT Manager initialized
+I (11385) CONN_MON: [10798 ms] Initializing connectivity monitor (RAM-only version)
+I (11385) CONN_MON: [10806 ms] Connectivity monitor initialized (RAM-only)
+I (11395) HDDESP32: [10812 ms] Connectivity monitor initialized
+I (11405) HDDESP32: [10818 ms] Phase 3: Callback configuration
+I (11405) MQTT_MGR: [10824 ms] Setting credentials for ESP32 ID: 1694ACA8
+I (11415) MQTT_MGR: [10830 ms] Credentials configured
+I (11415) HDDESP32: [10836 ms] Found saved configuration: client=client_2, panel=panel_COM4G655_client_2
+I (11425) MQTT_MGR: [10844 ms] Panel config set: client=client_2, panel=panel_COM4G655_client_2
+I (11435) HDDESP32: [10852 ms] Phase 4: WiFi connection
+I (11445) WIFI_MGR: [10857 ms] Connecting with saved credentials, SSID: PABLO-2.4G
+I (11445) WIFI_MGR: [10865 ms] Connecting to WiFi network: PABLO-2.4G
+I (11775) wifi:new:<4,0>, old:<1,0>, ap:<255,255>, sta:<4,0>, prof:1, snd_ch_cfg:0x0
+I (11775) wifi:state: init -> auth (0xb0)
+I (11805) wifi:state: auth -> assoc (0x0)
+I (11835) wifi:state: assoc -> run (0x10)
+I (11935) wifi:connected with PABLO-2.4G, aid = 47, channel 4, BW20, bssid = e8:6d:e9:55:91:dc
+I (11935) wifi:security: WPA2-PSK, phy: bgn, rssi: -45
+I (11945) wifi:pm start, type: 1
+
+I (11945) wifi:dp: 1, bi: 102400, li: 3, scale listen interval from 307200 us to 307200 us
+I (11965) wifi:AP's beacon interval = 102400 us, DTIM period = 1
+I (12985) esp_netif_handlers: sta ip: 192.168.18.36, mask: 255.255.255.0, gw: 192.168.18.1
+I (12985) WIFI_MGR: [12399 ms] Got IP address: 192.168.18.36
+I (12985) HDDESP32: [12401 ms] WiFi connected
+I (12985) TIME_MGR: Starting NTP synchronization
+I (12995) TIME_MGR: Initializing SNTP
+I (12995) TIME_MGR: SNTP initialized
+I (12995) WIFI_MGR: [12416 ms] Successfully connected to WiFi network
+I (13005) HDDESP32: [12422 ms] WiFi connection initiated - will connect in background
+I (13015) HDDESP32: [12430 ms] Phase 5: Creating system monitor task
+I (13015) HDDESP32: [12436 ms] System monitor task started
+I (15025) WATCHDOG_MGR: [14437 ms] Registered task: sys_monitor (2/10) in TWDT
+I (15025) HDDESP32: [14438 ms] System monitor task registered in watchdog manager
+I (15025) HDDESP32: [14442 ms] System initialization completed successfully
+I (15815) TIME_MGR: NTP synchronized successfully
+I (15815) TIME_MGR: Time synchronized successfully
+I (15815) TIME_MGR: Lima time: 05/12/2025, 18:57:34
+I (15815) MQTT_MGR: [05/12/2025, 18:57:34] Setting credentials for ESP32 ID: 1694ACA8
+I (15825) MQTT_MGR: [05/12/2025, 18:57:34] Credentials configured
+I (15825) MQTT_MGR: [05/12/2025, 18:57:34] Connecting to MQTT broker
+I (15835) MQTT_MGR: [05/12/2025, 18:57:34] Testing DNS resolution for: hddm.pqsolutionsperu.com
+I (15855) MQTT_MGR: [05/12/2025, 18:57:34] DNS resolution successful for hddm.pqsolutionsperu.com
+I (15855) MQTT_MGR: [05/12/2025, 18:57:34] Connecting to URI: mqtts://hddm.pqsolutionsperu.com:8883
+I (15865) MQTT_SSL: Setting up SSL with ESP-IDF Certificate Bundle
+I (15865) MQTT_SSL: Memory before SSL setup - Free: 137268 bytes, Largest block: 110592 bytes
+I (15875) MQTT_SSL: SSL configuration applied successfully with ESP-IDF Certificate Bundle
+I (15885) MQTT_SSL: Memory after SSL setup - Free: 137268 bytes
+I (16775) esp-x509-crt-bundle: Certificate validated
+I (17225) HDDESP32: [05/12/2025, 18:57:36] Sending network info
+I (17225) MQTT_MGR: [05/12/2025, 18:57:36] Sending network info to esp32/network_info (len=195)
+I (17485) wifi:<ba-add>idx:0 (ifx:0, e8:6d:e9:55:91:dc), tid:1, ssn:5, winSize:64
+I (17905) MQTT_MGR: [05/12/2025, 18:57:36] MQTT connected
+I (17905) HDDESP32: [05/12/2025, 18:57:36] MQTT connected
+I (17905) HDDESP32: [05/12/2025, 18:57:36] Initializing Relay Manager after MQTT connection
+I (17905) MQTT_MGR: [05/12/2025, 18:57:36] MQTT connected successfully
+I (17915) RELAY_MGR: [05/12/2025, 18:57:36] Initializing Relay Manager with 6 relays
+I (17925) RELAY_MGR: [05/12/2025, 18:57:36] === LOADING RELAY CONFIG FROM NVS ===
+I (17935) RELAY_MGR: [05/12/2025, 18:57:36] Loaded: Relay relay_1 = ACTIVE
+I (17945) RELAY_MGR: [05/12/2025, 18:57:36] Loaded: Relay relay_2 = ACTIVE
+I (17945) RELAY_MGR: [05/12/2025, 18:57:36] Loaded: Relay relay_3 = ACTIVE
+I (17955) RELAY_MGR: [05/12/2025, 18:57:36] Loaded 3 active relays from NVS
+I (17965) RELAY_MGR: [05/12/2025, 18:57:36] Loaded contact types from NVS
+I (17965) RELAY_MGR: [05/12/2025, 18:57:36] === RELAY CONFIG LOAD COMPLETED ===
+I (17975) RELAY_MGR: [05/12/2025, 18:57:36] GPIO ISR service ready
+I (17985) gpio: GPIO[32]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (18095) RELAY_MGR: [05/12/2025, 18:57:37] Relay relay_1 (GPIO 32): Relay 1, Type: NC, Active: YES, Initial: OK (GPIO=0)
+I (18095) gpio: GPIO[33]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (18195) RELAY_MGR: [05/12/2025, 18:57:37] Relay relay_2 (GPIO 33): Relay 2, Type: NC, Active: YES, Initial: OK (GPIO=0)
+I (18195) gpio: GPIO[25]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (18305) RELAY_MGR: [05/12/2025, 18:57:37] Relay relay_3 (GPIO 25): Relay 3, Type: NC, Active: YES, Initial: OK (GPIO=0)
+I (18305) gpio: GPIO[26]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (18405) RELAY_MGR: [05/12/2025, 18:57:37] Relay relay_4 (GPIO 26): Relay 4, Type: NC, Active: NO, Initial: DISC (GPIO=1)
+I (18405) gpio: GPIO[27]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (18505) RELAY_MGR: [05/12/2025, 18:57:37] Relay relay_5 (GPIO 27): Relay 5, Type: NC, Active: NO, Initial: DISC (GPIO=1)
+I (18505) gpio: GPIO[14]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:0 
+I (186LAY_MGR05) RE: [05/12/2025, 18:57:37] Relay relay_6 (GPIO 14): Relay 6, Type: NC, Active: NO, Initial: DISC (GPIO=1)
+I (18605) RELAY_MGR: [05/12/2025, 18:57:37] Relay event task created with 8KB stack
+I (18605) RELAY_MGR: [05/12/2025, 18:57:37] Relay event task started (optimized for panels)
+I (19005) RELAY_MGR: [05/12/2025, 18:57:38] Relay Manager initialized successfully
+I (20505) RELAY_MGR: [05/12/2025, 18:57:39] Detecting post-restart relay changes
+W (20505) RELAY_MGR: [05/12/2025, 18:57:39] No previous timestamps found
+I (20505) RELAY_MGR: [05/12/2025, 18:57:39] POST-RESTART: No relay state changes detected
+E (20515) CONFIG_MGR: Error setting blob 'relay_timestamps': ESP_ERR_NVS_KEY_TOO_LONG
+E (20515) RELAY_MGR: [05/12/2025, 18:57:39] Failed to save relay timestamps: ESP_ERR_NVS_KEY_TOO_LONG
+I (20525) HDDESP32: [05/12/2025, 18:57:39] Relay Manager initialized and ready for configurations
+I (20535) HDDESP32: [05/12/2025, 18:57:39] System stable - starting connectivity monitoring
+I (20545) CONN_MON: [05/12/2025, 18:57:39] Starting monitor task with 15000 ms stabilization period
+I (20555) CONN_MON: [05/12/2025, 18:57:39] Connectivity monitor started (RAM-only)
+I (20555) CONN_MON: [05/12/2025, 18:57:39] Monitor task started, waiting for stabilization period
+I (20565) HDDESP32: [05/12/2025, 18:57:39] Connectivity monitoring started successfully
+I (22575) HDDESP32: [05/12/2025, 18:57:41] Checking for pending RAM connectivity events after MQTT connection
+I (22575) HDDESP32: [05/12/2025, 18:57:41] Event count: 0, has_events: false
+I (22575) HDDESP32: [05/12/2025, 18:57:41] No RAM connectivity events to process
+I (23585) MQTT_MGR: [05/12/2025, 18:57:42] Sending network info to esp32/network_info (len=195)
+I (26585) WATCHDOG_MGR: [05/12/2025, 18:57:45] Changing mode from 0 to 1
+I (26585) WATCHDOG_MGR: [05/12/2025, 18:57:45] TWDT reconfigured for mode 1 with 15000ms timeout
+I (26585) HDDESP32: [05/12/2025, 18:57:45] Watchdog safely transitioned to running mode
+I (26595) HDDESP32: [05/12/2025, 18:57:45] Suscrito a topics generales del ESP32
+I (26605) MQTT_MGR: [05/12/2025, 18:57:45] Panel config set: client=client_2, panel=panel_COM4G655_client_2
+I (26615) MQTT_MGR: [05/12/2025, 18:57:45] Subscribed to panel relay_config: clients/client_2/panels/panel_COM4G655_client_2/relay_config
+I (26725) MQTT_MGR: [05/12/2025, 18:57:45] Subscribed to panel relays: clients/client_2/panels/paneI (26825) MQTT_MGR: [05/12/2025, 18:57:45] Subscribed to pal_COM4G655_client_2/relays
+nel command: clients/client_2/panels/panel_COM4G655_client_2/command
+I (26925) MQTT_MGR: [05/12/2025, 18:57:45] Subscribed to panel status: clients/client_2/panels/panel_COM4G655_client_2/status
+I (26975) MQTT_MGR: [05/12/2025, 18:57:45] MQTT subscribed, msg_id=35173
+I (27055) wifi:<ba-add>idx:1 (ifx:0, e8:6d:e9:55:91:dc), tid:0, ssn:5, winSize:64
+I (27225) MQTT_MGR: [05/12/2025, 18:57:46] MQTT subscribed, msg_id=59105
+I (27225) MQTT_MGR: [05/12/2025, 18:57:46] MQTT subscribed, msg_id=9389
+I (27235) MQTT_MGR: [05/12/2025, 18:57:46] MQTT subscribed, msg_id=49025
+I (27235) MQTT_MGR: [05/12/2025, 18:57:46] MQTT subscribed, msg_id=42326
+I (27245) MQTT_MGR: [05/12/2025, 18:57:46] MQTT subscribed, msg_id=39691
+I (27725) MQTT_MGR: [05/12/2025, 18:57:46] MQTT subscribed, msg_id=21419
+I (27735) MQTT_MGR: [05/12/2025, 18:57:46] MQTT subscribed, msg_id=64122
+I (35575) CONN_MON: [05/12/2025, 18:57:54] Stabilization period complete, starting connectivity monitoring
+I (131155) LOG_UPLOADER: [05/12/2025, 18:59:30] Full connectivity confirmed (WiFi + MQTT + Internet)
+I (131205) LOG_UPLOADER: [05/12/2025, 18:59:30] Full connectivity confirmed (WiFi + MQTT + Internet)
+I (131205) LOG_UPLOADER: [05/12/2025, 18:59:30] Internet connected, waiting 179 seconds for stability
+I (251255) LOG_UPLOADER: [05/12/2025, 19:01:30] Full connectivity confirmed (WiFi + MQTT + Internet)
+I (251305) LOG_UPLOADER: [05/12/2025, 19:01:30] Full connectivity confirmed (WiFi + MQTT + Internet)
+I (251305) LOG_UPLOADER: [05/12/2025, 19:01:30] Internet connected, waiting 59 seconds for stability
+I (371345) LOG_UPLOADER: [05/12/2025, 19:03:30] Full connectivity confirmed (WiFi + MQTT + Internet)
+I (371395) LOG_UPLOADER: [05/12/2025, 19:03:30] Full connectivity confirmed (WiFi + MQTT + Internet)
+I (371395) LOG_UPLOADER: [05/12/2025, 19:03:30] System confirmed stable after 36019s
+I (371405) LOG_UP5 mLOADER: [05/12/2025, 19:03:30] Checking for post-restart log rotation...
+I (371425) LOG_UPLOADER: [05/12/2025, 19:03:30] Post-restart: log.txt has 126491 bytes, rotating to preserve previous session
+I (371435) LOG_STORAGE: [05/12/2025, 19:03:30] Forcing log rotation...
+I (371435) LOG_STORAGE: [05/12/2025, 19:03:30] Forcing rotation of log.txt (126491 bytes)
+I (371545) LOG_STORAGE: [05/12/2025, 19:03:30] SPIFFS space check: 816 KB total, 555 KB used, 261 KB available, 148 KB needed
+E (371665) LOG_STORAGE: [05/12/2025, 19:03:30] Failed to rotate to timestamped file (errno=5), trying legacy
+E (371765) LOG_STORAGE: [05/12/2025, 19:03:30] LOG_FILE disappeared during rotation, cannot complete
+W (371865) LOG_UPLOADER: [05/12/2025, 19:03:30] Post-restart log rotation failed: ESP_FAIL
+I (371865) LOG_UPLOADER: [05/12/2025, 19:03:30] System is stable, checking for post-restart uploads
+I (371865) LOG_UPLOADER: [05/12/2025, 19:03:30] === STARTING LOG UPLOAD CHECK ===
+I (375295) LOG_UPLOADER: [05/12/2025, 19:03:34] No timestamped log files found - checking current log
+I (375305) LOG_UPLOADER: [05/12/2025, 19:03:34] Current log.txt size: 126491 bytes
+I (375305) LOG_UPLOADER: [05/12/2025, 19:03:34] Found current log with content, forcing rotation for upload
+I (375315) LOG_STORAGE: [05/12/2025, 19:03:34] Forcing log rotation...
+I (375325) LOG_STORAGE: [05/12/2025, 19:03:34] Forcing rotation of log.txt (126491 bytes)
+I (375425) LOG_STORAGE: [05/12/2025, 19:03:34] SPIFFS space check: 816 KB total, 555 KB used, 261 KB available, 148 KB needed
+E (375545) LOG_STORAGE: [05/12/2025, 19:03:34] Failed to rotate to timestamped file (errno=5), trying legacy
+E (375645) LOG_STORAGE: [05/12/2025, 19:03:34] LOG_FILE disappeared during rotation, cannot complete
+W (375745) LOG_UPLOADER: [05/12/2025, 19:03:34] Log rotation failed: ESP_FAIL
+I (375745) LOG_UPLOADER: [05/12/2025, 19:03:34] Current Lima time: 19:03:34, seconds until midnight: 17786
+I (375745) LOG_UPLOADER: [05/12/2025, 19:03:34] Post-restart upload complete, next scheduled at midnight Lima (GMT-5)

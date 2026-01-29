@@ -223,7 +223,7 @@ private fun NotificationCard(
                                 }
                             }
                             notification.connectivityType?.contains("internet") == true -> {
-                                if (notification.connectivityType.contains("lost")) {
+                                if (notification.connectivityType.contains("loss")) {
                                     Icons.Filled.Warning  // Internet perdido
                                 } else {
                                     Icons.Filled.CheckCircle  // Internet recuperado
@@ -262,7 +262,7 @@ private fun NotificationCard(
                                 }
                             }
                             notification.connectivityType?.contains("internet") == true -> {
-                                if (notification.connectivityType.contains("lost")) {
+                                if (notification.connectivityType.contains("loss")) {
                                     Color(0xFFFF6600)  // Naranja para internet perdido
                                 } else {
                                     MaterialTheme.colorScheme.tertiary  // Verde para internet recuperado
