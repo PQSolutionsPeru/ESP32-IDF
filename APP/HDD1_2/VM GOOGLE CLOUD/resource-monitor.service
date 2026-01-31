@@ -1,0 +1,55 @@
+# Systemd Service for HDD-Monitor Resource Monitor
+# Path: /etc/systemd/system/resource-monitor.service
+#
+# Continuously monitors system resources (disk, RAM, CPU) and sends
+# email alerts when thresholds are exceeded
+
+[Unit]
+Description=HDD-Monitor Resource Monitor
+Documentation=https://github.com/pqsolutionsperu/hdd-monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pqsolutionsperu
+Group=pqsolutionsperu
+
+# Python script to execute
+ExecStart=/usr/bin/python3 /home/pqsolutionsperu/resource_monitor.py
+
+# Restart policy (always restart on failure)
+Restart=always
+RestartSec=30
+
+# Environment variables for email alerts
+Environment="ADMIN_EMAIL=pqsolutionsperu@gmail.com"
+Environment="SMTP_USER=pqsolutionsperu@gmail.com"
+Environment="SMTP_SERVER=smtp.gmail.com"
+Environment="SMTP_PORT=587"
+
+# IMPORTANT: Replace xxxx_xxxx_xxxx_xxxx with your Gmail App Password
+# Get it from: https://myaccount.google.com/apppasswords
+Environment="SMTP_PASS=xxxx_xxxx_xxxx_xxxx"
+
+# Optional: Healthchecks.io URL for external monitoring
+# Sign up at https://healthchecks.io (free tier available)
+# Environment="HEALTHCHECKS_URL=https://hc-ping.com/YOUR_UUID_HERE"
+
+# Logging
+StandardOutput=append:/var/log/resource_monitor.log
+StandardError=append:/var/log/resource_monitor.log
+
+# Security hardening
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/log
+
+# Resource limits (prevent monitor itself from consuming too much)
+MemoryMax=100M
+CPUQuota=10%
+
+[Install]
+WantedBy=multi-user.target

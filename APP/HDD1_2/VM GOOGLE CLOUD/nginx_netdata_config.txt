@@ -1,0 +1,98 @@
+# ============================================
+# Nginx Configuration Snippet for Netdata Dashboard
+# ============================================
+#
+# Add this location block INSIDE the existing server block in:
+# /etc/nginx/sites-available/hddm.pqsolutionsperu.com
+#
+# This should be placed alongside your other location blocks
+# (after the SSL configuration and before the closing brace)
+
+    # ============================================
+    # Netdata Dashboard (System Metrics)
+    # ============================================
+    location /netdata/ {
+        # Proxy to local Netdata instance
+        proxy_pass http://127.0.0.1:19999/;
+
+        # Proxy headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket support (required for real-time updates)
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # Timeouts for long-polling
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+
+        # Authentication (basic auth)
+        auth_basic "HDD Monitor - System Metrics";
+        auth_basic_user_file /etc/nginx/.htpasswd_metrics;
+
+        # Security headers
+        add_header X-Content-Type-Options nosniff always;
+        add_header X-Frame-Options SAMEORIGIN always;
+        add_header X-XSS-Protection "1; mode=block" always;
+
+        # Access logging
+        access_log /var/log/nginx/netdata_access.log;
+        error_log /var/log/nginx/netdata_error.log;
+    }
+
+# ============================================
+# INSTALLATION INSTRUCTIONS
+# ============================================
+#
+# 1. Edit the Nginx configuration:
+#    sudo nano /etc/nginx/sites-available/hddm.pqsolutionsperu.com
+#
+# 2. Find the server block (should have "listen 443 ssl")
+#
+# 3. Add the above location block inside the server block
+#
+# 4. Create the password file:
+#    sudo htpasswd -c /etc/nginx/.htpasswd_metrics pqsowner
+#    (You'll be prompted to enter a password)
+#
+# 5. Test Nginx configuration:
+#    sudo nginx -t
+#
+# 6. If test passes, reload Nginx:
+#    sudo systemctl reload nginx
+#
+# 7. Access the dashboard:
+#    https://hddm.pqsolutionsperu.com/netdata/
+#    Username: pqsowner
+#    Password: (the one you set with htpasswd)
+#
+# ============================================
+# EXAMPLE FULL SERVER BLOCK
+# ============================================
+#
+# server {
+#     listen 443 ssl http2;
+#     server_name hddm.pqsolutionsperu.com;
+#
+#     # SSL configuration
+#     ssl_certificate /etc/letsencrypt/live/hddm.pqsolutionsperu.com/fullchain.pem;
+#     ssl_certificate_key /etc/letsencrypt/live/hddm.pqsolutionsperu.com/privkey.pem;
+#
+#     # Root and other locations...
+#     root /var/www/html;
+#
+#     location / {
+#         # Your existing config...
+#     }
+#
+#     # ADD THE NETDATA LOCATION BLOCK HERE
+#     location /netdata/ {
+#         proxy_pass http://127.0.0.1:19999/;
+#         # ... (rest of config from above)
+#     }
+# }

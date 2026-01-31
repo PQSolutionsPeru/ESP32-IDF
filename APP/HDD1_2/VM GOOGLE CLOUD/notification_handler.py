@@ -1,15 +1,17 @@
 from google.cloud import firestore
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from firebase_admin import messaging
 import firebase_admin
 from datetime import datetime
 import pytz
 import time
+from rate_limiter import RateLimiter, EventPriority
 
 class NotificationHandler:
     def __init__(self, db: firestore.Client):
         self.db = db
+        self.rate_limiter = RateLimiter()  # NUEVO
 
     def get_account_name(self, account_id: str, role: str = None) -> str:
         try:
@@ -37,11 +39,17 @@ class NotificationHandler:
             return 'Usuario desconocido'
 
     def send_wifi_disconnection_notification(self, client_id: str, panel_name: str, ssid: str, time_range: str, client_name: str = ""):
+        # NUEVO: Rate limiting
+        event_key = f"{client_id}_{panel_name}"
+        if not self.rate_limiter.check_and_increment(event_key, EventPriority.MEDIUM):
+            logging.info(f"WiFi disconnection notification rate-limited: {event_key}")
+            return
+
         try:
             message_text = f"Panel {panel_name} se desconectó de la red {ssid}"
             if time_range:
                 message_text += f" de {time_range}"
-            
+
             timestamp = int(time.time() * 1000)
             notification_id = f"wifi_disc_{client_id}_{timestamp}"
             
@@ -74,11 +82,17 @@ class NotificationHandler:
             logging.error(f"Error enviando notificación de desconexión WiFi: {e}")
 
     def send_internet_loss_notification(self, client_id: str, panel_name: str, time_range: str, client_name: str = ""):
+        # NUEVO: Rate limiting
+        event_key = f"{client_id}_{panel_name}"
+        if not self.rate_limiter.check_and_increment(event_key, EventPriority.MEDIUM):
+            logging.info(f"Internet loss notification rate-limited: {event_key}")
+            return
+
         try:
             message_text = f"Panel {panel_name} estuvo sin internet"
             if time_range:
                 message_text += f" de {time_range}"
-            
+
             timestamp = int(time.time() * 1000)
             notification_id = f"inet_loss_{client_id}_{timestamp}"
             
@@ -110,6 +124,12 @@ class NotificationHandler:
             logging.error(f"Error enviando notificación de pérdida de internet: {e}")
 
     def send_mqtt_disconnection_notification(self, client_id: str, panel_name: str, time_range: str, client_name: str = ""):
+        # NUEVO: Rate limiting
+        event_key = f"{client_id}_{panel_name}"
+        if not self.rate_limiter.check_and_increment(event_key, EventPriority.MEDIUM):
+            logging.info(f"MQTT disconnection notification rate-limited: {event_key}")
+            return
+
         try:
             message_text = f"Panel {panel_name} perdió conexión con el servidor MQTT"
             if time_range:
@@ -678,6 +698,30 @@ class NotificationHandler:
         except Exception as e:
             logging.error(f"Error en send_offline_notification: {e}", exc_info=True)
 
+    def send_fcm_with_retry(self, message: messaging.Message, max_retries: int = 3) -> Optional[str]:
+        """
+        Envía FCM con reintentos exponenciales.
+        Retorna message_id si exitoso, None si falla.
+        """
+        for attempt in range(max_retries):
+            try:
+                response = messaging.send(message)
+                return response
+
+            except messaging.UnregisteredError as e:
+                # Token inválido - NO reintentar
+                raise e
+
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    delay = 2 ** attempt  # 1s, 2s, 4s
+                    logging.warning(f"FCM failed (attempt {attempt+1}/{max_retries}), "
+                                  f"retry in {delay}s: {str(e)}")
+                    time.sleep(delay)
+                else:
+                    logging.error(f"FCM failed after {max_retries} attempts: {str(e)}")
+                    return None
+
     def send_fcm_notifications(self, client_id: str, notification_data: Dict[str, Any], notification_type: str):
         try:
             users_ref = self.db.collection(f'hdd-monitor/accounts/clients/{client_id}/users')
@@ -781,9 +825,12 @@ class NotificationHandler:
                             token=token,
                             android=android_config
                         )
-                        response = messaging.send(message)
-                        users_sent += 1
-                        logging.info(f"Notificación enviada a usuario {user_doc.id}. Response: {response}")
+                        response = self.send_fcm_with_retry(message, max_retries=3)
+                        if response:
+                            users_sent += 1
+                            logging.info(f"Notificación enviada a usuario {user_doc.id}. Response: {response}")
+                        else:
+                            logging.error(f"FCM failed for user {user_doc.id} after retries")
                     except messaging.UnregisteredError as e:
                         logging.warning(f"Token FCM no registrado para usuario {user_doc.id}: {e}")
                         batch.update(user_doc.reference, {'fcmToken': None})
@@ -801,9 +848,12 @@ class NotificationHandler:
                             token=token,
                             android=android_config
                         )
-                        response = messaging.send(message)
-                        admins_sent += 1
-                        logging.info(f"Notificación enviada a admin {admin_doc.id}. Response: {response}")
+                        response = self.send_fcm_with_retry(message, max_retries=3)
+                        if response:
+                            admins_sent += 1
+                            logging.info(f"Notificación enviada a admin {admin_doc.id}. Response: {response}")
+                        else:
+                            logging.error(f"FCM failed for admin {admin_doc.id} after retries")
                     except messaging.UnregisteredError as e:
                         logging.warning(f"Token FCM no registrado para admin {admin_doc.id}: {e}")
                         batch.update(admin_doc.reference, {'fcmToken': None})

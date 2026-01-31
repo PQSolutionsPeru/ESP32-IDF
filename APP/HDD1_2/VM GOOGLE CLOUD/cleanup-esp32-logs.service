@@ -1,0 +1,29 @@
+# Systemd Service for ESP32 Logs Cleanup
+# Path: /etc/systemd/system/cleanup-esp32-logs.service
+#
+# This service runs the ESP32 logs cleanup script
+# Triggered by cleanup-esp32-logs.timer (daily at 3 AM)
+
+[Unit]
+Description=Cleanup ESP32 logs older than 7 days
+Documentation=https://github.com/pqsolutionsperu/hdd-monitor
+After=network.target
+
+[Service]
+Type=oneshot
+User=pqsolutionsperu
+Group=pqsolutionsperu
+
+# Script to execute
+ExecStart=/bin/bash /home/pqsolutionsperu/cleanup_esp32_logs.sh
+
+# Logging
+StandardOutput=append:/var/log/hdd_monitor_cleanup.log
+StandardError=append:/var/log/hdd_monitor_cleanup.log
+
+# Security hardening
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/pqsolutions/esp32_log /var/log

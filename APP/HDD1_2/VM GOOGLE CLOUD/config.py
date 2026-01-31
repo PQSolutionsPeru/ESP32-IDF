@@ -1,8 +1,21 @@
 import logging
 from datetime import datetime
 import pytz
+import structlog
+import os
 
-# Configuración de logging
+# Configurar logging estructurado
+structlog.configure(
+    processors=[
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.add_log_level,
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+        structlog.processors.JSONRenderer()
+    ]
+)
+
+# Configuración de logging básico (fallback)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
@@ -47,3 +60,18 @@ FIRESTORE_PROJECT = 'fir-hdd-monitor-d00de'
 def format_date() -> str:
     """Formatea la fecha actual en español, GMT-5"""
     return datetime.now(TIMEZONE).strftime('%d/%m/%Y, %H:%M')
+
+# PostgreSQL para redundancia
+PG_CONFIG = {
+    'host': 'localhost',
+    'database': 'hdd_monitor',
+    'user': 'hdd_monitor_user',
+    'password': os.environ.get('PG_PASSWORD', 'default_password')
+}
+
+# Redis para rate limiting
+REDIS_CONFIG = {
+    'host': 'localhost',
+    'port': 6379,
+    'decode_responses': True
+}

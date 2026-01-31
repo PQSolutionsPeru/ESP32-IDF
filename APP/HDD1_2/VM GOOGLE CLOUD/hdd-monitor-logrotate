@@ -1,0 +1,96 @@
+# Logrotate Configuration for HDD-Monitor VM
+# Path: /etc/logrotate.d/hdd-monitor
+#
+# Rotates logs for:
+# - Cleanup operations
+# - Backup operations
+# - Resource monitoring
+# - ESP32 logs
+
+# ============================================
+# SYSTEM LOGS (cleanup, backup, monitoring)
+# ============================================
+/var/log/hdd_monitor_cleanup.log
+/var/log/hdd_monitor_backups.log
+/var/log/resource_monitor.log {
+    # Rotate daily
+    daily
+
+    # Keep 30 days of logs
+    rotate 30
+
+    # Compress old logs
+    compress
+
+    # Don't compress the most recent rotation
+    delaycompress
+
+    # Don't error if log file is missing
+    missingok
+
+    # Don't rotate empty logs
+    notifempty
+
+    # Create new log file with these permissions
+    create 0640 pqsolutionsperu pqsolutionsperu
+
+    # Shared scripts for all logs in this block
+    sharedscripts
+
+    # After rotation, reload rsyslog if running
+    postrotate
+        /usr/bin/systemctl reload rsyslog > /dev/null 2>&1 || true
+    endscript
+}
+
+# ============================================
+# ESP32 LOGS (handled separately)
+# ============================================
+# Note: ESP32 logs are primarily managed by cleanup_esp32_logs.sh
+# This provides additional rotation for very large individual files
+
+/home/pqsolutions/esp32_log/*.txt {
+    # Rotate weekly
+    weekly
+
+    # Keep 4 weeks
+    rotate 4
+
+    # Compress old logs
+    compress
+
+    # Don't compress the most recent rotation
+    delaycompress
+
+    # Don't error if log file is missing
+    missingok
+
+    # Don't rotate empty logs
+    notifempty
+
+    # Rotate if file exceeds 100MB (prevents single huge files)
+    maxsize 100M
+
+    # Don't create new files (ESP32 creates them)
+    nocreate
+
+    # No postrotate needed
+}
+
+# ============================================
+# NGINX LOGS (if not already configured)
+# ============================================
+# Uncomment if you need custom Nginx log rotation
+# /var/log/nginx/*.log {
+#     daily
+#     rotate 14
+#     compress
+#     delaycompress
+#     missingok
+#     notifempty
+#     create 0640 www-data adm
+#     sharedscripts
+#     postrotate
+#         /usr/bin/systemctl reload nginx > /dev/null 2>&1 || true
+#     endscript
+# }

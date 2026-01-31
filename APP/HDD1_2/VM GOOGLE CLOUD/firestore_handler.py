@@ -11,6 +11,10 @@ import json
 import time
 import threading
 import paho.mqtt.client as mqtt
+from psycopg2.pool import SimpleConnectionPool
+import psycopg2
+from config import PG_CONFIG
+from nfpa_metrics import NFPAMetricsCollector
 
 class EventReminderChecker:
     def __init__(self, db: firestore.Client, notification_handler: NotificationHandler):
@@ -210,7 +214,22 @@ class FirestoreHandler:
             
         self.notification_handler = NotificationHandler(self.db)
         self.mqtt_client = MQTTClient(self.handle_mqtt_message, db=self.db)
-        
+
+        # Pool PostgreSQL
+        try:
+            self.pg_pool = SimpleConnectionPool(
+                minconn=1,
+                maxconn=10,
+                **PG_CONFIG
+            )
+            logging.info("PostgreSQL connection pool initialized")
+        except Exception as e:
+            logging.error(f"Failed to initialize PostgreSQL pool: {e}")
+            self.pg_pool = None
+
+        # NFPA metrics
+        self.nfpa_metrics = NFPAMetricsCollector()
+
         self._watch_references = []
         self._relay_states = {}
         self._relay_configs = {}
@@ -572,7 +591,7 @@ class FirestoreHandler:
         except Exception as e:
             logging.error(f"Error en handle_panel_message: {e}", exc_info=True)
 
-    def _send_relay_notification_fast(self, client_id: str, panel_id: str, relay_name: str, old_status: str, new_status: str, relay_data: Dict[str, Any] = None):
+    def _send_relay_notification_fast(self, client_id: str, panel_id: str, relay_name: str, old_status: str, new_status: str, relay_data: Dict[str, Any] = None, event_id: str = None):
         try:
             current_time = time.time() * 1000
             
@@ -651,6 +670,10 @@ class FirestoreHandler:
                 'old_status': old_status,
                 'message': message_text
             }, 'relay')
+
+            # Registrar envío de notificación para NFPA 72
+            if event_id:
+                self.nfpa_metrics.record_notification_sent(event_id)
             
             logging.info(f"Notificación rápida enviada para {relay_display_name}: {old_status} -> {new_status}")
             
@@ -691,10 +714,14 @@ class FirestoreHandler:
                 complete_relay_data.update(new_data)
                 
                 relay_display_name = self._get_relay_display_name(relay_name, complete_relay_data)
-                
+
                 logging.info(f"{relay_display_name}: {old_status} -> {new_state}")
-                
-                self._send_relay_notification_fast(client_id, panel_id, relay_name, old_status, new_state, complete_relay_data)
+
+                # Registrar detección de evento relay para NFPA 72
+                event_id = f"{panel_id}_{relay_name}_{int(time.time()*1000)}"
+                self.nfpa_metrics.record_relay_detected(event_id)
+
+                self._send_relay_notification_fast(client_id, panel_id, relay_name, old_status, new_state, complete_relay_data, event_id)
                 
                 try:
                     relay_ref.set(new_data, merge=True)
@@ -702,6 +729,24 @@ class FirestoreHandler:
                     self._relay_states[doc_path] = complete_relay_data
                 except Exception as e:
                     logging.error(f"Error actualizando BD para {relay_display_name}: {e}")
+
+                # NUEVO: Persistencia redundante en PostgreSQL
+                if self.pg_pool:
+                    try:
+                        conn = self.pg_pool.getconn()
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            INSERT INTO relay_events (client_id, panel_id, relay_id, old_status, new_status)
+                            VALUES (%s, %s, %s, %s, %s)
+                        """, (client_id, panel_id, relay_name, old_status, new_state))
+                        conn.commit()
+                        cursor.close()
+                        self.pg_pool.putconn(conn)
+
+                        logging.info(f"Relay event persisted to PostgreSQL: {client_id}/{relay_name}")
+                    except Exception as pg_err:
+                        logging.error(f"PostgreSQL persist failed: {pg_err}")
+                        # NO fallar - Firestore es primario
                     
         except Exception as e:
             logging.error(f"Error en _update_relay_state: {e}", exc_info=True)

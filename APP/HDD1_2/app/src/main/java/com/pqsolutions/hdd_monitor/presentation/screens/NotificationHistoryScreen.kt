@@ -169,7 +169,7 @@ private fun NotificationsList(
     ) {
         items(
             items = sortedNotifications,
-            key = { notification -> "${notification.clientDocName}_${notification.documentName}" }
+            key = { notification -> "${notification.clientDocName}_${notification.documentName}_${notification.timestamp}" }
         ) { notification ->
             NotificationCard(
                 notification = notification,

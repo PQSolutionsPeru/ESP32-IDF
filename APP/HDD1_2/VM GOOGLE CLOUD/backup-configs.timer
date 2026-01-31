@@ -1,0 +1,27 @@
+# Systemd Timer for Configuration Backup
+# Path: /etc/systemd/system/backup-configs.timer
+#
+# Runs backup-configs.service weekly on Sundays at 3 AM
+# Uses Persistent=true to run missed executions after system boot
+
+[Unit]
+Description=Weekly configuration backup on Sundays at 3 AM
+Documentation=https://github.com/pqsolutionsperu/hdd-monitor
+Requires=backup-configs.service
+
+[Timer]
+# Run weekly on Sundays at 3:00 AM
+OnCalendar=weekly
+OnCalendar=Sun 03:00
+
+# If system was off at scheduled time, run at next boot
+Persistent=true
+
+# Don't add delay for backups (run exactly at 3 AM)
+RandomizedDelaySec=0
+
+# Ensure timer starts after boot
+After=network.target
+
+[Install]
+WantedBy=timers.target

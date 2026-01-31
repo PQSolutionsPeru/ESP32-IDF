@@ -34,6 +34,9 @@ bool config_manager_key_exists(const char *key);
 uint32_t config_manager_get_write_count(void);
 esp_err_t config_manager_force_commit(void);
 
+esp_err_t config_manager_check_boot_loop(void);
+esp_err_t config_manager_clear_boot_count(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -14,3 +14,44 @@
 .cxx
 local.properties
 keystore.properties
+
+# =========================================
+# 🔐 SECURITY - NEVER COMMIT THESE FILES
+# =========================================
+
+# Credentials and secrets
+**/PRIVATE_CREDENTIALS/
+**/*_LOGIN_SETUP*.md
+**/*SECRET*.md
+**/*PASSWORD*.md
+**/*CREDENTIALS*.md
+**/DEPLOYMENT_GUIDE.md
+**/UPLOAD_FILES_GCP.md
+**/ARQUITECTURA_VM.md
+**/IMPLEMENTATION_SUMMARY.md
+**/SECURITY_UPDATE_README.md
+**/VM_MASTER_DOCUMENTATION.md
+
+# Database files with passwords
+**/setup_postgresql.sql
+**/install.sh
+
+# Environment files with secrets
+**/.env
+**/.env.*
+!**/.env.example
+
+# SSH keys and certificates
+**/*.pem
+**/*.key
+**/*.p12
+**/*.jks
+!**/google-services.json
+
+# Logs that might contain sensitive data
+**/logs/
+**/*.log
+
+# Temporary files that might contain secrets
+**/*_backup_*.sql
+**/*_dump_*.sql

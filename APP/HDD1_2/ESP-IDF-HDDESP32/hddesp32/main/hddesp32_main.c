@@ -1261,7 +1261,17 @@ void app_main(void)
             LOG_W(TAG, "Initial watchdog feed failed: %s", esp_err_to_name(feed_ret));
         }
     }
-    
+
+    // Verificar boot loop
+    if (config_manager_check_boot_loop() != ESP_OK) {
+        LOG_E(TAG, "BOOT LOOP DETECTED - ENTERING SAFE MODE");
+        watchdog_manager_set_mode(WATCHDOG_MODE_CONFIG);
+        // No inicializar relay_manager para prevenir más reinicios
+        while(1) {
+            vTaskDelay(pdMS_TO_TICKS(10000));
+        }
+    }
+
     ESP_ERROR_CHECK(esp32_id_manager_init());
     if (main_task_registered) {
         watchdog_manager_feed();

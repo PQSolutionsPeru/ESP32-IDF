@@ -317,7 +317,9 @@ class FirebaseMessagingService : FirebaseMessagingService() {
             .setLights(color, 500, 500)
             .build()
 
-        notificationManager.notify("connectivity_${panelName}_${connectivityType}".hashCode(), notification)
+        // Usar clientDocName + timestamp para ID único y evitar suplantación
+        val uniqueId = "${clientDocName}_${panelName}_${connectivityType}_${System.currentTimeMillis()}".hashCode()
+        notificationManager.notify(uniqueId, notification)
         Log.d(TAG, "Notificación de conectividad mostrada: '$message'")
     }
 
@@ -442,7 +444,9 @@ class FirebaseMessagingService : FirebaseMessagingService() {
             .setLights(0xFF0000FF.toInt(), 500, 500)
             .build()
 
-        notificationManager.notify("relay_${relayName}_${newStatus}".hashCode(), notification)
+        // Usar clientDocName + timestamp para ID único y evitar suplantación
+        val uniqueId = "${clientDocName}_relay_${relayName}_${newStatus}_${System.currentTimeMillis()}".hashCode()
+        notificationManager.notify(uniqueId, notification)
         Log.d(TAG, "Notificación de relay mostrada: '$message'")
     }
 
@@ -591,7 +595,9 @@ class FirebaseMessagingService : FirebaseMessagingService() {
                         .setLights(if (isOnline) 0xFF00FF00.toInt() else 0xFFFF4444.toInt(), 500, 500)
                         .build()
 
-                    notificationManager.notify("status_${panelDocName}_${status}".hashCode(), notification)
+                    // Usar clientDocName + timestamp para ID único y evitar suplantación
+                    val uniqueId = "${clientDocName}_status_${panelDocName}_${status}_${System.currentTimeMillis()}".hashCode()
+                    notificationManager.notify(uniqueId, notification)
                     Log.d(TAG, "Notificación de status mostrada: '$message'")
                 }
             } catch (e: Exception) {
@@ -635,7 +641,9 @@ class FirebaseMessagingService : FirebaseMessagingService() {
             .build()
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify("event_${eventId}_${action}".hashCode(), notification)
+        // Usar clientDocName + timestamp para ID único y evitar suplantación
+        val uniqueId = "${clientDocName}_event_${eventId}_${action}_${System.currentTimeMillis()}".hashCode()
+        notificationManager.notify(uniqueId, notification)
         Log.d(TAG, "Notificación de evento mostrada: '$message'")
     }
 }

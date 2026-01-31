@@ -1,0 +1,15 @@
+[Unit]
+Description=HDD-Monitor System Watchdog
+After=network.target
+
+[Service]
+Type=simple
+User=pqsolutionsperu
+ExecStart=/usr/bin/python3 /home/pqsolutionsperu/system_watchdog.py
+Restart=always
+RestartSec=10
+Environment="SMTP_USER=alerts@pqsolutions.com"
+Environment="SMTP_PASS=secure_password"
+
+[Install]
+WantedBy=multi-user.target

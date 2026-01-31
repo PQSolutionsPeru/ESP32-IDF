@@ -3,6 +3,7 @@
 #include "wifi_manager.h"
 #include "config_manager.h"
 #include "mqtt_manager.h"
+#include "time_manager.h"
 #include "esp_timer.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
@@ -73,17 +74,31 @@ static bool validate_event_pointers(connectivity_monitor_context_t *ctx) {
     return true;
 }
 
-static void save_event_to_ram(int64_t start_time, int64_t end_time, 
+static void save_event_to_ram(int64_t start_time, int64_t end_time,
                               connectivity_event_type_t loss_type,
                               const char* ssid, const char* panel_name) {
     connectivity_monitor_context_t *ctx = &s_conn_ctx;
-    
+
+    // NUEVO: Verificar NTP sincronizado
+    if (!time_manager_is_synchronized()) {
+        LOG_W(TAG, "NTP not synced - rejecting event (invalid timestamps)");
+        return;
+    }
+
+    // NUEVO: Validar duración mínima (5 segundos)
+    int64_t duration_ms = end_time - start_time;
+    if (duration_ms < 5000) {
+        LOG_W(TAG, "Event duration too short (%lld ms) - rejecting",
+              (long long)duration_ms);
+        return;
+    }
+
     if (!validate_event_pointers(ctx)) {
         return;
     }
-    
+
     LOG_I(TAG, "save_event_to_ram called: start=%lld, end=%lld, type=%d, ssid=%s, panel=%s",
-          (long long)start_time, (long long)end_time, loss_type, 
+          (long long)start_time, (long long)end_time, loss_type,
           ssid ? ssid : "NULL", panel_name ? panel_name : "NULL");
     
     LOG_I(TAG, "Before save: pending_event_count=%d, write_index=%d", 

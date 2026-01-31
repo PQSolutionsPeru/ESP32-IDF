@@ -1,0 +1,7 @@
+paho-mqtt==1.6.1
+google-cloud-firestore==2.13.1
+firebase-admin==6.2.0
+pytz==2023.3
+structlog==24.1.0
+psycopg2-binary==2.9.9
+redis==5.0.1

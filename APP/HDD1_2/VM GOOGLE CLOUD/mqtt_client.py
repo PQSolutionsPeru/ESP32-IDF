@@ -3,9 +3,39 @@ import ssl
 import json
 import time
 import logging
+import re
 from config import MQTT_CONFIG
 from typing import Dict, Any, Optional, Callable
 from google.cloud import firestore
+
+def validate_time_range(time_range: str) -> bool:
+    """
+    Valida formato "HH:MM a HH:MM" y que inicio != fin.
+    Retorna True si válido, False si inválido.
+    """
+    if not time_range or time_range.strip() == "":
+        return False
+
+    pattern = r'^(\d{1,2}):(\d{2})\s+a\s+(\d{1,2}):(\d{2})$'
+    match = re.match(pattern, time_range)
+
+    if not match:
+        logging.error(f"time_range invalid format: '{time_range}'")
+        return False
+
+    h1, m1, h2, m2 = map(int, match.groups())
+
+    # Validar rangos horarios
+    if not (0 <= h1 < 24 and 0 <= h2 < 24 and 0 <= m1 < 60 and 0 <= m2 < 60):
+        logging.error(f"time_range out of bounds: '{time_range}'")
+        return False
+
+    # Validar que NO sean idénticos
+    if h1 == h2 and m1 == m2:
+        logging.error(f"time_range zero duration: '{time_range}'")
+        return False
+
+    return True
 
 class MQTTClient:
     def __init__(self, message_handler: Callable, db=None):
@@ -164,7 +194,13 @@ class MQTTClient:
             panel_name = payload.get('panel_name', 'Panel')
             ssid = payload.get('ssid', '')
             time_range = payload.get('time_range', '')
-            
+
+            # AGREGAR validación
+            if time_range and not validate_time_range(time_range):
+                logging.warning(f"Rejecting connectivity event - invalid time_range: '{time_range}' "
+                               f"for ESP32 {esp32_id}")
+                return
+
             if not esp32_id or not event_type:
                 logging.warning(f"Mensaje de conectividad incompleto: {payload}")
                 return

@@ -1,0 +1,27 @@
+# Systemd Timer for PostgreSQL Backup
+# Path: /etc/systemd/system/backup-postgresql.timer
+#
+# Runs backup-postgresql.service daily at 2 AM
+# Uses Persistent=true to run missed executions after system boot
+
+[Unit]
+Description=Daily PostgreSQL backup at 2 AM
+Documentation=https://github.com/pqsolutionsperu/hdd-monitor
+Requires=backup-postgresql.service
+
+[Timer]
+# Run daily at 2:00 AM
+OnCalendar=daily
+OnCalendar=02:00
+
+# If system was off at scheduled time, run at next boot
+Persistent=true
+
+# Don't add delay for backups (run exactly at 2 AM)
+RandomizedDelaySec=0
+
+# Ensure timer starts after boot
+After=network.target postgresql.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,29 @@
+# Systemd Service for Configuration Backup
+# Path: /etc/systemd/system/backup-configs.service
+#
+# Backs up all HDD-Monitor configuration files
+# Triggered by backup-configs.timer (weekly on Sundays at 3 AM)
+
+[Unit]
+Description=Backup HDD-Monitor configuration files
+Documentation=https://github.com/pqsolutionsperu/hdd-monitor
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+
+# Script to execute
+ExecStart=/bin/bash /home/pqsolutionsperu/backup_configs.sh
+
+# Logging
+StandardOutput=append:/var/log/hdd_monitor_backups.log
+StandardError=append:/var/log/hdd_monitor_backups.log
+
+# Security hardening
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+# Timeout (backup should complete within 5 minutes)
+TimeoutStartSec=300

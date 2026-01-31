@@ -1,0 +1,44 @@
+# Systemd Service for PostgreSQL Backup
+# Path: /etc/systemd/system/backup-postgresql.service
+#
+# Backs up the HDD-Monitor PostgreSQL database
+# Triggered by backup-postgresql.timer (daily at 2 AM)
+
+[Unit]
+Description=Backup HDD-Monitor PostgreSQL database
+Documentation=https://github.com/pqsolutionsperu/hdd-monitor
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=pqsolutionsperu
+Group=pqsolutionsperu
+
+# Script to execute
+ExecStart=/bin/bash /home/pqsolutionsperu/backup_postgresql.sh
+
+# Database credentials
+Environment="PG_DATABASE=hdd_monitor"
+Environment="PG_USER=hdd_monitor_user"
+Environment="PG_HOST=localhost"
+
+# IMPORTANT: Replace YOUR_POSTGRES_PASSWORD with actual password
+Environment="PG_PASSWORD=YOUR_POSTGRES_PASSWORD"
+
+# Optional: Healthchecks.io URL for backup monitoring
+# Environment="HEALTHCHECKS_POSTGRES_URL=https://hc-ping.com/YOUR_UUID_HERE"
+
+# Logging
+StandardOutput=append:/var/log/hdd_monitor_backups.log
+StandardError=append:/var/log/hdd_monitor_backups.log
+
+# Security hardening
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/pqsolutionsperu/backups /var/log
+
+# Timeout (backup should complete within 10 minutes)
+TimeoutStartSec=600

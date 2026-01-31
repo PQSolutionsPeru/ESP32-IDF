@@ -1,0 +1,28 @@
+# Systemd Timer for ESP32 Logs Cleanup
+# Path: /etc/systemd/system/cleanup-esp32-logs.timer
+#
+# Runs cleanup-esp32-logs.service daily at 3 AM
+# Uses Persistent=true to run missed executions after system boot
+
+[Unit]
+Description=Daily ESP32 logs cleanup at 3 AM
+Documentation=https://github.com/pqsolutionsperu/hdd-monitor
+Requires=cleanup-esp32-logs.service
+
+[Timer]
+# Run daily at 3:00 AM
+OnCalendar=daily
+OnCalendar=03:00
+
+# If system was off at scheduled time, run at next boot
+Persistent=true
+
+# Add random delay (0-30 min) to prevent simultaneous execution
+# with other maintenance tasks
+RandomizedDelaySec=30m
+
+# Ensure timer starts after boot
+After=network.target
+
+[Install]
+WantedBy=timers.target

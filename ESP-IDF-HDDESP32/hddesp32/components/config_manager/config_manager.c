@@ -401,13 +401,58 @@ esp_err_t config_manager_force_commit(void) {
     if (!is_initialized || !config_handle) {
         return ESP_ERR_INVALID_STATE;
     }
-    
+
     esp_err_t err = nvs_commit(config_handle);
     if (err == ESP_OK) {
         last_commit_time = esp_timer_get_time() / 1000;
         pending_commit = false;
         ESP_LOGI(TAG, "Forced commit completed");
     }
-    
+
     return err;
+}
+
+#define BOOT_LOOP_THRESHOLD 20
+#define BOOT_LOOP_RESET_INTERVAL_MS 300000  // 5 minutos
+
+esp_err_t config_manager_check_boot_loop(void) {
+    if (!is_initialized || !config_handle) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    uint32_t boot_count = 0;
+    int64_t last_boot_time = 0;
+    int64_t current_time = esp_timer_get_time() / 1000;
+
+    nvs_get_u32(config_handle, "boot_count", &boot_count);
+    nvs_get_i64(config_handle, "last_boot", &last_boot_time);
+
+    if ((current_time - last_boot_time) > BOOT_LOOP_RESET_INTERVAL_MS) {
+        boot_count = 0;
+    }
+
+    boot_count++;
+    nvs_set_u32(config_handle, "boot_count", boot_count);
+    nvs_set_i64(config_handle, "last_boot", current_time);
+    nvs_commit(config_handle);
+
+    if (boot_count >= BOOT_LOOP_THRESHOLD) {
+        ESP_LOGE(TAG, "BOOT LOOP DETECTED: %lu boots in <5min - SAFE MODE", boot_count);
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    ESP_LOGI(TAG, "Boot count: %lu", boot_count);
+    return ESP_OK;
+}
+
+esp_err_t config_manager_clear_boot_count(void) {
+    if (!is_initialized || !config_handle) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    nvs_set_u32(config_handle, "boot_count", 0);
+    nvs_commit(config_handle);
+
+    ESP_LOGI(TAG, "Boot count cleared");
+    return ESP_OK;
 }
