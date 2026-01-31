@@ -1,0 +1,109 @@
+Copyright (c) 2024-2026 PQ Solutions Peru
+All Rights Reserved
+
+HDD MONITOR - SISTEMA DE MONITOREO DE PANELES DE ALARMA CONTRA INCENDIOS
+NFPA 72 / UL 864 / UL 2572 Compliant Fire Alarm Monitoring System
+
+================================================================================
+
+TÉRMINOS Y CONDICIONES
+
+Este software y su código fuente son propiedad exclusiva de PQ Solutions Peru
+y están protegidos por las leyes de derechos de autor internacionales.
+
+El código fuente está disponible públicamente únicamente con los siguientes
+propósitos autorizados:
+
+  ✓ Auditoría de seguridad y cumplimiento normativo
+  ✓ Verificación de cumplimiento NFPA 72, UL 864, UL 2572
+  ✓ Revisión técnica por autoridades competentes
+  ✓ Transparencia para clientes y stakeholders
+
+================================================================================
+
+USOS PROHIBIDOS SIN AUTORIZACIÓN ESCRITA:
+
+  ✗ Uso comercial del software o sus componentes
+  ✗ Redistribución, venta o licenciamiento del código
+  ✗ Modificación para uso en sistemas de terceros
+  ✗ Copia, duplicación o derivación del código
+  ✗ Ingeniería inversa de algoritmos propietarios
+  ✗ Uso en sistemas competidores o similares
+  ✗ Remoción de avisos de copyright
+
+================================================================================
+
+LICENCIAS COMERCIALES
+
+Para obtener una licencia comercial, permisos especiales, o integración en
+sistemas de terceros, contactar:
+
+  Empresa:  PQ Solutions Peru
+  Email:    pqsolutionsperu@gmail.com
+  Web:      hddm.pqsolutionsperu.com
+
+================================================================================
+
+EXCLUSIÓN DE GARANTÍAS
+
+ESTE SOFTWARE SE PROPORCIONA "TAL CUAL", SIN GARANTÍAS DE NINGÚN TIPO,
+EXPRESAS O IMPLÍCITAS, INCLUYENDO PERO NO LIMITADO A GARANTÍAS DE
+COMERCIABILIDAD, ADECUACIÓN PARA UN PROPÓSITO PARTICULAR Y NO INFRACCIÓN.
+
+EN NINGÚN CASO LOS AUTORES O TITULARES DEL COPYRIGHT SERÁN RESPONSABLES POR
+CUALQUIER RECLAMO, DAÑO U OTRA RESPONSABILIDAD, YA SEA EN UNA ACCIÓN DE
+CONTRATO, AGRAVIO O DE OTRO TIPO, QUE SURJA DE, FUERA DE O EN CONEXIÓN CON
+EL SOFTWARE O EL USO U OTRAS OPERACIONES EN EL SOFTWARE.
+
+================================================================================
+
+SISTEMA CRÍTICO - AVISO LEGAL
+
+Este sistema está diseñado para monitoreo de seguridad contra incendios y
+cumple con normativas NFPA 72 (National Fire Protection Association) y
+UL 864/2572 (Underwriters Laboratories). El uso inadecuado o no autorizado
+puede comprometer la seguridad de personas y propiedades.
+
+El uso de este software en sistemas de seguridad debe cumplir con todas las
+regulaciones locales, nacionales e internacionales aplicables.
+
+================================================================================
+
+TECNOLOGÍAS Y COMPONENTES
+
+Este software utiliza componentes de terceros bajo sus respectivas licencias:
+
+  - ESP-IDF (Apache 2.0) - Espressif Systems
+  - Python (PSF License) - Python Software Foundation
+  - PostgreSQL (PostgreSQL License) - PostgreSQL Global Development Group
+  - Firebase (Google Terms of Service) - Google LLC
+  - MQTT/Mosquitto (EPL/EDL) - Eclipse Foundation
+  - Android SDK (Apache 2.0) - Google LLC
+  - Kotlin (Apache 2.0) - JetBrains
+
+El uso de estos componentes no implica transferencia de derechos sobre el
+software HDD Monitor en su totalidad.
+
+================================================================================
+
+JURISDICCIÓN
+
+Este acuerdo se regirá e interpretará de acuerdo con las leyes de la
+República del Perú. Cualquier disputa relacionada con este software estará
+sujeta a la jurisdicción exclusiva de los tribunales de Lima, Perú.
+
+================================================================================
+
+CONTACTO
+
+Para consultas sobre licenciamiento, permisos especiales, o cualquier
+pregunta relacionada con este software:
+
+  PQ Solutions Peru
+  Email: pqsolutionsperu@gmail.com
+  Dominio: hddm.pqsolutionsperu.com
+  Sistema: HDD Monitor v2.0
+
+================================================================================
+
+Copyright (c) 2024-2026 PQ Solutions Peru - Todos los Derechos Reservados

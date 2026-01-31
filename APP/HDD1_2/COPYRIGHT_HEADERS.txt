@@ -1,0 +1,47 @@
+# COPYRIGHT HEADERS
+# Agregar estos headers al inicio de archivos principales
+
+## Para archivos Python (.py)
+"""
+Copyright (c) 2024-2026 PQ Solutions Peru
+All Rights Reserved.
+
+HDD Monitor - NFPA 72 Fire Alarm Monitoring System
+Unauthorized copying, modification, or use is strictly prohibited.
+
+Contact: pqsolutionsperu@gmail.com
+"""
+
+## Para archivos C/C++ (.c, .h, .cpp)
+/*
+ * Copyright (c) 2024-2026 PQ Solutions Peru
+ * All Rights Reserved.
+ *
+ * HDD Monitor - NFPA 72 Fire Alarm Monitoring System
+ * Unauthorized copying, modification, or use is strictly prohibited.
+ *
+ * Contact: pqsolutionsperu@gmail.com
+ */
+
+## Para archivos Kotlin (.kt)
+/*
+ * Copyright (c) 2024-2026 PQ Solutions Peru
+ * All Rights Reserved.
+ *
+ * HDD Monitor - NFPA 72 Fire Alarm Monitoring System
+ * Unauthorized copying, modification, or use is strictly prohibited.
+ *
+ * Contact: pqsolutionsperu@gmail.com
+ */
+
+## Para archivos Shell Script (.sh)
+#!/bin/bash
+#
+# Copyright (c) 2024-2026 PQ Solutions Peru
+# All Rights Reserved.
+#
+# HDD Monitor - NFPA 72 Fire Alarm Monitoring System
+# Unauthorized copying, modification, or use is strictly prohibited.
+#
+# Contact: pqsolutionsperu@gmail.com
+#
