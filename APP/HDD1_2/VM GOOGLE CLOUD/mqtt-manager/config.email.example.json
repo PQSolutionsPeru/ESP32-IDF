@@ -1,15 +1,13 @@
 {
   "smtp_server": "smtp.gmail.com",
   "smtp_port": 587,
-  "smtp_user": "your-email@gmail.com",
-  "smtp_password": "your-app-password",
-  "from_email": "your-email@gmail.com",
+  "smtp_user": "pqsolutionsperu@gmail.com",
+  "smtp_password": "YOUR_APP_PASSWORD_HERE",
+  "from_email": "pqsolutionsperu@gmail.com",
   "to_emails": [
-    "admin@pqsolutionsperu.com",
-    "alerts@pqsolutionsperu.com"
+    "admin@pqsolutionsperu.com"
   ],
   "use_tls": true,
-  "log_base_path": "/home/pqsolutions/esp32_log",
   "mqtt_broker": "localhost",
   "mqtt_port": 1883
 }

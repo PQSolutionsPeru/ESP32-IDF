@@ -36,6 +36,10 @@
                 <span class="nav-icon">📡</span>
                 <span class="nav-label">ESP32 Devices</span>
             </a>
+            <a href="{{ url_for('health_dashboard') }}" class="nav-item {% if request.endpoint == 'health_dashboard' %}active{% endif %}">
+                <span class="nav-icon">💚</span>
+                <span class="nav-label">ESP32 Health</span>
+            </a>
             <a href="{{ url_for('clients_panels') }}" class="nav-item {% if request.endpoint == 'clients_panels' %}active{% endif %}">
                 <span class="nav-icon">🏢</span>
                 <span class="nav-label">Clients & Panels</span>

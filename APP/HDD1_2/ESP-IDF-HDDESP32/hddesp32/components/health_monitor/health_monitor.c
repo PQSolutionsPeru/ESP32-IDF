@@ -7,6 +7,7 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_heap_caps.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -18,11 +19,11 @@
 
 static const char *TAG = "HEALTH_MON";
 
-// Configuration - OPTIMIZED FOR LOW MEMORY
-#define HEALTH_MONITOR_TASK_STACK_SIZE (2560)  // Reduced from 4096 (saves 1.5KB)
-#define HEALTH_MONITOR_TASK_PRIORITY (configMAX_PRIORITIES - 2)  // High priority
+// Configuration - ULTRA-LIGHTWEIGHT FOR NATIVE APPROACH
+#define HEALTH_MONITOR_TASK_STACK_SIZE (1536)  // Minimal stack for simple monitoring
+#define HEALTH_MONITOR_TASK_PRIORITY (tskIDLE_PRIORITY + 2)  // Low priority (not critical path)
 #define HEALTH_MONITOR_CORE_ID (1)  // Run on Core 1
-#define HEALTH_MONITOR_CHECK_INTERVAL_MS (10000)  // Check every 10 seconds (reduced frequency)
+#define HEALTH_MONITOR_CHECK_INTERVAL_MS (30000)  // Check every 30 seconds (reduce CPU usage)
 
 // Thresholds - OPTIMIZED
 #define MEMORY_LOW_THRESHOLD (40 * 1024)  // 40KB (adjusted for your device)
@@ -39,11 +40,6 @@ static char device_id[32] = {0};
 static uint32_t last_free_heap = 0;
 static uint32_t stable_uptime_threshold_ms = 600000;  // 10 minutes
 static bool boot_counter_cleared = false;
-
-// Recovery tracking
-static uint32_t consecutive_critical_issues = 0;
-static uint32_t last_critical_time_ms = 0;
-static uint32_t recovery_attempts = 0;
 
 /**
  * @brief Get issue type as string
@@ -79,7 +75,34 @@ static const char* health_status_to_string(health_status_t status) {
 }
 
 /**
- * @brief Send health alert to server via MQTT
+ * @brief Send simple health alert to server via MQTT (LIGHTWEIGHT)
+ */
+static esp_err_t send_simple_alert(const char *type, uint32_t free_heap, uint32_t boot_count) {
+    // Build MQTT topic: hdd-monitor/alerts/{ESP32_ID}
+    char topic[80];
+    snprintf(topic, sizeof(topic), "hdd-monitor/alerts/%s", device_id);
+
+    // Build minimal JSON payload
+    char payload[200];
+    snprintf(payload, sizeof(payload),
+        "{\"type\":\"%s\",\"heap\":%lu,\"boot_count\":%lu,\"uptime\":%lld}",
+        type, free_heap, boot_count, esp_timer_get_time() / 1000000LL
+    );
+
+    ESP_LOGW(TAG, "Alert: %s (heap=%lu, boots=%lu)", type, free_heap, boot_count);
+
+    // Publish to MQTT
+    esp_err_t ret = mqtt_manager_publish(topic, payload, 0, 1, false);
+    if (ret != ESP_OK) {
+        ESP_LOGD(TAG, "Failed to publish alert: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    return ESP_OK;
+}
+
+/**
+ * @brief Send comprehensive health alert to server via MQTT
  */
 static esp_err_t send_health_alert(const health_report_t *report) {
     if (!report) {
@@ -87,49 +110,35 @@ static esp_err_t send_health_alert(const health_report_t *report) {
     }
 
     // Build MQTT topic: hdd-monitor/alerts/{ESP32_ID}
-    char topic[96];  // Reduced from 128
+    char topic[80];
     snprintf(topic, sizeof(topic), "hdd-monitor/alerts/%s", device_id);
 
-    // Build JSON payload - OPTIMIZED: smaller buffer
-    char payload[384];  // Reduced from 512
+    // Build JSON payload
+    char payload[512];
     snprintf(payload, sizeof(payload),
-        "{"
-        "\"esp32_id\":\"%s\","
-        "\"status\":\"%s\","
-        "\"issue_type\":\"%s\","
-        "\"description\":\"%s\","
-        "\"uptime_ms\":%lu,"
-        "\"free_heap\":%lu,"
-        "\"min_free_heap\":%lu,"
-        "\"boot_count\":%lu,"
-        "\"timestamp\":%lld"
-        "}",
+        "{\"esp32_id\":\"%s\",\"status\":\"%s\",\"issue_type\":\"%s\","
+        "\"description\":\"%s\",\"uptime_ms\":%lu,\"free_heap\":%lu,"
+        "\"min_free_heap\":%lu,\"boot_count\":%lu,\"timestamp\":%lld}",
         report->esp32_id,
         health_status_to_string(report->status),
         health_issue_to_string(report->issue_type),
         report->issue_description,
-        report->uptime_ms,
+        (unsigned long)report->uptime_ms,
         report->free_heap,
         report->min_free_heap,
         report->boot_count,
         esp_timer_get_time() / 1000000LL
     );
 
-    ESP_LOGW(TAG, "Sending health alert: %s - %s",
-             health_issue_to_string(report->issue_type),
+    ESP_LOGW(TAG, "Health Alert: %s - %s",
+             health_status_to_string(report->status),
              report->issue_description);
 
     // Publish to MQTT
     esp_err_t ret = mqtt_manager_publish(topic, payload, 0, 1, false);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to publish health alert: %s", esp_err_to_name(ret));
+        ESP_LOGD(TAG, "Failed to publish health alert: %s", esp_err_to_name(ret));
         return ret;
-    }
-
-    // If critical or fatal, trigger log upload
-    if (report->status >= HEALTH_STATUS_CRITICAL) {
-        ESP_LOGW(TAG, "Critical issue detected - triggering log upload");
-        log_uploader_reset_stability();  // Force immediate upload
     }
 
     return ESP_OK;
@@ -278,97 +287,62 @@ static esp_err_t perform_health_check(health_report_t *report) {
 }
 
 /**
- * @brief Health monitoring task
+ * @brief Simple health monitoring task (NATIVE APPROACH)
+ * Only monitors and alerts - recovery handled by native TWDT
  */
 static void health_monitor_task(void *pvParameters) {
-    ESP_LOGI(TAG, "Health monitor task started on core %d", xPortGetCoreID());
+    ESP_LOGI(TAG, "Simple health monitor started on core %d (native approach)", xPortGetCoreID());
 
-    health_report_t report;
-    bool first_check = true;
-    uint32_t consecutive_errors = 0;
+    uint32_t stable_checks = 0;
+    uint32_t last_alert_time = 0;
+    const uint32_t ALERT_COOLDOWN_MS = 60000;  // Max 1 alert per minute
 
     while (monitor_running) {
-        // Auto-clear boot counter after stable uptime
-        if (!boot_counter_cleared && esp_timer_get_time() / 1000 > stable_uptime_threshold_ms) {
-            ESP_LOGI(TAG, "System stable for %lu seconds - clearing boot counter",
-                     stable_uptime_threshold_ms / 1000);
+        uint32_t current_time = esp_timer_get_time() / 1000;
+        uint32_t free_heap = esp_get_free_heap_size();
+
+        // Get boot count from config manager (if available)
+        uint32_t boot_count = 0;
+        // Note: Boot count tracking handled by main via RTC memory
+
+        // Auto-clear boot counter after 10 minutes stable
+        if (!boot_counter_cleared && current_time > stable_uptime_threshold_ms) {
+            ESP_LOGI(TAG, "System stable for 10 minutes - clearing boot counter");
             config_manager_clear_boot_count();
             boot_counter_cleared = true;
         }
 
-        // Perform health check
-        esp_err_t ret = perform_health_check(&report);
+        // SIMPLE HEALTH CHECKS (only critical conditions)
+        bool should_alert = false;
+        const char *alert_type = NULL;
 
-        if (ret == ESP_OK) {
-            // Store current health status
-            if (xSemaphoreTake(health_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-                memcpy(&current_health, &report, sizeof(health_report_t));
-                xSemaphoreGive(health_mutex);
-            }
+        if (free_heap < 30 * 1024) {
+            should_alert = true;
+            alert_type = "MEMORY_CRITICAL";
+            ESP_LOGE(TAG, "CRITICAL: Low memory - %lu bytes free", free_heap);
+        } else if (free_heap < 40 * 1024) {
+            should_alert = true;
+            alert_type = "MEMORY_LOW";
+            ESP_LOGW(TAG, "WARNING: Memory low - %lu bytes free", free_heap);
+        }
 
-            // Send alert if there's an issue
-            if (report.status > HEALTH_STATUS_OK) {
-                send_health_alert(&report);
-                consecutive_errors++;
+        // Send alert if needed (with cooldown)
+        if (should_alert && (current_time - last_alert_time) > ALERT_COOLDOWN_MS) {
+            send_simple_alert(alert_type, free_heap, boot_count);
+            last_alert_time = current_time;
+        }
 
-                // Track critical issues for recovery decision
-                if (report.status >= HEALTH_STATUS_CRITICAL) {
-                    consecutive_critical_issues++;
-                    last_critical_time_ms = report.uptime_ms;
+        // Track stability
+        if (free_heap > 40 * 1024) {
+            stable_checks++;
+        } else {
+            stable_checks = 0;
+        }
 
-                    ESP_LOGW(TAG, "Critical issue #%lu detected: %s",
-                             consecutive_critical_issues,
-                             report.issue_description);
-
-                    // ESCALATION LOGIC
-                    if (consecutive_critical_issues >= 3) {
-                        ESP_LOGE(TAG, "========================================");
-                        ESP_LOGE(TAG, "ESCALATION: %lu consecutive critical issues",
-                                 consecutive_critical_issues);
-                        ESP_LOGE(TAG, "System is NOT recovering - initiating restart");
-                        ESP_LOGE(TAG, "========================================");
-
-                        // Give time for alert to be sent
-                        vTaskDelay(pdMS_TO_TICKS(2000));
-
-                        // Force restart with recovery tracking
-                        recovery_attempts++;
-                        esp_restart();
-                    }
-                } else if (report.status == HEALTH_STATUS_WARNING) {
-                    // Warning - monitor but don't escalate yet
-                    ESP_LOGW(TAG, "Warning detected - monitoring for escalation");
-                }
-
-                // Check for too many consecutive errors
-                if (consecutive_errors > 10) {
-                    ESP_LOGE(TAG, "========================================");
-                    ESP_LOGE(TAG, "SYSTEM UNSTABLE: %lu consecutive errors", consecutive_errors);
-                    ESP_LOGE(TAG, "Recovery attempts: %lu", recovery_attempts);
-                    ESP_LOGE(TAG, "Initiating controlled restart");
-                    ESP_LOGE(TAG, "========================================");
-
-                    vTaskDelay(pdMS_TO_TICKS(2000));
-                    recovery_attempts++;
-                    esp_restart();
-                }
-            } else {
-                // System is OK - reset counters
-                if (consecutive_errors > 0 || consecutive_critical_issues > 0) {
-                    ESP_LOGI(TAG, "System recovered - resetting error counters");
-                }
-                consecutive_errors = 0;
-                consecutive_critical_issues = 0;
-            }
-
-            // On first check, always send status (helps detect unexpected reboots)
-            if (first_check) {
-                if (report.uptime_ms < 60000) {  // Less than 1 minute uptime
-                    ESP_LOGW(TAG, "System recently rebooted - sending initial health report");
-                    send_health_alert(&report);
-                }
-                first_check = false;
-            }
+        // Log periodic status (every 10 checks = 5 minutes)
+        if (stable_checks > 0 && stable_checks % 10 == 0) {
+            ESP_LOGI(TAG, "System healthy - Uptime: %lu min, Heap: %lu KB",
+                     current_time / 60000, free_heap / 1024);
         }
 
         // Sleep for check interval

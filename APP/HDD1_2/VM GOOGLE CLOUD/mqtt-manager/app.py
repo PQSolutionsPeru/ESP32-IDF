@@ -288,6 +288,12 @@ def mqtt_config():
     """MQTT configuration page (formerly index.html)"""
     return render_template('mqtt_config.html', username=session.get('username', 'admin'))
 
+@app.route('/health')
+@login_required
+def health_dashboard():
+    """ESP32 Health Monitor Dashboard"""
+    return render_template('health.html', username=session.get('username', 'admin'))
+
 # ============================================================================
 # DASHBOARD API ENDPOINTS
 # ============================================================================
