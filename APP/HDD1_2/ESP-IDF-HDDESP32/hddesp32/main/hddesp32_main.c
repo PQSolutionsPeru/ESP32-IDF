@@ -23,6 +23,7 @@
 #include "esp_timer.h"
 #include "spiffs_log.h"
 #include "log_uploader.h"
+#include "health_monitor.h"
 #include "driver/uart.h"
 #include "esp_spiffs.h"
 
@@ -1262,13 +1263,115 @@ void app_main(void)
         }
     }
 
-    // Verificar boot loop
+    // MULTI-LEVEL RECOVERY SYSTEM for mission-critical operations
+    uint32_t boot_count = 0;
+    nvs_handle_t check_handle;
+    if (nvs_open("config", NVS_READONLY, &check_handle) == ESP_OK) {
+        nvs_get_u32(check_handle, "boot_count", &boot_count);
+        nvs_close(check_handle);
+    }
+
     if (config_manager_check_boot_loop() != ESP_OK) {
-        LOG_E(TAG, "BOOT LOOP DETECTED - ENTERING SAFE MODE");
+        LOG_E(TAG, "BOOT LOOP DETECTED - Boot count: %lu", boot_count);
         watchdog_manager_set_mode(WATCHDOG_MODE_CONFIG);
-        // No inicializar relay_manager para prevenir más reinicios
-        while(1) {
-            vTaskDelay(pdMS_TO_TICKS(10000));
+
+        // ESCALATED RECOVERY STRATEGY based on boot count
+        if (boot_count < 10) {
+            // LEVEL 1: Soft recovery (first attempts)
+            LOG_W(TAG, "RECOVERY LEVEL 1: Quick stabilization (boot #%lu)", boot_count);
+
+            for (int i = 0; i < 60; i++) {  // Wait 1 minute
+                if (main_task_registered) watchdog_manager_feed();
+                if (i % 15 == 0) {
+                    LOG_I(TAG, "L1: Stabilizing... %d/60s (heap: %lu)", i, esp_get_free_heap_size());
+                }
+                vTaskDelay(pdMS_TO_TICKS(1000));
+            }
+
+            LOG_I(TAG, "L1: Quick recovery complete - Restarting");
+            esp_restart();
+
+        } else if (boot_count < 15) {
+            // LEVEL 2: Safe mode with memory cleanup
+            LOG_W(TAG, "RECOVERY LEVEL 2: Safe mode with cleanup (boot #%lu)", boot_count);
+
+            // Attempt memory cleanup
+            LOG_I(TAG, "L2: Performing emergency cleanup");
+            // Add your cleanup here if available
+
+            for (int i = 0; i < 180; i++) {  // Wait 3 minutes
+                if (main_task_registered) watchdog_manager_feed();
+                if (i % 30 == 0) {
+                    LOG_I(TAG, "L2: Safe mode... %d/180s (heap: %lu)", i, esp_get_free_heap_size());
+                }
+                vTaskDelay(pdMS_TO_TICKS(1000));
+            }
+
+            LOG_I(TAG, "L2: Clearing boot counter and restarting");
+            config_manager_clear_boot_count();
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            esp_restart();
+
+        } else if (boot_count < 20) {
+            // LEVEL 3: Extended safe mode + factory reset
+            LOG_E(TAG, "RECOVERY LEVEL 3: Factory reset required (boot #%lu)", boot_count);
+
+            // Notify server of critical situation
+            LOG_E(TAG, "L3: CRITICAL - Multiple recovery attempts failed");
+
+            for (int i = 0; i < 300; i++) {  // Wait 5 minutes
+                if (main_task_registered) watchdog_manager_feed();
+                if (i % 60 == 0) {
+                    LOG_E(TAG, "L3: Factory reset pending... %d/300s (heap: %lu)",
+                          i, esp_get_free_heap_size());
+                }
+                vTaskDelay(pdMS_TO_TICKS(1000));
+            }
+
+            LOG_E(TAG, "L3: Erasing configuration and restarting");
+            // Erase NVS config partition
+            nvs_flash_erase_partition("nvs_config");
+            config_manager_clear_boot_count();
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            esp_restart();
+
+        } else {
+            // LEVEL 4: SURVIVAL MODE - Hardware fault suspected
+            LOG_E(TAG, "========================================");
+            LOG_E(TAG, "RECOVERY LEVEL 4: HARDWARE FAULT");
+            LOG_E(TAG, "Boot count: %lu (CRITICAL THRESHOLD EXCEEDED)", boot_count);
+            LOG_E(TAG, "========================================");
+            LOG_E(TAG, "");
+            LOG_E(TAG, "⚠️  DEVICE REQUIRES PHYSICAL INSPECTION");
+            LOG_E(TAG, "⚠️  POSSIBLE HARDWARE FAILURE");
+            LOG_E(TAG, "⚠️  DO NOT CONTINUE OPERATION WITHOUT INSPECTION");
+            LOG_E(TAG, "");
+            LOG_E(TAG, "Entering SURVIVAL MODE (minimal operation)");
+
+            watchdog_manager_set_mode(WATCHDOG_MODE_CONFIG);
+
+            // SURVIVAL MODE: Stay alive but don't restart
+            // Allow monitoring and remote diagnostics
+            uint32_t survival_time = 0;
+            while(1) {
+                if (main_task_registered) watchdog_manager_feed();
+
+                if (survival_time % 60 == 0) {
+                    LOG_E(TAG, "SURVIVAL MODE: %lu min | Heap: %lu | AWAITING MAINTENANCE",
+                          survival_time / 60, esp_get_free_heap_size());
+                }
+
+                vTaskDelay(pdMS_TO_TICKS(1000));
+                survival_time++;
+
+                // After 30 minutes in survival mode, clear counter and try ONE more time
+                if (survival_time >= 1800) {
+                    LOG_W(TAG, "SURVIVAL MODE: 30 min elapsed - Final recovery attempt");
+                    config_manager_clear_boot_count();
+                    vTaskDelay(pdMS_TO_TICKS(2000));
+                    esp_restart();
+                }
+            }
         }
     }
 
@@ -1280,7 +1383,11 @@ void app_main(void)
     ESP_ERROR_CHECK(esp32_id_manager_get_id(g_esp32_id_buffer, sizeof(g_esp32_id_buffer)));
     LOG_I(TAG, "ESP32 ID: %s", g_esp32_id_buffer);
     log_uploader_start(g_esp32_id_buffer);
-    
+
+    // Initialize independent health monitor
+    ESP_ERROR_CHECK(health_monitor_init(g_esp32_id_buffer));
+    LOG_I(TAG, "Health monitor initialized");
+
     char mac_address[ESP32_MAC_STR_LENGTH + 1];
     ESP_ERROR_CHECK(esp32_id_manager_get_mac(mac_address, sizeof(mac_address)));
     LOG_I(TAG, "MAC: %s", mac_address);

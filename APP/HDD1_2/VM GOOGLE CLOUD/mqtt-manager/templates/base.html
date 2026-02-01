@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}HDD Monitor Dashboard{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Mobile Menu Toggle -->
+    <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Toggle menu">
+        <span></span>
+        <span></span>
+        <span></span>
+    </button>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h1 class="sidebar-logo">🔥 HDD Monitor</h1>
+            <p class="sidebar-subtitle">Sistema NFPA 72</p>
+        </div>
+
+        <nav class="sidebar-nav">
+            <a href="{{ url_for('dashboard') }}" class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">
+                <span class="nav-icon">📊</span>
+                <span class="nav-label">Dashboard</span>
+            </a>
+            <a href="{{ url_for('vm_monitoring') }}" class="nav-item {% if request.endpoint == 'vm_monitoring' %}active{% endif %}">
+                <span class="nav-icon">💻</span>
+                <span class="nav-label">VM Monitoring</span>
+            </a>
+            <a href="{{ url_for('esp32_devices') }}" class="nav-item {% if request.endpoint == 'esp32_devices' %}active{% endif %}">
+                <span class="nav-icon">📡</span>
+                <span class="nav-label">ESP32 Devices</span>
+            </a>
+            <a href="{{ url_for('clients_panels') }}" class="nav-item {% if request.endpoint == 'clients_panels' %}active{% endif %}">
+                <span class="nav-icon">🏢</span>
+                <span class="nav-label">Clients & Panels</span>
+            </a>
+            <a href="{{ url_for('events') }}" class="nav-item {% if request.endpoint == 'events' %}active{% endif %}">
+                <span class="nav-icon">📅</span>
+                <span class="nav-label">Events</span>
+            </a>
+            <a href="{{ url_for('mqtt_config') }}" class="nav-item {% if request.endpoint == 'mqtt_config' %}active{% endif %}">
+                <span class="nav-icon">⚙️</span>
+                <span class="nav-label">MQTT Config</span>
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="user-info-sidebar">
+                <span class="user-icon">👤</span>
+                <span class="user-name">{{ session.get('username', 'User') }}</span>
+            </div>
+            <a href="{{ url_for('logout') }}" class="btn-logout-sidebar">
+                <span class="logout-icon">🚪</span>
+                <span class="logout-label">Logout</span>
+            </a>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Page Header -->
+        <header class="page-header">
+            <div class="page-header-content">
+                <h1 class="page-title">{% block page_title %}Dashboard{% endblock %}</h1>
+                <p class="page-description">{% block page_description %}Unified monitoring and management{% endblock %}</p>
+            </div>
+            <div class="page-header-actions">
+                {% block header_actions %}{% endblock %}
+            </div>
+        </header>
+
+        <!-- Toast Notifications Container -->
+        <div id="toastContainer" class="toast-container"></div>
+
+        <!-- Page Content -->
+        <div class="page-content">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <!-- Base JavaScript -->
+    <script>
+        // Mobile menu toggle
+        const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+        const sidebar = document.getElementById('sidebar');
+
+        if (mobileMenuToggle) {
+            mobileMenuToggle.addEventListener('click', () => {
+                sidebar.classList.toggle('open');
+                mobileMenuToggle.classList.toggle('active');
+            });
+        }
+
+        // Close sidebar when clicking outside on mobile
+        document.addEventListener('click', (e) => {
+            if (window.innerWidth <= 768) {
+                if (!sidebar.contains(e.target) && !mobileMenuToggle.contains(e.target)) {
+                    sidebar.classList.remove('open');
+                    mobileMenuToggle.classList.remove('active');
+                }
+            }
+        });
+
+        // Toast notification function
+        function showToast(message, type = 'info', duration = 3000) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+
+            const icon = {
+                'success': '✓',
+                'error': '✗',
+                'warning': '⚠',
+                'info': 'ℹ'
+            }[type] || 'ℹ';
+
+            toast.innerHTML = `
+                <span class="toast-icon">${icon}</span>
+                <span class="toast-message">${message}</span>
+            `;
+
+            container.appendChild(toast);
+
+            // Trigger animation
+            setTimeout(() => toast.classList.add('show'), 10);
+
+            // Remove toast
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        }
+
+        // Make showToast available globally
+        window.showToast = showToast;
+    </script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

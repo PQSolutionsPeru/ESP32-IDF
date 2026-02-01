@@ -6,7 +6,10 @@
       "Bash(grep:*)",
       "Bash(./gradlew clean:*)",
       "Bash(powershell.exe -Command \".\\\\gradlew.bat clean\")",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(chmod:*)",
+      "Bash(tar:*)",
+      "Bash(ls:*)"
     ]
   }
 }

@@ -6,6 +6,7 @@ Flask API para gestionar usuarios MQTT en Mosquitto
 
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 from flask_cors import CORS
+from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import check_password_hash, generate_password_hash
 from functools import wraps
 import subprocess
@@ -14,6 +15,12 @@ import os
 from datetime import datetime, timedelta
 import logging
 
+# Import modules
+from modules.firestore_client import FirestoreClient
+from modules.cache import SimpleCache
+from modules.health_system import HealthMonitoringSystem
+from modules.email_alerter import EmailConfig
+
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -21,9 +28,71 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 
+# Initialize CSRF protection
+csrf = CSRFProtect(app)
+
+# Initialize Firestore client (will be initialized with service account in production)
+try:
+    service_account_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS',
+                                          '/home/pqsolutionsperu/vm-service-key.json')
+    if os.path.exists(service_account_path):
+        firestore_client = FirestoreClient(service_account_path)
+        logger.info("Firestore client initialized successfully")
+    else:
+        firestore_client = None
+        logger.warning(f"Firestore service account not found at {service_account_path}")
+except Exception as e:
+    firestore_client = None
+    logger.error(f"Failed to initialize Firestore client: {e}")
+
+# Initialize Health Monitoring System
+health_system = None
+try:
+    # Try to load email configuration
+    email_config_path = os.environ.get('EMAIL_CONFIG_PATH', './config.email.json')
+    if os.path.exists(email_config_path):
+        import json
+        with open(email_config_path, 'r') as f:
+            email_conf = json.load(f)
+
+        email_config = EmailConfig(
+            smtp_server=email_conf['smtp_server'],
+            smtp_port=email_conf['smtp_port'],
+            smtp_user=email_conf['smtp_user'],
+            smtp_password=email_conf['smtp_password'],
+            from_email=email_conf['from_email'],
+            to_emails=email_conf['to_emails'],
+            use_tls=email_conf.get('use_tls', True)
+        )
+
+        mqtt_broker = email_conf.get('mqtt_broker', 'localhost')
+        health_system = HealthMonitoringSystem(email_config=email_config, mqtt_broker=mqtt_broker)
+        health_system.start()
+        logger.info("Health monitoring system started with email alerts")
+    else:
+        # Start without email alerts
+        health_system = HealthMonitoringSystem(email_config=None, mqtt_broker='localhost')
+        health_system.start()
+        logger.warning("Health monitoring started WITHOUT email alerts (config not found)")
+
+except Exception as e:
+    logger.error(f"Failed to initialize health monitoring system: {e}")
+
 # Configuración de sesión
 app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', os.urandom(24).hex())
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
+app.config['WTF_CSRF_TIME_LIMIT'] = None  # No expiration for CSRF tokens
+
+# Security headers
+@app.after_request
+def add_security_headers(response):
+    """Add security headers to all responses"""
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-src 'self' http://127.0.0.1:19999 https://hddm.pqsolutionsperu.com;"
+    return response
 
 # Credenciales de login (DEBE configurar ADMIN_PASSWORD_HASH en variables de entorno)
 # Para generar un hash: python3 -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('tu_password'))"
@@ -164,7 +233,7 @@ def login_page():
     """Página de login"""
     # Si ya está autenticado, redirigir al dashboard
     if session.get('logged_in'):
-        return redirect(url_for('index'))
+        return redirect(url_for('dashboard'))
     return render_template('login.html')
 
 @app.route('/logout')
@@ -176,8 +245,227 @@ def logout():
 @app.route('/')
 @login_required
 def index():
-    """Página principal - Interfaz web (protegida)"""
-    return render_template('index.html', username=session.get('username', 'admin'))
+    """Redirect to dashboard"""
+    return redirect(url_for('dashboard'))
+
+# ============================================================================
+# DASHBOARD ROUTES
+# ============================================================================
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    """Main dashboard page"""
+    return render_template('dashboard.html', username=session.get('username', 'admin'))
+
+@app.route('/vm-monitoring')
+@login_required
+def vm_monitoring():
+    """VM monitoring page with Netdata iframe"""
+    return render_template('vm_monitoring.html', username=session.get('username', 'admin'))
+
+@app.route('/esp32-devices')
+@login_required
+def esp32_devices():
+    """ESP32 devices monitoring page"""
+    return render_template('esp32_devices.html', username=session.get('username', 'admin'))
+
+@app.route('/clients')
+@login_required
+def clients_panels():
+    """Clients and panels management page"""
+    return render_template('clients.html', username=session.get('username', 'admin'))
+
+@app.route('/events')
+@login_required
+def events():
+    """Events management page"""
+    return render_template('events.html', username=session.get('username', 'admin'))
+
+@app.route('/mqtt-config')
+@login_required
+def mqtt_config():
+    """MQTT configuration page (formerly index.html)"""
+    return render_template('mqtt_config.html', username=session.get('username', 'admin'))
+
+# ============================================================================
+# DASHBOARD API ENDPOINTS
+# ============================================================================
+
+@app.route('/api/dashboard/metrics', methods=['GET'])
+@login_required
+def get_dashboard_metrics():
+    """GET - Get dashboard overview metrics"""
+    if not firestore_client:
+        return jsonify({
+            'success': False,
+            'error': 'Firestore client not initialized'
+        }), 503
+
+    try:
+        metrics = firestore_client.get_dashboard_metrics()
+        return jsonify({
+            'success': True,
+            'metrics': metrics
+        })
+    except Exception as e:
+        logger.error(f"Error getting dashboard metrics: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/esp32/devices', methods=['GET'])
+@login_required
+def get_esp32_devices():
+    """GET - Get all ESP32 devices"""
+    if not firestore_client:
+        return jsonify({
+            'success': False,
+            'error': 'Firestore client not initialized'
+        }), 503
+
+    try:
+        devices = firestore_client.get_all_esp32_devices()
+        return jsonify({
+            'success': True,
+            'devices': devices,
+            'total': len(devices)
+        })
+    except Exception as e:
+        logger.error(f"Error getting ESP32 devices: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/esp32/devices/<device_id>', methods=['GET'])
+@login_required
+def get_esp32_device(device_id):
+    """GET - Get specific ESP32 device details"""
+    if not firestore_client:
+        return jsonify({
+            'success': False,
+            'error': 'Firestore client not initialized'
+        }), 503
+
+    try:
+        device = firestore_client.get_device_by_id(device_id)
+        if device:
+            return jsonify({
+                'success': True,
+                'device': device
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Device not found'
+            }), 404
+    except Exception as e:
+        logger.error(f"Error getting ESP32 device {device_id}: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/clients', methods=['GET'])
+@login_required
+def get_clients():
+    """GET - Get all clients"""
+    if not firestore_client:
+        return jsonify({
+            'success': False,
+            'error': 'Firestore client not initialized'
+        }), 503
+
+    try:
+        clients = firestore_client.get_all_clients()
+        return jsonify({
+            'success': True,
+            'clients': clients,
+            'total': len(clients)
+        })
+    except Exception as e:
+        logger.error(f"Error getting clients: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/clients/<client_id>/panels', methods=['GET'])
+@login_required
+def get_client_panels(client_id):
+    """GET - Get all panels for a client"""
+    if not firestore_client:
+        return jsonify({
+            'success': False,
+            'error': 'Firestore client not initialized'
+        }), 503
+
+    try:
+        panels = firestore_client.get_client_panels(client_id)
+        return jsonify({
+            'success': True,
+            'panels': panels,
+            'total': len(panels)
+        })
+    except Exception as e:
+        logger.error(f"Error getting panels for client {client_id}: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/panels/<client_id>/<panel_id>/relays', methods=['GET'])
+@login_required
+def get_panel_relays(client_id, panel_id):
+    """GET - Get all relays for a panel"""
+    if not firestore_client:
+        return jsonify({
+            'success': False,
+            'error': 'Firestore client not initialized'
+        }), 503
+
+    try:
+        relays = firestore_client.get_panel_relays(client_id, panel_id)
+        return jsonify({
+            'success': True,
+            'relays': relays,
+            'total': len(relays)
+        })
+    except Exception as e:
+        logger.error(f"Error getting relays for panel {panel_id}: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/events/<client_id>', methods=['GET'])
+@login_required
+def get_client_events(client_id):
+    """GET - Get events for a client"""
+    if not firestore_client:
+        return jsonify({
+            'success': False,
+            'error': 'Firestore client not initialized'
+        }), 503
+
+    try:
+        status = request.args.get('status')
+        limit = int(request.args.get('limit', 100))
+
+        events = firestore_client.get_client_events(client_id, status=status, limit=limit)
+        return jsonify({
+            'success': True,
+            'events': events,
+            'total': len(events)
+        })
+    except Exception as e:
+        logger.error(f"Error getting events for client {client_id}: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 # ============================================================================
 # API REST
@@ -378,6 +666,127 @@ def health_check():
         'status': 'healthy',
         'timestamp': datetime.now().isoformat()
     })
+
+# ============================================================================
+# ESP32 HEALTH MONITORING API
+# ============================================================================
+
+@app.route('/api/esp32/health/status', methods=['GET'])
+@login_required
+def get_esp32_health_status():
+    """Get health status for all ESP32 devices"""
+    if not health_system:
+        return jsonify({
+            'success': False,
+            'error': 'Health monitoring system not initialized'
+        }), 503
+
+    try:
+        monitor = health_system.get_health_monitor()
+        all_status = monitor.get_all_device_status()
+
+        return jsonify({
+            'success': True,
+            'devices': [
+                {
+                    'esp32_id': s.esp32_id,
+                    'is_healthy': s.is_healthy,
+                    'last_heartbeat': s.last_heartbeat.isoformat() if s.last_heartbeat else None,
+                    'total_alerts': s.total_alerts,
+                    'critical_alerts_24h': s.critical_alerts_24h,
+                    'consecutive_failures': s.consecutive_failures,
+                    'uptime_ms': s.uptime_ms,
+                    'last_alert': {
+                        'status': s.last_alert.status,
+                        'issue_type': s.last_alert.issue_type,
+                        'description': s.last_alert.description,
+                        'timestamp': s.last_alert.timestamp.isoformat()
+                    } if s.last_alert else None
+                }
+                for s in all_status
+            ]
+        })
+    except Exception as e:
+        logger.error(f"Error getting ESP32 health status: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/esp32/health/alerts/<esp32_id>', methods=['GET'])
+@login_required
+def get_esp32_alerts(esp32_id):
+    """Get alert history for specific ESP32 device"""
+    if not health_system:
+        return jsonify({
+            'success': False,
+            'error': 'Health monitoring system not initialized'
+        }), 503
+
+    try:
+        limit = int(request.args.get('limit', 50))
+        monitor = health_system.get_health_monitor()
+        alerts = monitor.get_device_alerts(esp32_id, limit=limit)
+
+        return jsonify({
+            'success': True,
+            'esp32_id': esp32_id,
+            'alerts': [
+                {
+                    'status': a.status,
+                    'issue_type': a.issue_type,
+                    'description': a.description,
+                    'uptime_ms': a.uptime_ms,
+                    'free_heap': a.free_heap,
+                    'min_free_heap': a.min_free_heap,
+                    'boot_count': a.boot_count,
+                    'timestamp': a.timestamp.isoformat(),
+                    'server_received_at': a.server_received_at.isoformat()
+                }
+                for a in alerts
+            ]
+        })
+    except Exception as e:
+        logger.error(f"Error getting alerts for {esp32_id}: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/esp32/health/statistics', methods=['GET'])
+@login_required
+def get_health_statistics():
+    """Get overall health statistics"""
+    if not health_system:
+        return jsonify({
+            'success': False,
+            'error': 'Health monitoring system not initialized'
+        }), 503
+
+    try:
+        monitor = health_system.get_health_monitor()
+        stats = monitor.get_statistics()
+        unhealthy = monitor.get_unhealthy_devices()
+
+        return jsonify({
+            'success': True,
+            'statistics': stats,
+            'unhealthy_devices': [
+                {
+                    'esp32_id': d.esp32_id,
+                    'critical_alerts_24h': d.critical_alerts_24h,
+                    'consecutive_failures': d.consecutive_failures,
+                    'last_issue': d.last_alert.issue_type if d.last_alert else None
+                }
+                for d in unhealthy
+            ]
+        })
+    except Exception as e:
+        logger.error(f"Error getting health statistics: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 # ============================================================================
 # ERROR HANDLERS

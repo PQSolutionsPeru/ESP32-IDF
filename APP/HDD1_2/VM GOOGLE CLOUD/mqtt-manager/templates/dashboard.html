@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - HDD Monitor{% endblock %}
+{% block page_title %}Dashboard Overview{% endblock %}
+{% block page_description %}Real-time system monitoring and status{% endblock %}
+
+{% block header_actions %}
+<button class="btn btn-secondary" id="refreshBtn" onclick="refreshDashboard()">
+    <span>🔄</span>
+    <span>Refresh</span>
+</button>
+{% endblock %}
+
+{% block content %}
+<!-- Metrics Cards Grid -->
+<div class="metrics-grid">
+    <!-- ESP32 Devices Online -->
+    <div class="metric-card">
+        <div class="metric-header">
+            <span class="metric-icon">📡</span>
+        </div>
+        <div class="metric-value" id="esp32Online">--</div>
+        <div class="metric-label">ESP32 Devices Online</div>
+        <div class="metric-subtitle" id="esp32Total">of -- total devices</div>
+    </div>
+
+    <!-- Panels Status -->
+    <div class="metric-card">
+        <div class="metric-header">
+            <span class="metric-icon">🏢</span>
+        </div>
+        <div class="metric-value" id="panelsOk">--</div>
+        <div class="metric-label">Panels OK</div>
+        <div class="metric-subtitle" id="panelsTotal">of -- total panels</div>
+    </div>
+
+    <!-- Events Today -->
+    <div class="metric-card">
+        <div class="metric-header">
+            <span class="metric-icon">📅</span>
+        </div>
+        <div class="metric-value" id="eventsToday">--</div>
+        <div class="metric-label">Events Today</div>
+        <div class="metric-subtitle">Scheduled & ongoing</div>
+    </div>
+
+    <!-- MQTT Status -->
+    <div class="metric-card">
+        <div class="metric-header">
+            <span class="metric-icon">⚡</span>
+        </div>
+        <div class="metric-value">
+            <span class="status-badge status-info" id="mqttStatus">
+                <span class="status-dot"></span>
+                <span>Checking...</span>
+            </span>
+        </div>
+        <div class="metric-label">MQTT Broker</div>
+        <div class="metric-subtitle">Message broker status</div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="card" style="margin-bottom: 32px;">
+    <div style="padding: 24px;">
+        <h2 style="margin-bottom: 16px; font-size: 1.25rem; font-weight: 600;">Quick Actions</h2>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <a href="{{ url_for('esp32_devices') }}" class="btn btn-primary">
+                <span>📡</span>
+                <span>Monitor Devices</span>
+            </a>
+            <a href="{{ url_for('clients_panels') }}" class="btn btn-primary">
+                <span>🏢</span>
+                <span>View Panels</span>
+            </a>
+            <a href="{{ url_for('events') }}" class="btn btn-primary">
+                <span>📅</span>
+                <span>Manage Events</span>
+            </a>
+            <a href="{{ url_for('vm_monitoring') }}" class="btn btn-secondary">
+                <span>💻</span>
+                <span>VM Metrics</span>
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- System Status -->
+<div class="card">
+    <div style="padding: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <h2 style="font-size: 1.25rem; font-weight: 600;">System Status</h2>
+            <span id="lastUpdated" style="font-size: 0.875rem; color: var(--text-secondary);">Never updated</span>
+        </div>
+        <div id="statusMessage" style="padding: 16px; background: var(--bg-color); border-radius: 8px; color: var(--text-secondary);">
+            Loading system status...
+        </div>
+    </div>
+</div>
+
+<style>
+.card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: var(--card-shadow);
+    border: 1px solid var(--border-color);
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script>
+// Initialize dashboard on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Start auto-refresh
+    startDashboardRefresh();
+
+    // Initial load
+    refreshDashboard();
+});
+
+function refreshDashboard() {
+    // This function will be implemented in dashboard.js
+    if (typeof updateDashboardMetrics === 'function') {
+        updateDashboardMetrics();
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,461 @@
+{% extends "base.html" %}
+
+{% block title %}Clients & Panels - HDD Monitor{% endblock %}
+{% block page_title %}Clients & Panels{% endblock %}
+{% block page_description %}Manage fire alarm panels and relay status{% endblock %}
+
+{% block header_actions %}
+<button class="btn btn-secondary" onclick="refreshClients()">
+    <span>🔄</span>
+    <span>Refresh</span>
+</button>
+{% endblock %}
+
+{% block content %}
+<!-- Clients Accordion -->
+<div id="clientsAccordion" class="clients-accordion">
+    <div style="text-align: center; padding: 40px; color: var(--text-secondary);">
+        Loading clients...
+    </div>
+</div>
+
+<!-- Panel Relay Modal -->
+<div id="relayModal" class="modal" style="display: none;">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <div>
+                <h2 id="relayModalTitle">Panel Relays</h2>
+                <p id="relayModalSubtitle" style="color: var(--text-secondary); font-size: 0.938rem; margin-top: 4px;"></p>
+            </div>
+            <button class="modal-close" onclick="closeRelayModal()">&times;</button>
+        </div>
+        <div class="modal-body" id="relayModalBody">
+            <!-- Relay grid will be inserted here -->
+        </div>
+    </div>
+</div>
+
+<style>
+.clients-accordion {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.client-item {
+    background: white;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--card-shadow);
+    overflow: hidden;
+    transition: all 0.3s;
+}
+
+.client-header {
+    padding: 20px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.client-header:hover {
+    background: var(--bg-color);
+}
+
+.client-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.client-icon {
+    font-size: 2rem;
+}
+
+.client-details h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.client-meta {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.client-toggle {
+    font-size: 1.5rem;
+    transition: transform 0.3s;
+}
+
+.client-toggle.open {
+    transform: rotate(180deg);
+}
+
+.panels-container {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out;
+    background: var(--bg-color);
+}
+
+.panels-container.open {
+    max-height: 2000px;
+}
+
+.panels-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+    padding: 20px;
+}
+
+.panel-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.panel-card:hover {
+    box-shadow: var(--card-shadow-hover);
+    transform: translateY(-2px);
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+}
+
+.panel-name {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.panel-location {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.panel-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.panel-info-row {
+    display: flex;
+    justify-content: space-between;
+}
+
+.relay-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    padding: 0;
+}
+
+.relay-item {
+    background: var(--bg-color);
+    border-radius: 8px;
+    padding: 16px;
+    border: 2px solid var(--border-color);
+}
+
+.relay-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.relay-number {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.relay-info {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.875rem;
+}
+
+.relay-info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.relay-label {
+    color: var(--text-secondary);
+}
+
+.relay-value {
+    font-weight: 600;
+    font-family: monospace;
+}
+
+.modal-large .modal-content {
+    max-width: 900px;
+}
+
+@media (max-width: 768px) {
+    .panels-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .relay-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let allClients = [];
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadClients();
+
+    // Close modal when clicking outside
+    document.getElementById('relayModal')?.addEventListener('click', function(e) {
+        if (e.target.id === 'relayModal') {
+            closeRelayModal();
+        }
+    });
+});
+
+async function loadClients() {
+    try {
+        const response = await fetch('/api/clients', {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+        const data = await response.json();
+        if (data.success && data.clients) {
+            allClients = data.clients;
+            renderClients(allClients);
+        } else {
+            throw new Error(data.error || 'Failed to load clients');
+        }
+    } catch (error) {
+        console.error('Error loading clients:', error);
+        document.getElementById('clientsAccordion').innerHTML = `
+            <div style="text-align: center; padding: 40px; color: var(--danger-color);">
+                ⚠️ Failed to load clients
+            </div>
+        `;
+        showToast('Failed to load clients', 'error');
+    }
+}
+
+async function renderClients(clients) {
+    const accordion = document.getElementById('clientsAccordion');
+    if (!accordion) return;
+
+    if (clients.length === 0) {
+        accordion.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                No clients found
+            </div>
+        `;
+        return;
+    }
+
+    accordion.innerHTML = '';
+
+    for (const client of clients) {
+        const clientDiv = document.createElement('div');
+        clientDiv.className = 'client-item';
+        clientDiv.innerHTML = `
+            <div class="client-header" onclick="toggleClient('${client.id}')">
+                <div class="client-info">
+                    <span class="client-icon">🏢</span>
+                    <div class="client-details">
+                        <h3>${client.name || 'Unnamed Client'}</h3>
+                        <p class="client-meta">ID: ${client.id}</p>
+                    </div>
+                </div>
+                <span class="client-toggle" id="toggle-${client.id}">▼</span>
+            </div>
+            <div class="panels-container" id="panels-${client.id}">
+                <div class="panels-grid" id="panels-grid-${client.id}">
+                    <div style="text-align: center; padding: 20px; color: var(--text-secondary);">
+                        Loading panels...
+                    </div>
+                </div>
+            </div>
+        `;
+        accordion.appendChild(clientDiv);
+    }
+}
+
+async function toggleClient(clientId) {
+    const container = document.getElementById(`panels-${clientId}`);
+    const toggle = document.getElementById(`toggle-${clientId}`);
+    const grid = document.getElementById(`panels-grid-${clientId}`);
+
+    if (!container || !toggle) return;
+
+    const isOpen = container.classList.contains('open');
+
+    if (isOpen) {
+        container.classList.remove('open');
+        toggle.classList.remove('open');
+    } else {
+        container.classList.add('open');
+        toggle.classList.add('open');
+
+        // Load panels if not loaded yet
+        if (grid && grid.innerHTML.includes('Loading')) {
+            await loadPanels(clientId);
+        }
+    }
+}
+
+async function loadPanels(clientId) {
+    try {
+        const response = await fetch(`/api/clients/${clientId}/panels`);
+        const data = await response.json();
+
+        if (data.success && data.panels) {
+            renderPanels(clientId, data.panels);
+        }
+    } catch (error) {
+        console.error('Error loading panels:', error);
+    }
+}
+
+function renderPanels(clientId, panels) {
+    const grid = document.getElementById(`panels-grid-${clientId}`);
+    if (!grid) return;
+
+    if (panels.length === 0) {
+        grid.innerHTML = '<div style="text-align: center; padding: 20px;">No panels found</div>';
+        return;
+    }
+
+    grid.innerHTML = panels.map(panel => {
+        const statusClass = {
+            'ok': 'status-online',
+            'partial': 'status-warning',
+            'disconnected': 'status-offline',
+            'no_relays': 'status-info'
+        }[panel.panel_status] || 'status-info';
+
+        return `
+            <div class="panel-card" onclick="showPanelRelays('${clientId}', '${panel.id}', '${panel.name}')">
+                <div class="panel-header">
+                    <div>
+                        <div class="panel-name">${panel.name || 'Unnamed Panel'}</div>
+                        <div class="panel-location">${panel.location || 'No location'}</div>
+                    </div>
+                    <span class="status-badge ${statusClass}">
+                        <span class="status-dot"></span>
+                    </span>
+                </div>
+                <div class="panel-info">
+                    <div class="panel-info-row">
+                        <span>ESP32:</span>
+                        <strong>${panel.esp32_id || 'N/A'}</strong>
+                    </div>
+                    <div class="panel-info-row">
+                        <span>Relays:</span>
+                        <strong>${panel.relay_count || 0}</strong>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function showPanelRelays(clientId, panelId, panelName) {
+    try {
+        const response = await fetch(`/api/panels/${clientId}/${panelId}/relays`);
+        const data = await response.json();
+
+        if (data.success && data.relays) {
+            renderRelayModal(panelName, data.relays);
+        }
+    } catch (error) {
+        console.error('Error loading relays:', error);
+        showToast('Failed to load relays', 'error');
+    }
+}
+
+function renderRelayModal(panelName, relays) {
+    const modal = document.getElementById('relayModal');
+    const title = document.getElementById('relayModalTitle');
+    const subtitle = document.getElementById('relayModalSubtitle');
+    const body = document.getElementById('relayModalBody');
+
+    title.textContent = panelName;
+    subtitle.textContent = `${relays.length} relays configured`;
+
+    body.innerHTML = `
+        <div class="relay-grid">
+            ${relays.map(relay => {
+                const statusClass = relay.status === 'OK' ? 'status-online' : 'status-offline';
+                return `
+                    <div class="relay-item">
+                        <div class="relay-header">
+                            <span class="relay-number">Relay ${relay.relay_number}</span>
+                            <span class="status-badge ${statusClass}">
+                                <span class="status-dot"></span>
+                                ${relay.status || 'UNKNOWN'}
+                            </span>
+                        </div>
+                        <div class="relay-info">
+                            <div class="relay-info-row">
+                                <span class="relay-label">Name:</span>
+                                <span class="relay-value">${relay.name || 'N/A'}</span>
+                            </div>
+                            <div class="relay-info-row">
+                                <span class="relay-label">Type:</span>
+                                <span class="relay-value">${relay.contact_type || 'N/A'}</span>
+                            </div>
+                            <div class="relay-info-row">
+                                <span class="relay-label">Active:</span>
+                                <span class="relay-value">${relay.isActive ? 'Yes' : 'No'}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+
+    modal.style.display = 'flex';
+}
+
+function closeRelayModal() {
+    const modal = document.getElementById('relayModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function refreshClients() {
+    loadClients();
+    showToast('Clients refreshed', 'success');
+}
+
+window.toggleClient = toggleClient;
+window.showPanelRelays = showPanelRelays;
+window.closeRelayModal = closeRelayModal;
+window.refreshClients = refreshClients;
+</script>
+{% endblock %}

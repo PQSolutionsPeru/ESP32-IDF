@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}Events - HDD Monitor{% endblock %}
+{% block page_title %}Events Management{% endblock %}
+{% block page_description %}View and manage scheduled fire alarm events{% endblock %}
+
+{% block header_actions %}
+<div style="display: flex; gap: 12px; align-items: center;">
+    <select id="clientFilter" class="filter-select" onchange="loadEventsForSelectedClient()">
+        <option value="">Select Client</option>
+    </select>
+    <select id="statusFilter" class="filter-select" onchange="filterEventsByStatus()">
+        <option value="">All Status</option>
+        <option value="PROGRAMADO">Programado</option>
+        <option value="ACEPTADO">Aceptado</option>
+        <option value="FINALIZADO">Finalizado</option>
+    </select>
+    <button class="btn btn-secondary" onclick="refreshEvents()">
+        <span>🔄</span>
+        <span>Refresh</span>
+    </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Events Table -->
+<div class="card">
+    <div class="table-container">
+        <table class="events-table">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Panel</th>
+                    <th>Status</th>
+                    <th>Start Date</th>
+                    <th>End Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="eventsTableBody">
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                        Select a client to view events
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Event Detail Modal -->
+<div id="eventModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="eventModalTitle">Event Details</h2>
+            <button class="modal-close" onclick="closeEventModal()">&times;</button>
+        </div>
+        <div class="modal-body" id="eventModalBody">
+            <!-- Event details will be inserted here -->
+        </div>
+    </div>
+</div>
+
+<style>
+.filter-select {
+    padding: 10px 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: white;
+    font-size: 0.938rem;
+    font-weight: 500;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s;
+    min-width: 150px;
+}
+
+.filter-select:hover {
+    border-color: var(--primary-color);
+}
+
+.card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: var(--card-shadow);
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+
+.table-container {
+    overflow-x: auto;
+}
+
+.events-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.events-table thead {
+    background: var(--bg-color);
+    border-bottom: 2px solid var(--border-color);
+}
+
+.events-table th {
+    padding: 16px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+}
+
+.events-table tbody tr {
+    border-bottom: 1px solid var(--border-color);
+    transition: background 0.2s;
+    cursor: pointer;
+}
+
+.events-table tbody tr:hover {
+    background: var(--bg-color);
+}
+
+.events-table td {
+    padding: 16px;
+    font-size: 0.938rem;
+    color: var(--text-primary);
+}
+
+.event-title {
+    font-weight: 600;
+}
+
+.btn-icon {
+    padding: 8px 12px;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 1rem;
+}
+
+.btn-icon:hover {
+    background: var(--bg-color);
+    border-color: var(--primary-color);
+}
+
+@media (max-width: 768px) {
+    .events-table {
+        font-size: 0.813rem;
+    }
+
+    .events-table th,
+    .events-table td {
+        padding: 12px 8px;
+    }
+
+    .filter-select {
+        min-width: auto;
+        width: 100%;
+    }
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/events.js') }}"></script>
+{% endblock %}
