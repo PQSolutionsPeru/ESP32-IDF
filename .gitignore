@@ -48,3 +48,23 @@ APP/HDDMonitor/functions/fir-hdd-monitor-d00de-firebase-adminsdk-mmnr4-ceb93cce3
 APP/HDDMonitor/functions/fir-hdd-monitor-d00de-firebase-adminsdk-mmnr4-ceb93cce3e.json
 APP/HDDMonitor/functions/fir-hdd-monitor-d00de-firebase-adminsdk-mmnr4-ceb93cce3e.json
 APP/HDDMonitor/functions/fir-hdd-monitor-d00de-firebase-adminsdk-mmnr4-ceb93cce3e.json
+
+# ============================================
+# PRIVATE CREDENTIALS - NEVER COMMIT
+# ============================================
+APP/PRIVATE_CREDENTIALS/
+PRIVATE_CREDENTIALS/
+**/PRIVATE_CREDENTIALS/
+
+# Android build artifacts (contain API keys)
+APP/build/
+APP/*/build/
+APP/.gradle/
+*.apk
+*.aab
+
+# VM Master Documentation (contains passwords)
+APP/HDD1_2/VM GOOGLE CLOUD/VM_MASTER_DOCUMENTATION.md
+
+# Google Services JSON (Firebase API keys)
+**/google-services.json
