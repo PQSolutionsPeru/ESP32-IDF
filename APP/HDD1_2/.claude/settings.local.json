@@ -3,7 +3,10 @@
     "allow": [
       "WebSearch",
       "Bash(find:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(./gradlew clean:*)",
+      "Bash(powershell.exe -Command \".\\\\gradlew.bat clean\")",
+      "Bash(python3:*)"
     ]
   }
 }

@@ -54,10 +54,11 @@ object AppModule {
     @Provides
     @Singleton
     fun provideUserRepository(
+        @ApplicationContext context: Context,
         firestore: FirebaseFirestore,
         auth: FirebaseAuth
     ): UserRepository {
-        return UserRepository(firestore, auth)
+        return UserRepository(context, firestore, auth)
     }
 
     @Provides

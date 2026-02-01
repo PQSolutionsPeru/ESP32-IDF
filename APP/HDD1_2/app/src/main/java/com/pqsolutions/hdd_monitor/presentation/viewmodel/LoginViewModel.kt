@@ -53,12 +53,23 @@ class LoginViewModel @Inject constructor(
 
     private suspend fun updateFCMToken() {
         try {
+            // Primero, enviar cualquier token pendiente guardado anteriormente
+            Log.d(TAG, "Verificando tokens FCM pendientes")
+            userRepository.sendPendingFCMToken()
+                .onSuccess {
+                    Log.d(TAG, "Tokens pendientes procesados exitosamente")
+                }
+                .onFailure { e ->
+                    Log.e(TAG, "Error procesando tokens pendientes: ${e.message}")
+                }
+
+            // Luego, obtener y actualizar el token actual
             val token = FirebaseMessaging.getInstance().token.await()
-            Log.d(TAG, "Token FCM obtenido: $token")
+            Log.d(TAG, "Token FCM actual obtenido: $token")
 
             val currentUser = userRepository.getCurrentUser()
             if (currentUser != null) {
-                Log.d(TAG, "Actualizando token para usuario: ${currentUser.email} (${currentUser.role})")
+                Log.d(TAG, "Actualizando token actual para usuario: ${currentUser.email} (${currentUser.role})")
                 userRepository.updateFcmToken(currentUser.documentName, token)
                     .onSuccess {
                         Log.d(TAG, "Token FCM actualizado exitosamente")

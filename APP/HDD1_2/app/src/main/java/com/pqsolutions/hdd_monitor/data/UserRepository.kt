@@ -1,5 +1,6 @@
 package com.pqsolutions.hdd_monitor.data
 
+import android.content.Context
 import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
@@ -7,6 +8,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import com.pqsolutions.hdd_monitor.data.util.IdManager
 import com.pqsolutions.hdd_monitor.domain.model.UserRole
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -17,12 +19,14 @@ import javax.inject.Singleton
 
 @Singleton
 class UserRepository @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val firestore: FirebaseFirestore,
     private val auth: FirebaseAuth
 ) {
     companion object {
         private const val TAG = "UserRepository"
         private const val BASE_PATH = "hdd-monitor/accounts"
+        private const val PREF_PENDING_FCM_TOKEN = "pending_fcm_token"
     }
 
     private val getUserMutex = Mutex()
@@ -351,6 +355,32 @@ class UserRepository @Inject constructor(
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Error updating FCM token: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    suspend fun sendPendingFCMToken(): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val sharedPreferences = context.getSharedPreferences("fcm_prefs", Context.MODE_PRIVATE)
+            val pendingToken = sharedPreferences.getString(PREF_PENDING_FCM_TOKEN, null)
+
+            if (pendingToken != null) {
+                Log.d(TAG, "Token pendiente encontrado, enviando al servidor")
+                val result = updateFCMToken(pendingToken)
+
+                if (result.isSuccess) {
+                    // Limpiar el token pendiente después de enviarlo exitosamente
+                    sharedPreferences.edit().remove(PREF_PENDING_FCM_TOKEN).apply()
+                    Log.d(TAG, "Token pendiente enviado y limpiado exitosamente")
+                }
+
+                return@withContext result
+            } else {
+                Log.d(TAG, "No hay token pendiente para enviar")
+                return@withContext Result.success(Unit)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error enviando token pendiente: ${e.message}")
             Result.failure(e)
         }
     }

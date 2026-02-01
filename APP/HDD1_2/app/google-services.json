@@ -2,7 +2,7 @@
   "project_info": {
     "project_number": "1002136032862",
     "project_id": "fir-hdd-monitor-d00de",
-    "storage_bucket": "fir-hdd-monitor-d00de.appspot.com"
+    "storage_bucket": "fir-hdd-monitor-d00de.firebasestorage.app"
   },
   "client": [
     {
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyB3lWszDhwWGiUTx0ENpjdgrrHwFzLfKX8"
+          "current_key": "AIzaSyAW3hQT7IaJXvrSnwEtvUDRjBbswexlTQU"
         }
       ],
       "services": {

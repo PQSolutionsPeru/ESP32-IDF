@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.media.RingtoneManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -51,8 +52,13 @@ class FirebaseMessagingService : FirebaseMessagingService() {
     private val SHOW_VISUAL_NOTIFICATIONS = true
     private val SHOW_STATUS_NOTIFICATIONS = true
 
+    private val sharedPreferences: SharedPreferences by lazy {
+        getSharedPreferences("fcm_prefs", Context.MODE_PRIVATE)
+    }
+
     companion object {
         private const val TAG = "OptimizedFCMService"
+        private const val PREF_PENDING_FCM_TOKEN = "pending_fcm_token"
     }
 
     override fun onCreate() {
@@ -118,8 +124,19 @@ class FirebaseMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         Log.d(TAG, "Nuevo token FCM para 24/7: $token")
 
+        // Guardar el token localmente siempre
+        sharedPreferences.edit().putString(PREF_PENDING_FCM_TOKEN, token).apply()
+        Log.d(TAG, "Token guardado en SharedPreferences")
+
         CoroutineScope(Dispatchers.IO).launch {
-            sendTokenToServerWithRetry(token)
+            // Solo intentar enviar si hay un usuario logueado
+            val currentUser = userRepository.getCurrentUser()
+            if (currentUser != null) {
+                Log.d(TAG, "Usuario logueado detectado, enviando token al servidor")
+                sendTokenToServerWithRetry(token)
+            } else {
+                Log.d(TAG, "No hay usuario logueado, token guardado para envío posterior")
+            }
         }
     }
 
