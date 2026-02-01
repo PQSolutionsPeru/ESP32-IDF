@@ -20,7 +20,7 @@
 static const char *TAG = "HEALTH_MON";
 
 // Configuration - ULTRA-LIGHTWEIGHT FOR NATIVE APPROACH
-#define HEALTH_MONITOR_TASK_STACK_SIZE (1536)  // Minimal stack for simple monitoring
+#define HEALTH_MONITOR_TASK_STACK_SIZE (3072)  // 3KB stack (increased for MQTT payloads)
 #define HEALTH_MONITOR_TASK_PRIORITY (tskIDLE_PRIORITY + 2)  // Low priority (not critical path)
 #define HEALTH_MONITOR_CORE_ID (1)  // Run on Core 1
 #define HEALTH_MONITOR_CHECK_INTERVAL_MS (30000)  // Check every 30 seconds (reduce CPU usage)
