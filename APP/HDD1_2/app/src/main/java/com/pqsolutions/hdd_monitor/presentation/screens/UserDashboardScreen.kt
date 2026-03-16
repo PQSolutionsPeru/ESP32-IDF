@@ -69,6 +69,7 @@ fun UserDashboardScreen(
     onViewEventsClick: () -> Unit,
     onViewNotificationHistoryClick: () -> Unit,
     onManageESP32Click: () -> Unit,
+    onAboutClick: () -> Unit,
     hasPendingNotifications: Boolean,
     selectedPanelId: String? = null
 ) {
@@ -151,6 +152,7 @@ fun UserDashboardScreen(
                 onViewEventsClick = onViewEventsClick,
                 onViewNotificationHistoryClick = onViewNotificationHistoryClick,
                 onManageESP32Click = onManageESP32Click,
+                onAboutClick = onAboutClick,
                 context = context
             )
 
@@ -272,6 +274,7 @@ private fun DashboardActions(
     onViewEventsClick: () -> Unit,
     onViewNotificationHistoryClick: () -> Unit,
     onManageESP32Click: () -> Unit,
+    onAboutClick: () -> Unit,
     context: android.content.Context
 ) {
     Log.d(TAG, "Rendering DashboardActions")
@@ -308,6 +311,15 @@ private fun DashboardActions(
                 onManageESP32Click()
             },
             text = "Gestionar ESP32"
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        DashboardButton(
+            onClick = {
+                Log.d(TAG, "About button clicked")
+                performHapticFeedback(context)
+                onAboutClick()
+            },
+            text = "Acerca de"
         )
     }
 }

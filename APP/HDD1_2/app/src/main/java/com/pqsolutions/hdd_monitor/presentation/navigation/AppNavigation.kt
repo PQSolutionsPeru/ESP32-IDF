@@ -32,6 +32,7 @@ sealed class Screen(val route: String) {
     object RelayControl : Screen("relay_control")
     object ESP32Management : Screen("esp32_management")
     object PanelConfiguration : Screen("panel_configuration")
+    object About : Screen("about")
 
     companion object {
         fun panelConfiguration(panelId: String? = null) = if (panelId != null) "panel_configuration?panelId=$panelId" else "panel_configuration"
@@ -90,6 +91,7 @@ fun AppNavigation(viewModel: MainViewModel) {
                         onViewEventsClick = { navController.navigate(Screen.Events.route) },
                         onViewNotificationHistoryClick = { navController.navigate(Screen.NotificationHistory.route) },
                         onManageESP32Click = { navController.navigate(Screen.ESP32Management.route) },
+                        onAboutClick = { navController.navigate(Screen.About.route) },
                         hasPendingNotifications = hasPendingNotifications,
                         selectedPanelId = null
                     )
@@ -100,6 +102,7 @@ fun AppNavigation(viewModel: MainViewModel) {
                         onViewNotificationHistoryClick = { navController.navigate(Screen.NotificationHistory.route) },
                         onViewEventsClick = { navController.navigate(Screen.Events.route) },
                         onManageESP32Click = { navController.navigate(Screen.ESP32Management.route) },
+                        onAboutClick = { navController.navigate(Screen.About.route) },
                         hasPendingNotifications = hasPendingNotifications,
                         selectedPanelId = null
                     )
@@ -196,6 +199,16 @@ fun AppNavigation(viewModel: MainViewModel) {
                 },
                 hasPendingNotifications = hasPendingNotifications,
                 onNotificationClick = { navController.navigate(Screen.NotificationHistory.route) }
+            )
+        }
+
+        composable(Screen.About.route) {
+            AboutScreen(
+                onBackClick = {
+                    if (!navController.popBackStack()) {
+                        navController.navigate(Screen.Dashboard.route)
+                    }
+                }
             )
         }
 
