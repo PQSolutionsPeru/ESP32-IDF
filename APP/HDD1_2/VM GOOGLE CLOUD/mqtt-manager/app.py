@@ -768,6 +768,7 @@ def get_users():
     })
 
 @app.route('/api/mqtt/users', methods=['POST'])
+@csrf.exempt
 @login_required
 def create_user():
     """POST - Crea un nuevo usuario MQTT (ESP32)"""
@@ -822,6 +823,7 @@ def create_user():
     }), 201
 
 @app.route('/api/mqtt/users/<username>', methods=['DELETE'])
+@csrf.exempt
 @login_required
 def delete_user(username):
     """DELETE - Elimina un usuario MQTT"""
