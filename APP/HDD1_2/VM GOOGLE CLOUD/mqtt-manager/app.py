@@ -7,11 +7,15 @@ Flask API para gestionar usuarios MQTT en Mosquitto
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 from flask_cors import CORS
 from flask_wtf.csrf import CSRFProtect
+from flask_socketio import SocketIO, emit
 from werkzeug.security import check_password_hash, generate_password_hash
 from functools import wraps
 import subprocess
 import re
 import os
+import secrets
+import hashlib
+import threading
 from datetime import datetime, timedelta
 import logging
 
@@ -20,6 +24,7 @@ from modules.firestore_client import FirestoreClient
 from modules.cache import SimpleCache
 from modules.health_system import HealthMonitoringSystem
 from modules.email_alerter import EmailConfig
+from modules.firestore_realtime import FirestoreRealtimeListener
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -79,9 +84,34 @@ except Exception as e:
     logger.error(f"Failed to initialize health monitoring system: {e}")
 
 # Configuración de sesión
-app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', os.urandom(24).hex())
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
+_secret_key = os.environ.get('FLASK_SECRET_KEY')
+if not _secret_key:
+    logger.critical("[AUTH] FLASK_SECRET_KEY no está configurado. Las sesiones no sobrevivirán reinicios. "
+                    "Configura esta variable de entorno con un valor fijo.")
+    _secret_key = os.urandom(24).hex()
+app.config['SECRET_KEY'] = _secret_key
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 app.config['WTF_CSRF_TIME_LIMIT'] = None  # No expiration for CSRF tokens
+
+# Constantes de sesión
+SESSION_LIFETIME_DAYS = 30
+SESSION_CHECK_INTERVAL = 300  # Validar contra Firestore cada 5 minutos
+
+# Initialize SocketIO for real-time updates
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+logger.info("SocketIO initialized successfully")
+
+# Initialize Firestore real-time listener
+realtime_listener = None
+if firestore_client and hasattr(firestore_client, 'db'):
+    try:
+        realtime_listener = FirestoreRealtimeListener(firestore_client.db, socketio)
+        realtime_listener.start()
+        logger.info("Firestore real-time listener started successfully")
+    except Exception as e:
+        logger.error(f"Failed to start Firestore real-time listener: {e}")
+else:
+    logger.warning("Firestore real-time listener not started (Firestore client not initialized)")
 
 # Security headers
 @app.after_request
@@ -107,20 +137,176 @@ MOSQUITTO_PASSWD_CMD = '/usr/bin/mosquitto_passwd'
 SYSTEMCTL_CMD = '/bin/systemctl'
 
 # ============================================================================
-# AUTENTICACIÓN
+# AUTENTICACIÓN - SINGLE SESSION
 # ============================================================================
 
+def _generate_device_fingerprint(req):
+    """Genera un fingerprint del dispositivo basado en headers HTTP"""
+    components = [
+        req.headers.get('User-Agent', ''),
+        req.headers.get('Accept-Language', ''),
+        req.headers.get('Accept-Encoding', ''),
+    ]
+    return hashlib.sha256('|'.join(components).encode()).hexdigest()[:16]
+
+def _sessions_ref():
+    """Referencia a la colección de sesiones en Firestore"""
+    return firestore_client.db.collection('hdd-monitor').document('sessions')
+
+def create_firestore_session(username, req):
+    """
+    Crea una nueva sesión en Firestore.
+    Invalida automáticamente cualquier sesión anterior del mismo usuario (single session).
+    """
+    if not firestore_client:
+        return None
+    try:
+        now = datetime.utcnow()
+        session_id = secrets.token_urlsafe(32)
+        expires_at = now + timedelta(days=SESSION_LIFETIME_DAYS)
+
+        # 1. Invalidar sesión anterior si existe
+        user_ref = _sessions_ref().collection('users').document(username)
+        user_doc = user_ref.get()
+        if user_doc.exists:
+            prev_id = user_doc.to_dict().get('current_session_id')
+            if prev_id:
+                _sessions_ref().collection('active').document(prev_id).delete()
+                logger.info(f"[AUTH] Sesión anterior invalidada para '{username}' (nuevo login desde {req.remote_addr})")
+
+        # 2. Crear nueva sesión activa
+        _sessions_ref().collection('active').document(session_id).set({
+            'username': username,
+            'session_id': session_id,
+            'login_time': now,
+            'last_active': now,
+            'expires_at': expires_at,
+            'ip': req.remote_addr,
+            'user_agent': req.headers.get('User-Agent', '')[:200],
+            'device_fingerprint': _generate_device_fingerprint(req),
+        })
+
+        # 3. Registrar sesión actual del usuario
+        user_ref.set({'current_session_id': session_id, 'updated_at': now})
+
+        logger.info(f"[AUTH] Nueva sesión creada para '{username}' desde {req.remote_addr}")
+        return session_id
+    except Exception as e:
+        logger.error(f"[AUTH] Error creando sesión en Firestore: {e}")
+        return None
+
+def validate_and_renew_session(session_id, username):
+    """
+    Valida la sesión contra Firestore y renueva su expiración.
+    Retorna True si la sesión es válida.
+    Si Firestore no está disponible, retorna True (fail-open para garantizar uptime NFPA 72).
+    """
+    if not firestore_client:
+        logger.warning("[AUTH] Firestore no disponible, usando sesión local (modo degradado)")
+        return True
+    if not session_id or not username:
+        return False
+    try:
+        session_ref = _sessions_ref().collection('active').document(session_id)
+        doc = session_ref.get()
+
+        if not doc.exists:
+            logger.warning(f"[AUTH] Sesión '{session_id[:8]}...' no encontrada para '{username}'")
+            return False
+
+        data = doc.to_dict()
+
+        if data.get('username') != username:
+            logger.warning(f"[AUTH] Sesión '{session_id[:8]}...' no pertenece a '{username}'")
+            return False
+
+        expires_at = data.get('expires_at')
+        if expires_at and datetime.utcnow() > expires_at.replace(tzinfo=None) if hasattr(expires_at, 'tzinfo') else datetime.utcnow() > expires_at:
+            session_ref.delete()
+            logger.info(f"[AUTH] Sesión expirada eliminada para '{username}'")
+            return False
+
+        # Renovar: extender expiración y actualizar last_active
+        now = datetime.utcnow()
+        session_ref.update({
+            'last_active': now,
+            'expires_at': now + timedelta(days=SESSION_LIFETIME_DAYS),
+        })
+        return True
+    except Exception as e:
+        logger.error(f"[AUTH] Error validando sesión: {e}")
+        return True  # Fail-open: no interrumpir monitoreo NFPA 72 por error de red
+
+def invalidate_firestore_session(session_id, username):
+    """Elimina la sesión de Firestore (logout explícito)"""
+    if not firestore_client or not session_id:
+        return
+    try:
+        _sessions_ref().collection('active').document(session_id).delete()
+        _sessions_ref().collection('users').document(username).delete()
+        logger.info(f"[AUTH] Logout: sesión eliminada para '{username}'")
+    except Exception as e:
+        logger.error(f"[AUTH] Error eliminando sesión: {e}")
+
+def _cleanup_expired_sessions():
+    """Elimina sesiones expiradas de Firestore (ejecutado periódicamente)"""
+    if not firestore_client:
+        return
+    try:
+        now = datetime.utcnow()
+        expired = _sessions_ref().collection('active').where('expires_at', '<', now).stream()
+        count = sum(1 for doc in expired if not doc.reference.delete() or True)
+        if count > 0:
+            logger.info(f"[AUTH] Limpieza: {count} sesiones expiradas eliminadas")
+    except Exception as e:
+        logger.error(f"[AUTH] Error en limpieza de sesiones: {e}")
+
+def _start_session_cleanup_thread():
+    """Inicia un thread que limpia sesiones expiradas cada 6 horas"""
+    def run():
+        import time
+        while True:
+            time.sleep(6 * 3600)
+            _cleanup_expired_sessions()
+    t = threading.Thread(target=run, daemon=True, name="session-cleanup")
+    t.start()
+    logger.info("[AUTH] Thread de limpieza de sesiones iniciado (cada 6h)")
+
+_start_session_cleanup_thread()
+
 def login_required(f):
-    """Decorator para proteger rutas que requieren autenticación"""
+    """
+    Decorator para proteger rutas que requieren autenticación.
+    Valida la sesión contra Firestore cada SESSION_CHECK_INTERVAL segundos.
+    Si otro dispositivo inició sesión, esta sesión quedará invalidada en Firestore
+    y el usuario será redirigido al login en la próxima verificación.
+    """
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'logged_in' not in session or not session['logged_in']:
+        if not session.get('logged_in'):
             if request.is_json or request.path.startswith('/api/'):
-                return jsonify({
-                    'success': False,
-                    'error': 'Authentication required'
-                }), 401
+                return jsonify({'success': False, 'error': 'Authentication required'}), 401
             return redirect(url_for('login_page'))
+
+        # Verificar contra Firestore cada 5 minutos (no en cada request)
+        now = datetime.now()
+        last_check_str = session.get('last_firestore_check')
+        needs_check = True
+        if last_check_str:
+            try:
+                last_check = datetime.fromisoformat(last_check_str)
+                needs_check = (now - last_check).total_seconds() > SESSION_CHECK_INTERVAL
+            except (ValueError, TypeError):
+                pass
+
+        if needs_check:
+            if not validate_and_renew_session(session.get('session_id'), session.get('username')):
+                session.clear()
+                if request.is_json or request.path.startswith('/api/'):
+                    return jsonify({'success': False, 'error': 'Sesión expirada o iniciada en otro dispositivo'}), 401
+                return redirect(url_for('login_page'))
+            session['last_firestore_check'] = now.isoformat()
+
         return f(*args, **kwargs)
     return decorated_function
 
@@ -239,6 +425,7 @@ def login_page():
 @app.route('/logout')
 def logout():
     """Cerrar sesión"""
+    invalidate_firestore_session(session.get('session_id'), session.get('username'))
     session.clear()
     return redirect(url_for('login_page'))
 
@@ -303,19 +490,22 @@ def health_dashboard():
 def get_dashboard_metrics():
     """GET - Get dashboard overview metrics"""
     if not firestore_client:
+        logger.error("Firestore client not initialized - check GOOGLE_APPLICATION_CREDENTIALS")
         return jsonify({
             'success': False,
-            'error': 'Firestore client not initialized'
+            'error': 'Firestore client not initialized. Check service account credentials.'
         }), 503
 
     try:
+        logger.info("Fetching dashboard metrics from Firestore...")
         metrics = firestore_client.get_dashboard_metrics()
+        logger.info(f"Successfully fetched metrics: {metrics}")
         return jsonify({
             'success': True,
             'metrics': metrics
         })
     except Exception as e:
-        logger.error(f"Error getting dashboard metrics: {e}")
+        logger.error(f"Error getting dashboard metrics: {e}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -478,6 +668,7 @@ def get_client_events(client_id):
 # ============================================================================
 
 @app.route('/api/auth/login', methods=['POST'])
+@csrf.exempt
 def login():
     """POST - Autenticar usuario"""
     data = request.get_json()
@@ -495,19 +686,24 @@ def login():
     if username in LOGIN_CREDENTIALS:
         password_hash = LOGIN_CREDENTIALS[username]
         if check_password_hash(password_hash, password):
+            # Crear sesión en Firestore (invalida la anterior automáticamente)
+            session_id = create_firestore_session(username, request)
+
             session.permanent = True
             session['logged_in'] = True
             session['username'] = username
             session['login_time'] = datetime.now().isoformat()
+            session['session_id'] = session_id
+            session['last_firestore_check'] = datetime.now().isoformat()
 
-            logger.info(f"Successful login: {username}")
+            logger.info(f"[AUTH] Login exitoso: '{username}' desde {request.remote_addr}")
             return jsonify({
                 'success': True,
                 'message': 'Login successful',
                 'username': username
             })
 
-    logger.warning(f"Failed login attempt: {username}")
+    logger.warning(f"[AUTH] Intento fallido: '{username}' desde {request.remote_addr}")
     return jsonify({
         'success': False,
         'error': 'Invalid credentials'
@@ -520,6 +716,22 @@ def check_auth():
         'success': True,
         'authenticated': session.get('logged_in', False),
         'username': session.get('username')
+    })
+
+@app.route('/api/auth/heartbeat', methods=['POST'])
+@csrf.exempt
+@login_required
+def heartbeat():
+    """
+    POST - Mantiene la sesión activa desde el frontend en background.
+    El frontend llama a este endpoint cada 10 minutos silenciosamente.
+    Esto garantiza que la sesión nunca expire mientras el app está activo,
+    independientemente de si el usuario interactúa con la interfaz.
+    """
+    return jsonify({
+        'success': True,
+        'timestamp': datetime.now().isoformat(),
+        'session_renewed': True
     })
 
 @app.route('/api/mqtt/users', methods=['GET'])
@@ -795,6 +1007,45 @@ def get_health_statistics():
         }), 500
 
 # ============================================================================
+# SOCKETIO EVENT HANDLERS
+# ============================================================================
+
+@socketio.on('connect')
+def handle_connect():
+    """Handle client connection"""
+    logger.info(f"Client connected: {request.sid}")
+    emit('connection_established', {
+        'message': 'Connected to HDD Monitor real-time updates',
+        'timestamp': datetime.now().isoformat()
+    })
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Handle client disconnection"""
+    logger.info(f"Client disconnected: {request.sid}")
+
+@socketio.on('request_initial_data')
+def handle_initial_data_request():
+    """Send initial data to newly connected client"""
+    if not firestore_client:
+        emit('error', {'message': 'Firestore not available'})
+        return
+
+    try:
+        # Send dashboard metrics
+        metrics = firestore_client.get_dashboard_metrics()
+        emit('initial_metrics', metrics)
+
+        # Send ESP32 devices
+        devices = firestore_client.get_all_esp32_devices()
+        emit('initial_esp32_devices', {'devices': devices})
+
+        logger.info(f"Sent initial data to client {request.sid}")
+    except Exception as e:
+        logger.error(f"Error sending initial data: {e}")
+        emit('error', {'message': str(e)})
+
+# ============================================================================
 # ERROR HANDLERS
 # ============================================================================
 
@@ -818,5 +1069,5 @@ def internal_error(e):
 # ============================================================================
 
 if __name__ == '__main__':
-    # Solo para desarrollo - En producción usar Gunicorn
-    app.run(debug=True, host='127.0.0.1', port=5000)
+    # Solo para desarrollo - En producción usar Gunicorn con eventlet
+    socketio.run(app, debug=True, host='127.0.0.1', port=5000)
