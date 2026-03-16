@@ -5,6 +5,7 @@ import android.os.Build
 import android.util.Log
 import androidx.work.WorkManager
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import com.pqsolutions.hdd_monitor.ServiceCheckWorker
@@ -14,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -36,6 +38,24 @@ class AuthRepository @Inject constructor(
             val userData = getUserData(email)
             userPreferences.setUserData(userData)
             userPreferences.setAuthToken(authResult.user?.uid ?: "")
+
+            // Generar sessionToken para sesión única (invalida sesiones anteriores)
+            val sessionToken = UUID.randomUUID().toString()
+            val collectionPath = if (userData.role == UserRole.ADMIN) {
+                "hdd-monitor/accounts/admins"
+            } else {
+                "hdd-monitor/accounts/clients/${userData.clientDocName}/users"
+            }
+            try {
+                firestore.collection(collectionPath)
+                    .document(userData.documentName)
+                    .update("sessionToken", sessionToken)
+                    .await()
+                userPreferences.setSessionToken(sessionToken)
+                Log.d(TAG, "SessionToken generado y guardado para: ${userData.documentName}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error guardando sessionToken", e)
+            }
 
             // Obtener el contexto de la aplicación
             val context = auth.app.applicationContext
@@ -98,11 +118,30 @@ class AuthRepository @Inject constructor(
                 // Continuar con el proceso aunque falle la eliminación del token
             }
 
-            // 5. Limpiar datos locales antes de cerrar sesión
+            // 5. Limpiar sessionToken de Firestore
+            val savedUser = userPreferences.getUserData()
+            if (savedUser != null) {
+                val collectionPath = if (savedUser.role == UserRole.ADMIN) {
+                    "hdd-monitor/accounts/admins"
+                } else {
+                    "hdd-monitor/accounts/clients/${savedUser.clientDocName}/users"
+                }
+                try {
+                    firestore.collection(collectionPath)
+                        .document(savedUser.documentName)
+                        .update("sessionToken", FieldValue.delete())
+                        .await()
+                    Log.d(TAG, "SessionToken eliminado de Firestore")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error eliminando sessionToken de Firestore", e)
+                }
+            }
+
+            // 6. Limpiar datos locales antes de cerrar sesión
             Log.d(TAG, "Limpiando datos locales")
             userPreferences.clearUserData()
 
-            // 6. Cerrar sesión en Firebase Auth
+            // 7. Cerrar sesión en Firebase Auth
             Log.d(TAG, "Cerrando sesión en Firebase")
             auth.signOut()
 

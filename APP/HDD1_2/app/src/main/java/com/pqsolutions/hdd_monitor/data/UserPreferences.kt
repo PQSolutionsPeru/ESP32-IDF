@@ -33,6 +33,7 @@ class UserPreferences @Inject constructor(private val context: Context) {
     private val userRoleStringKey = stringPreferencesKey("user_role_string")
     private val lastSyncDateKey = longPreferencesKey("last_sync_date")
     private val sessionValidKey = booleanPreferencesKey("session_valid")
+    private val sessionTokenKey = stringPreferencesKey("session_token")
 
     // Flow getters
     val isFirstLaunchFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
@@ -84,6 +85,10 @@ class UserPreferences @Inject constructor(private val context: Context) {
         preferences[lastSyncDateKey] ?: 0L
     }
 
+    val sessionTokenFlow: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[sessionTokenKey]
+    }
+
     // Setters
     suspend fun setFirstLaunch(isFirstLaunch: Boolean) {
         context.dataStore.edit { preferences ->
@@ -132,6 +137,16 @@ class UserPreferences @Inject constructor(private val context: Context) {
         }
     }
 
+    suspend fun setSessionToken(token: String) {
+        context.dataStore.edit { preferences ->
+            preferences[sessionTokenKey] = token
+        }
+    }
+
+    suspend fun getSessionToken(): String? {
+        return context.dataStore.data.first()[sessionTokenKey]
+    }
+
     suspend fun setLastSyncDate(timestamp: Long) {
         context.dataStore.edit { preferences ->
             preferences[lastSyncDateKey] = timestamp
@@ -155,6 +170,7 @@ class UserPreferences @Inject constructor(private val context: Context) {
             preferences[clientDocNameKey] = ""
             preferences[authTokenKey] = ""
             preferences[sessionValidKey] = false
+            preferences[sessionTokenKey] = ""
         }
     }
 

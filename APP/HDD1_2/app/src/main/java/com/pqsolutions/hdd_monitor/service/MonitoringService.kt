@@ -9,7 +9,9 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessaging
 import com.pqsolutions.hdd_monitor.R
+import com.pqsolutions.hdd_monitor.data.UserPreferences
 import com.pqsolutions.hdd_monitor.data.UserRepository
+import com.pqsolutions.hdd_monitor.domain.model.UserRole
 import com.pqsolutions.hdd_monitor.presentation.MainActivity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
@@ -19,6 +21,10 @@ import javax.inject.Inject
 class MonitoringService : Service() {
     @Inject
     lateinit var userRepository: UserRepository
+    @Inject
+    lateinit var userPreferences: UserPreferences
+    @Inject
+    lateinit var sessionWatcher: SessionWatcher
 
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
@@ -53,6 +59,7 @@ class MonitoringService : Service() {
 
         startOptimizedMonitoring()
         startPeriodicFCMValidation()
+        startSessionWatcher()
 
         return START_STICKY
     }
@@ -75,6 +82,25 @@ class MonitoringService : Service() {
                     Log.e(TAG, "Error en verificación de sesión", e)
                     delay(60_000L) // 1 minuto en caso de error
                 }
+            }
+        }
+    }
+
+    private fun startSessionWatcher() {
+        serviceScope.launch {
+            try {
+                val userData = userPreferences.getUserData()
+                if (userData != null) {
+                    val docPath = if (userData.role == UserRole.ADMIN) {
+                        "hdd-monitor/accounts/admins/${userData.documentName}"
+                    } else {
+                        "hdd-monitor/accounts/clients/${userData.clientDocName}/users/${userData.documentName}"
+                    }
+                    sessionWatcher.start(docPath)
+                    Log.d(TAG, "SessionWatcher iniciado para: ${userData.documentName}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error iniciando SessionWatcher", e)
             }
         }
     }
@@ -154,6 +180,7 @@ class MonitoringService : Service() {
     override fun onDestroy() {
         Log.d(TAG, "Servicio 24/7 optimizado siendo destruido")
         isServiceRunning = false
+        sessionWatcher.stop()
         serviceJob.cancel()
         super.onDestroy()
     }
