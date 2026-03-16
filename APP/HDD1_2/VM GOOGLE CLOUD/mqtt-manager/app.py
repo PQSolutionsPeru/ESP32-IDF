@@ -16,6 +16,7 @@ import os
 import secrets
 import hashlib
 import threading
+import json
 from datetime import datetime, timedelta
 import logging
 
@@ -29,6 +30,19 @@ from modules.firestore_realtime import FirestoreRealtimeListener
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def _sanitize_firestore_data(obj):
+    """
+    Convierte recursivamente tipos no serializables de Firestore a tipos JSON-compatibles.
+    Resuelve: DatetimeWithNanoseconds, datetime, date → string ISO 8601
+    """
+    if hasattr(obj, 'isoformat'):  # datetime, DatetimeWithNanoseconds, date
+        return obj.isoformat()
+    if isinstance(obj, dict):
+        return {k: _sanitize_firestore_data(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_firestore_data(i) for i in obj]
+    return obj
 
 app = Flask(__name__)
 CORS(app)
@@ -1034,11 +1048,11 @@ def handle_initial_data_request():
     try:
         # Send dashboard metrics
         metrics = firestore_client.get_dashboard_metrics()
-        emit('initial_metrics', metrics)
+        emit('initial_metrics', _sanitize_firestore_data(metrics))
 
         # Send ESP32 devices
         devices = firestore_client.get_all_esp32_devices()
-        emit('initial_esp32_devices', {'devices': devices})
+        emit('initial_esp32_devices', _sanitize_firestore_data({'devices': devices}))
 
         logger.info(f"Sent initial data to client {request.sid}")
     except Exception as e:
