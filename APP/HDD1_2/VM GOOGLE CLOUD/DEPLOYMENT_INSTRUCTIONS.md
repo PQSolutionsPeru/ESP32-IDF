@@ -596,6 +596,102 @@ sudo systemctl status TIMER_NAME.timer
 
 ---
 
+## 📡 Phase 5: ESP32 Log Upload Monitor
+
+This service alerts by email when any ESP32 device stops uploading logs for more than 26 hours.
+
+**When it runs:** 08:00 UTC daily (03:00 Lima time) — 3 hours after expected midnight Lima upload.
+
+### Step 5.1: Deploy Script and Systemd Files
+
+```bash
+# Copy script
+cp log_monitor.py /home/pqsolutionsperu/log_monitor.py
+chmod +x /home/pqsolutionsperu/log_monitor.py
+
+# Copy systemd unit files
+sudo cp log-monitor.service /etc/systemd/system/log-monitor.service
+sudo cp log-monitor.timer /etc/systemd/system/log-monitor.timer
+```
+
+### Step 5.2: Enable and Start Timer
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable log-monitor.timer
+sudo systemctl start log-monitor.timer
+```
+
+**Verify timer is scheduled:**
+```bash
+sudo systemctl list-timers log-monitor.timer
+```
+
+### Step 5.3: Test Manually
+
+```bash
+sudo systemctl start log-monitor.service
+sudo journalctl -u log-monitor.service -n 50
+tail -f /var/log/hdd_monitor_log_check.log
+```
+
+**Expected output (all devices OK):**
+```
+[2026-03-26 08:00:01] ============================================================
+[2026-03-26 08:00:01] Iniciando verificacion de logs
+[2026-03-26 08:00:01]   [ESP32_001] OK - ultimo log: log_20260326_050012.txt (2.9h atras)
+[2026-03-26 08:00:01] Todos los dispositivos (2) estan subiendo logs correctamente
+[2026-03-26 08:00:01] Verificacion completada
+```
+
+**Expected output (device missing):**
+```
+[2026-03-26 08:00:01]   [ESP32_002] ATRASADO - ultimo log: log_20260324_050008.txt (51.0h atras)
+[2026-03-26 08:00:01] Enviando alerta para 1 dispositivo(s)...
+[2026-03-26 08:00:01] Email de alerta enviado a: pqsolutionsperu@gmail.com
+```
+
+### Step 5.4: Verify Email Config
+
+The script reads SMTP settings from `/home/pqsolutionsperu/mqtt-manager/config.email.json`.
+
+**Required fields:**
+```json
+{
+  "smtp_server": "smtp.gmail.com",
+  "smtp_port": 587,
+  "use_tls": true,
+  "smtp_user": "pqsolutionsperu@gmail.com",
+  "smtp_password": "xxxx xxxx xxxx xxxx",
+  "from_email": "pqsolutionsperu@gmail.com",
+  "to_emails": ["pqsolutionsperu@gmail.com"]
+}
+```
+
+**Verify config exists:**
+```bash
+cat /home/pqsolutionsperu/mqtt-manager/config.email.json
+```
+
+### Step 5.5: Verify Log Directory
+
+```bash
+# ESP32 devices upload to subdirectories named by device ID
+ls -la /home/pqsolutions/esp32_log/
+```
+
+**Expected structure:**
+```
+/home/pqsolutions/esp32_log/
+├── ESP32_001/
+│   ├── log_20260326_050012.txt
+│   └── log_20260325_050008.txt
+└── ESP32_002/
+    └── log_20260326_050017.txt
+```
+
+---
+
 ## 🔄 Rollback Plan
 
 If something goes wrong and you need to revert:
@@ -606,12 +702,14 @@ sudo systemctl stop resource-monitor
 sudo systemctl stop cleanup-esp32-logs.timer
 sudo systemctl stop backup-postgresql.timer
 sudo systemctl stop backup-configs.timer
+sudo systemctl stop log-monitor.timer
 
 # Disable services
 sudo systemctl disable resource-monitor
 sudo systemctl disable cleanup-esp32-logs.timer
 sudo systemctl disable backup-postgresql.timer
 sudo systemctl disable backup-configs.timer
+sudo systemctl disable log-monitor.timer
 
 # Uninstall Netdata (optional)
 sudo /usr/libexec/netdata/netdata-uninstaller.sh --yes
@@ -625,6 +723,7 @@ sudo rm /etc/systemd/system/cleanup-esp32-logs.*
 sudo rm /etc/systemd/system/backup-postgresql.*
 sudo rm /etc/systemd/system/backup-configs.*
 sudo rm /etc/systemd/system/resource-monitor.service
+sudo rm /etc/systemd/system/log-monitor.*
 sudo systemctl daemon-reload
 ```
 
@@ -643,16 +742,20 @@ sudo systemctl list-timers
 # View all logs
 sudo journalctl -u netdata -f
 sudo journalctl -u resource-monitor -f
+sudo journalctl -u log-monitor.service -n 50
 tail -f /var/log/hdd_monitor_cleanup.log
 tail -f /var/log/hdd_monitor_backups.log
+tail -f /var/log/hdd_monitor_log_check.log
 
 # Service status
 sudo systemctl status netdata
 sudo systemctl status resource-monitor
+sudo systemctl status log-monitor.timer
 
-# Manual backup
+# Manual backup / manual check
 sudo systemctl start backup-postgresql.service
 sudo systemctl start backup-configs.service
+sudo systemctl start log-monitor.service
 ```
 
 ---
@@ -684,6 +787,7 @@ Your HDD-Monitor VM is now **100% auto-sustainable** with:
 - ✅ Email alerts for resource issues
 - ✅ Automated daily backups
 - ✅ External monitoring via Healthchecks.io
+- ✅ ESP32 log upload monitoring with email alerts
 - ✅ Complete audit trail
 
 **The VM will now maintain itself with zero manual intervention.**

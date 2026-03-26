@@ -1,0 +1,17 @@
+# Systemd Timer for ESP32 Log Upload Monitor
+# Path: /etc/systemd/system/log-monitor.timer
+#
+# Corre a las 08:00 UTC = 03:00 hora Lima
+# Los ESP32 suben logs a medianoche Lima (05:00 UTC).
+# Las 08:00 UTC dan 3 horas de margen para confirmar que llegaron.
+
+[Unit]
+Description=Verificacion diaria de logs ESP32 a las 08:00 UTC
+Requires=log-monitor.service
+
+[Timer]
+OnCalendar=*-*-* 08:00:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

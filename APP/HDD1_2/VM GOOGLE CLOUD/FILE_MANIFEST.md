@@ -4,7 +4,7 @@
 
 All files have been created and are ready for deployment to the VM.
 
-**Total Files:** 22 configuration files + 4 documentation files = **26 files**
+**Total Files:** 25 configuration files + 4 documentation files = **29 files**
 
 ---
 
@@ -52,6 +52,14 @@ All files have been created and are ready for deployment to the VM.
 | 21 | `backup-configs.timer` | `/etc/systemd/system/backup-configs.timer` | Weekly Sunday 3 AM timer |
 | 22 | `nginx_netdata_config.txt` | Reference only | Nginx config instructions |
 
+### Phase 5: Log Upload Monitor (3 files)
+
+| # | File Name | Destination Path | Purpose |
+|---|-----------|------------------|---------|
+| 23 | `log_monitor.py` | `/home/pqsolutionsperu/` | ESP32 log upload monitor script |
+| 24 | `log-monitor.service` | `/etc/systemd/system/log-monitor.service` | Monitor systemd service |
+| 25 | `log-monitor.timer` | `/etc/systemd/system/log-monitor.timer` | Daily 08:00 UTC timer |
+
 ---
 
 ## 📚 Documentation Files (4 files)
@@ -74,6 +82,7 @@ All files have been created and are ready for deployment to the VM.
 ├── backup_postgresql.sh                  [executable]
 ├── backup_configs.sh                     [executable]
 ├── resource_monitor.py                   [executable]
+├── log_monitor.py                        [executable]
 ├── README.md                             [documentation]
 ├── DEPLOYMENT_INSTRUCTIONS.md            [documentation]
 ├── IMPLEMENTATION_CHECKLIST.md           [documentation]
@@ -100,6 +109,8 @@ All files have been created and are ready for deployment to the VM.
 ├── backup-configs.service
 ├── backup-configs.timer
 ├── resource-monitor.service
+├── log-monitor.service
+├── log-monitor.timer
 └── netdata.service.d/
     └── override.conf                     [Gmail App Password]
 
@@ -114,7 +125,8 @@ All files have been created and are ready for deployment to the VM.
 /var/log/
 ├── hdd_monitor_cleanup.log               [cleanup logs]
 ├── hdd_monitor_backups.log               [backup logs]
-└── resource_monitor.log                  [monitor logs]
+├── resource_monitor.log                  [monitor logs]
+└── hdd_monitor_log_check.log             [ESP32 log upload check results]
 ```
 
 ---
@@ -205,9 +217,9 @@ cat IMPLEMENTATION_CHECKLIST.md
 
 ### By Type
 - **Bash scripts:** 4 files
-- **Python scripts:** 1 file
-- **Systemd services:** 5 files
-- **Systemd timers:** 3 files
+- **Python scripts:** 2 files
+- **Systemd services:** 6 files
+- **Systemd timers:** 4 files
 - **Netdata configs:** 5 files
 - **System configs:** 2 files (logrotate, nginx)
 - **Documentation:** 4 files
@@ -217,6 +229,7 @@ cat IMPLEMENTATION_CHECKLIST.md
 - **Phase 2 (Cleanup):** 4 files
 - **Phase 3 (Resource Monitor):** 2 files
 - **Phase 4 (Backups):** 7 files
+- **Phase 5 (Log Upload Monitor):** 3 files
 - **Documentation:** 4 files
 
 ### Total Size
@@ -278,7 +291,7 @@ System now 100% auto-sustainable with zero manual intervention required."
 ## 🎯 Deployment Readiness
 
 ### Prerequisites Checklist
-- [x] All 26 files created
+- [x] All 29 files created
 - [x] Scripts validated for syntax
 - [x] Documentation complete
 - [x] Deployment guide written

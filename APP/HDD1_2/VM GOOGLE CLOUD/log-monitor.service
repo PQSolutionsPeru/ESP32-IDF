@@ -1,0 +1,25 @@
+# Systemd Service for ESP32 Log Upload Monitor
+# Path: /etc/systemd/system/log-monitor.service
+#
+# Verifica que cada ESP32 suba sus logs diariamente.
+# Disparado por log-monitor.timer (diariamente a las 08:00 UTC)
+
+[Unit]
+Description=ESP32 Log Upload Monitor - Alerta si faltan logs
+After=network.target
+
+[Service]
+Type=oneshot
+User=pqsolutionsperu
+Group=pqsolutionsperu
+
+ExecStart=/usr/bin/python3 /home/pqsolutionsperu/log_monitor.py
+
+StandardOutput=append:/var/log/hdd_monitor_log_check.log
+StandardError=append:/var/log/hdd_monitor_log_check.log
+
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/pqsolutions/esp32_log /var/log
