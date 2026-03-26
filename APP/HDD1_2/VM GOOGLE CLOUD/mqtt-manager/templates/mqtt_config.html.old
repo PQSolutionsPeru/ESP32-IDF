@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MQTT Manager - HDD Monitor</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1>🔧 MQTT Manager</h1>
+                <p class="subtitle">Gestión de dispositivos ESP32 - HDD Monitor</p>
+            </div>
+            <div class="header-actions">
+                <div class="broker-status">
+                    <span class="status-label">Broker:</span>
+                    <span id="brokerStatus" class="status-badge status-loading">Verificando...</span>
+                </div>
+                <div class="user-info">
+                    <span class="username">👤 {{ username }}</span>
+                    <a href="/logout" class="btn-logout" title="Cerrar sesión">🚪 Salir</a>
+                </div>
+            </div>
+        </header>
+
+        <!-- Add User Section -->
+        <section class="add-user-section">
+            <h2>➕ Registrar nuevo ESP32</h2>
+            <form id="addUserForm" class="add-user-form">
+                <div class="form-group">
+                    <label for="esp32Id">ESP32 ID:</label>
+                    <input
+                        type="text"
+                        id="esp32Id"
+                        name="esp32_id"
+                        placeholder="Ej: 42A8ACA0"
+                        maxlength="8"
+                        pattern="[A-Fa-f0-9]{8}"
+                        required
+                        autocomplete="off"
+                    >
+                    <small class="help-text">8 caracteres hexadecimales (0-9, A-F)</small>
+                </div>
+                <button type="submit" class="btn btn-primary" id="addBtn">
+                    <span class="btn-text">Agregar ESP32</span>
+                    <span class="btn-loading" style="display: none;">Agregando...</span>
+                </button>
+            </form>
+        </section>
+
+        <!-- Users Table Section -->
+        <section class="users-section">
+            <div class="section-header">
+                <h2>📋 Dispositivos registrados</h2>
+                <button id="refreshBtn" class="btn btn-secondary">🔄 Actualizar</button>
+            </div>
+
+            <div id="loadingSpinner" class="loading-container">
+                <div class="spinner"></div>
+                <p>Cargando dispositivos...</p>
+            </div>
+
+            <div id="errorContainer" class="error-container" style="display: none;">
+                <p id="errorMessage"></p>
+            </div>
+
+            <div id="tableContainer" style="display: none;">
+                <div class="table-info">
+                    <span id="userCount">0 dispositivos</span>
+                </div>
+                <table class="users-table">
+                    <thead>
+                        <tr>
+                            <th>Usuario</th>
+                            <th>Tipo</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersTableBody">
+                        <!-- Rows populated by JavaScript -->
+                    </tbody>
+                </table>
+
+                <div id="emptyState" class="empty-state" style="display: none;">
+                    <p>📭 No hay dispositivos ESP32 registrados</p>
+                    <p class="empty-subtitle">Agrega tu primer ESP32 usando el formulario superior</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>PQ Solutions Peru &copy; 2025 | <a href="https://pqsolutionsperu.com" target="_blank">pqsolutionsperu.com</a></p>
+        </footer>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="deleteModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>⚠️ Confirmar eliminación</h3>
+            <p>¿Estás seguro de que quieres eliminar el usuario <strong id="deleteUsername"></strong>?</p>
+            <p class="warning-text">Esta acción no se puede deshacer.</p>
+            <div class="modal-actions">
+                <button id="cancelDeleteBtn" class="btn btn-secondary">Cancelar</button>
+                <button id="confirmDeleteBtn" class="btn btn-danger">Eliminar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

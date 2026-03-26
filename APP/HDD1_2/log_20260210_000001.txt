@@ -1,0 +1,320 @@
+I (252076299) TIME_MGR: NTP synchronized successfully
+I (252076379) LOG_UPLOADER: [09/02/2026, 12:04:12] Daily log rotation successful
+I (252076389) TIME_MGR: Lima time: 09/02/2026, 12:04:12
+I (252076389) LOG_UPLOADER: [09/02/2026, 12:04:12] === STARTING LOG UPLOAD CHECK ===
+I (252076609) HDDESP32: [09/02/2026, 12:04:13] Sending network info
+I (252076689) MQTT_MGR: [09/02/2026, 12:04:13] Sending network info to esp32/network_info (len=195)
+I (252079219) LOG_UPLOADER: [09/02/2026, 12:04:15] Found timestamped file with time variance: /spiffs/log_20260209_120412.txt, size: 26024 bytes
+I (252079229) LOG_UPLOADER: [09/02/2026, 12:04:15] === STARTING HTTP UPLOAD PROCESS ===
+I (252079239) LOG_UPLOADER: [09/02/2026, 12:04:15] Found 1 log file(s) for upload
+I (252079239) LOG_UPLOADER: [09/02/2026, 12:04:15] Processing file 1/1: /spiffs/log_20260209_120412.txt
+I (252079329) LOG_UPLOADER: [09/02/2026, 12:04:15] Upload attempt 1/3 for /spiffs/log_20260209_120412.txt
+I (252079389) LOG_UPLOADER: [09/02/2026, 12:04:15] Full connectivity confirmed (WiFi + MQTT + Internet)
+I (252079399) LOG_UPLOADER: [09/02/2026, 12:04:15] Attempting to send file: /spiffs/log_20260209_120412.txt
+I (252079449) LOG_UPLOADER: [09/02/2026, 12:04:16] Full connectivity confirmed (WiFi + MQTT + Internet)
+I (252079479) LOG_UPLOADER: [09/02/2026, 12:04:16] File /spiffs/log_20260209_120412.txt found, size: 26024 bytes - proceeding with upload
+I (252079559) LOG_UPLOADER: [09/02/2026, 12:04:16] Free heap before upload: 72512 bytes
+I (252079559) LOG_UPLOADER: [09/02/2026, 12:04:16] Preparing streaming HTTP upload for file: log_20260209_120412.txt
+I (252079569) LOG_UPLOADER: [09/02/2026, 12:04:16] HTTP body size: 26270 bytes (streaming mode)
+I (252079629) LOG_UPLOADER: [09/02/2026, 12:04:16] Full connectivity confirmed (WiFi + MQTT + Internet)
+I (252079639) LOG_UPLOADER: [09/02/2026, 12:04:16] Sending streaming HTTP POST to: http://34.63.146.196:8080/upload
+I (252079649) LOG_UPLOADER: [09/02/2026, 12:04:16] Opening HTTP connection...
+I (252079889) LOG_UPLOADER: [09/02/2026, 12:04:16] Sending multipart headers...
+I (252079979) LOG_UPLOADER: [09/02/2026, 12:04:16] Streaming file content...
+I (252081429) LOG_UPLOADER: [09/02/2026, 12:04:18] Sending multipart footer...
+I (252081439) LOG_UPLOADER: [09/02/2026, 12:04:18] Fetching response...
+W (252081679) WATCHDOG_MGR: [09/02/2026, 12:04:18] Significant memory decrease detected: 72536 -> 60940
+W (252081689) MQTT_MGR: [09/02/2026, 12:04:18] Performing emergency memory cleanup
+I (252081699) MQTT_MGR: [09/02/2026, 12:04:18] Memory cleanup completed, free heap: 60940
+I (252081799) LOG_UPLOADER: [09/02/2026, 12:04:18] HTTP response - Status: 200, Content-Length: 88
+I (252081809) LOG_UPLOADER: [09/02/2026, 12:04:18] Upload successful! Deleting local file: /spiffs/log_20260209_120412.txt
+I (252081949) LOG_UPLOADER: [09/02/2026, 12:04:18] Local file deleted successfully
+I (252081959) LOG_UPLOADER: [09/02/2026, 12:04:18] Free heap after upload: 72724 bytes (delta: +212)
+I (252081969) LOG_UPLOADER: [09/02/2026, 12:04:18] Upload completed successfully for /spiffs/log_20260209_120412.txt on attempt 1
+I (252081979) LOG_UPLOADER: [09/02/2026, 12:04:18] === UPLOAD PROCESS COMPLETED ===
+I (252082049) LOG_UPLOADER: [09/02/2026, 12:04:18] Successfully uploaded 1/1 files
+I (252082049) LOG_UPLOADER: [09/02/2026, 12:04:18] === DAILY ROTATION AND UPLOAD COMPLETED ===
+I (252082059) LOG_UPLOADER: [09/02/2026, 12:04:18] Current Lima time: 12:04:18, seconds until midnight: 42942
+I (252293119) HEALTH_MON: System healthy - Uptime: 4204 min, Heap: 70 KB
+I (252593129) HEALTH_MON: System healthy - Uptime: 4209 min, Heap: 70 KB
+I (252893139) HEALTH_MON: System healthy - Uptime: 4214 min, Heap: 70 KB
+I (253193219) HEALTH_MON: System healthy - Uptime: 4219 min, Heap: 70 KB
+I (253473749) RELAY_MGR: [09/02/2026, 12:27:30] Verifying GPIO interrupt system for panel
+I (253473839) RELAY_MGR: [09/02/2026, 12:27:30] GPIO verification: 4/4 functional (active relays: 4)
+I (253473849) RELAY_MGR: [09/02/2026, 12:27:30] All active GPIOs functional - no reconfiguration needed
+I (253473859) HDDESP32: [09/02/2026, 12:27:30] Memory: free=72536 min=50956
+I (253473859) HDDESP32: [09/02/2026, 12:27:30] System OK - WiFi+MQTT connected
+I (253493229) HEALTH_MON: System healthy - Uptime: 4224 min, Heap: 70 KB
+I (253793309) HEALTH_MON: System healthy - Uptime: 4229 min, Heap: 70 KB
+I (254093319) HEALTH_MON: System healthy - Uptime: 4234 min, Heap: 70 KB
+I (254393329) HEALTH_MON: System healthy - Uptime: 4239 min, Heap: 70 KB
+I (254693339) HEALTH_MON: System healthy - Uptime: 4244 min, Heap: 70 KB
+I (254993349) HEALTH_MON: System healthy - Uptime: 4249 min, Heap: 70 KB
+I (255293359) HEALTH_MON: System healthy - Uptime: 4254 min, Heap: 70 KB
+I (255453899) RELAY_MGR: [09/02/2026, 13:00:30] Verifying GPIO interrupt system for panel
+I (255453989) RELAY_MGR: [09/02/2026, 13:00:30] GPIO verification: 4/4 functional (active relays: 4)
+I (255453999) RELAY_MGR: [09/02/2026, 13:00:30] All active GPIOs functional - no reconfiguration needed
+I (255593439) HEALTH_MON: System healthy - Uptime: 4259 min, Heap: 70 KB
+I (255605709) HDDESP32: [09/02/2026, 13:03:02] Main task: heap free=72536 min=50956
+I (255676409) TIME_MGR: NTP synchronized successfully
+I (255676419) TIME_MGR: Lima time: 09/02/2026, 13:04:13
+I (255678209) HDDESP32: [09/02/2026, 13:04:14] Sending network info
+I (255678219) MQTT_MGR: [09/02/2026, 13:04:14] Sending network info to esp32/network_info (len=195)
+I (255893449) HEALTH_MON: System healthy - Uptime: 4264 min, Heap: 70 KB
+I (256193459) HEALTH_MON: System healthy - Uptime: 4269 min, Heap: 70 KB
+I (256493469) HEALTH_MON: System healthy - Uptime: 4274 min, Heap: 70 KB
+I (256793479) HEALTH_MON: System healthy - Uptime: 4279 min, Heap: 70 KB
+I (257093559) HEALTH_MON: System healthy - Uptime: 4284 min, Heap: 70 KB
+I (257393569) HEALTH_MON: System healthy - Uptime: 4289 min, Heap: 70 KB
+I (257434029) RELAY_MGR: [09/02/2026, 13:33:30] Verifying GPIO interrupt system for panel
+I (257434119) RELAY_MGR: [09/02/2026, 13:33:30] GPIO verification: 4/4 functional (active relays: 4)
+I (257434129) RELAY_MGR: [09/02/2026, 13:33:30] All active GPIOs functional - no reconfiguration needed
+I (257434129) HDDESP32: [09/02/2026, 13:33:30] Memory: free=72540 min=50956
+I (257434139) HDDESP32: [09/02/2026, 13:33:30] System OK - WiFi+MQTT connected
+I (257693579) HEALTH_MON: System healthy - Uptime: 4294 min, Heap: 70 KB
+I (257993589) HEALTH_MON: System healthy - Uptime: 4299 min, Heap: 70 KB
+I (258293599) HEALTH_MON: System healthy - Uptime: 4304 min, Heap: 70 KB
+I (258593609) HEALTH_MON: System healthy - Uptime: 4309 min, Heap: 70 KB
+I (258893619) HEALTH_MON: System healthy - Uptime: 4314 min, Heap: 70 KB
+I (259193629) HEALTH_MON: System healthy - Uptime: 4319 min, Heap: 70 KB
+I (259205719) HDDESP32: [09/02/2026, 14:03:02] Main task: heap free=72540 min=50956
+I (259276509) TIME_MGR: NTP synchronized successfully
+I (259276519) TIME_MGR: Lima time: 09/02/2026, 14:04:13
+I (259277509) HDDESP32: [09/02/2026, 14:04:14] Sending network info
+I (259277519) MQTT_MGR: [09/02/2026, 14:04:14] Sending network info to esp32/network_info (len=195)
+I (259414229) RELAY_MGR: [09/02/2026, 14:06:30] Verifying GPIO interrupt system for panel
+I (259414319) RELAY_MGR: [09/02/2026, 14:06:31] GPIO verification: 4/4 functional (active relays: 4)
+I (259414399) RELAY_MGR: [09/02/2026, 14:06:31] All active GPIOs functional - no reconfiguration needed
+I (259493709) HEALTH_MON: System healthy - Uptime: 4324 min, Heap: 70 KB
+I (259793719) HEALTH_MON: System healthy - Uptime: 4329 min, Heap: 70 KB
+I (260093729) HEALTH_MON: System healthy - Uptime: 4334 min, Heap: 70 KB
+I (260393739) HEALTH_MON: System healthy - Uptime: 4339 min, Heap: 70 KB
+I (260693749) HEALTH_MON: System healthy - Uptime: 4344 min, Heap: 70 KB
+I (260993829) HEALTH_MON: System healthy - Uptime: 4349 min, Heap: 70 KB
+I (261293839) HEALTH_MON: System healthy - Uptime: 4354 min, Heap: 70 KB
+I (261394409) RELAY_MGR: [09/02/2026, 14:39:31] Verifying GPIO interrupt system for panel
+I (261394499) RELAY_MGR: [09/02/2026, 14:39:31] GPIO verification: 4/4 functional (active relays: 4)
+I (261394509) RELAY_MGR: [09/02/2026, 14:39:31] All active GPIOs functional - no reconfiguration needed
+I (261394509) HDDESP32: [09/02/2026, 14:39:31] Memory: free=72540 min=50956
+I (261394579) HDDESP32: [09/02/2026, 14:39:31] System OK - WiFi+MQTT connected
+I (261593849) HEALTH_MON: System healthy - Uptime: 4359 min, Heap: 70 KB
+I (261893859) HEALTH_MON: System healthy - Uptime: 4364 min, Heap: 70 KB
+I (262193869) HEALTH_MON: System healthy - Uptime: 4369 min, Heap: 70 KB
+I (262493879) HEALTH_MON: System healthy - Uptime: 4374 min, Heap: 70 KB
+I (262793889) HEALTH_MON: System healthy - Uptime: 4379 min, Heap: 70 KB
+I (262805729) HDDESP32: [09/02/2026, 15:03:02] Main task: heap free=72548 min=50956
+I (262876539) TIME_MGR: NTP synchronized successfully
+I (262876549) TIME_MGR: Lima time: 09/02/2026, 15:04:13
+I (262876979) HDDESP32: [09/02/2026, 15:04:13] Sending network info
+I (262876989) MQTT_MGR: [09/02/2026, 15:04:13] Sending network info to esp32/network_info (len=195)
+I (263093899) HEALTH_MON: System healthy - Uptime: 4384 min, Heap: 70 KB
+I (263374599) RELAY_MGR: [09/02/2026, 15:12:31] Verifying GPIO interrupt system for panel
+I (263374609) RELAY_MGR: [09/02/2026, 15:12:31] Recent interrupt activity detected - system OK
+I (263393909) HEALTH_MON: System healthy - Uptime: 4389 min, Heap: 70 KB
+I (263693919) HEALTH_MON: System healthy - Uptime: 4394 min, Heap: 70 KB
+I (263993929) HEALTH_MON: System healthy - Uptime: 4399 min, Heap: 70 KB
+I (264293939) HEALTH_MON: System healthy - Uptime: 4404 min, Heap: 70 KB
+I (264593949) HEALTH_MON: System healthy - Uptime: 4409 min, Heap: 70 KB
+I (264893959) HEALTH_MON: System healthy - Uptime: 4414 min, Heap: 70 KB
+I (265194039) HEALTH_MON: System healthy - Uptime: 4419 min, Heap: 70 KB
+I (265354679) RELAY_MGR: [09/02/2026, 15:45:31] Verifying GPIO interrupt system for panel
+I (265354689) RELAY_MGR: [09/02/2026, 15:45:31] Recent interrupt activity detected - system OK
+I (265354699) HDDESP32: [09/02/2026, 15:45:31] Memory: free=72544 min=50956
+I (265354699) HDDESP32: [09/02/2026, 15:45:31] System OK - WiFi+MQTT connected
+I (265494049) HEALTH_MON: System healthy - Uptime: 4424 min, Heap: 70 KB
+I (265794059) HEALTH_MON: System healthy - Uptime: 4429 min, Heap: 70 KB
+I (266094139) HEALTH_MON: System healthy - Uptime: 4434 min, Heap: 70 KB
+I (266394149) HEALTH_MON: System healthy - Uptime: 4439 min, Heap: 70 KB
+I (266405799) HDDESP32: [09/02/2026, 16:03:02] Main task: heap free=72536 min=50956
+I (266476569) TIME_MGR: NTP synchronized successfully
+I (266476579) TIME_MGR: Lima time: 09/02/2026, 16:04:13
+I (266476729) HDDESP32: [09/02/2026, 16:04:13] Sending network info
+I (266476809) MQTT_MGR: [09/02/2026, 16:04:13] Sending network info to esp32/network_info (len=195)
+I (266694159) HEALTH_MON: System healthy - Uptime: 4444 min, Heap: 70 KB
+I (266994169) HEALTH_MON: System healthy - Uptime: 4449 min, Heap: 70 KB
+I (267294179) HEALTH_MON: System healthy - Uptime: 4454 min, Heap: 70 KB
+I (267334819) RELAY_MGR: [09/02/2026, 16:18:31] Verifying GPIO interrupt system for panel
+I (267334829) RELAY_MGR: [09/02/2026, 16:18:31] Recent interrupt activity detected - system OK
+I (267594189) HEALTH_MON: System healthy - Uptime: 4459 min, Heap: 70 KB
+I (267894269) HEALTH_MON: System healthy - Uptime: 4464 min, Heap: 70 KB
+I (268194279) HEALTH_MON: System healthy - Uptime: 4469 min, Heap: 70 KB
+I (268494289) HEALTH_MON: System healthy - Uptime: 4474 min, Heap: 70 KB
+I (268794299) HEALTH_MON: System healthy - Uptime: 4479 min, Heap: 70 KB
+I (269094309) HEALTH_MON: System healthy - Uptime: 4484 min, Heap: 70 KB
+I (269314839) RELAY_MGR: [09/02/2026, 16:51:31] Verifying GPIO interrupt system for panel
+I (269314919) RELAY_MGR: [09/02/2026, 16:51:31] Recent interrupt activity detected - system OK
+I (269314919) HDDESP32: [09/02/2026, 16:51:31] Memory: free=72540 min=50956
+I (269314929) HDDESP32: [09/02/2026, 16:51:31] System OK - WiFi+MQTT connected
+I (269394319) HEALTH_MON: System healthy - Uptime: 4489 min, Heap: 70 KB
+I (269694329) HEALTH_MON: System healthy - Uptime: 4494 min, Heap: 70 KB
+I (269994339) HEALTH_MON: System healthy - Uptime: 4499 min, Heap: 70 KB
+I (270005809) HDDESP32: [09/02/2026, 17:03:02] Main task: heap free=72540 min=50956
+I (270076599) TIME_MGR: NTP synchronized successfully
+I (270076609) TIME_MGR: Lima time: 09/02/2026, 17:04:13
+I (270078149) HDDESP32: [09/02/2026, 17:04:15] Sending network info
+I (270078159) MQTT_MGR: [09/02/2026, 17:04:15] Sending network info to esp32/network_info (len=195)
+I (270294349) HEALTH_MON: System healthy - Uptime: 4504 min, Heap: 70 KB
+I (270594359) HEALTH_MON: System healthy - Uptime: 4509 min, Heap: 69 KB
+I (270894439) HEALTH_MON: System healthy - Uptime: 4514 min, Heap: 70 KB
+I (271194449) HEALTH_MON: System healthy - Uptime: 4519 min, Heap: 70 KB
+I (271294969) RELAY_MGR: [09/02/2026, 17:24:32] Verifying GPIO interrupt system for panel
+I (271295059) RELAY_MGR: [09/02/2026, 17:24:32] GPIO verification: 4/4 functional (active relays: 4)
+I (271295069) RELAY_MGR: [09/02/2026, 17:24:32] All active GPIOs functional - no reconfiguration needed
+I (271494459) HEALTH_MON: System healthy - Uptime: 4524 min, Heap: 70 KB
+I (271794469) HEALTH_MON: System healthy - Uptime: 4529 min, Heap: 70 KB
+I (272094549) HEALTH_MON: System healthy - Uptime: 4534 min, Heap: 70 KB
+I (272394559) HEALTH_MON: System healthy - Uptime: 4539 min, Heap: 70 KB
+I (272694569) HEALTH_MON: System healthy - Uptime: 4544 min, Heap: 70 KB
+I (272994579) HEALTH_MON: System healthy - Uptime: 4549 min, Heap: 70 KB
+I (273275079) RELAY_MGR: [09/02/2026, 17:57:32] Verifying GPIO interrupt system for panel
+I (273275169) RELAY_MGR: [09/02/2026, 17:57:32] GPIO verification: 4/4 functional (active relays: 4)
+I (273275249) RELAY_MGR: [09/02/2026, 17:57:32] All active GPIOs functional - no reconfiguration needed
+I (273275249) HDDESP32: [09/02/2026, 17:57:32] Memory: free=72548 min=50956
+I (273275259) HDDESP32: [09/02/2026, 17:57:32] System OK - WiFi+MQTT connected
+I (273294589) HEALTH_MON: System healthy - Uptime: 4554 min, Heap: 70 KB
+I (273594599) HEALTH_MON: System healthy - Uptime: 4559 min, Heap: 70 KB
+I (273605889) HDDESP32: [09/02/2026, 18:03:02] Main task: heap free=72548 min=50956
+I (273676809) TIME_MGR: NTP synchronized successfully
+I (273676829) TIME_MGR: Lima time: 09/02/2026, 18:04:13
+I (273677579) HDDESP32: [09/02/2026, 18:04:14] Sending network info
+I (273677589) MQTT_MGR: [09/02/2026, 18:04:14] Sending network info to esp32/network_info (len=195)
+I (273894609) HEALTH_MON: System healthy - Uptime: 4564 min, Heap: 70 KB
+I (274194619) HEALTH_MON: System healthy - Uptime: 4569 min, Heap: 70 KB
+I (274494629) HEALTH_MON: System healthy - Uptime: 4574 min, Heap: 70 KB
+I (274794709) HEALTH_MON: System healthy - Uptime: 4579 min, Heap: 70 KB
+I (275094719) HEALTH_MON: System healthy - Uptime: 4584 min, Heap: 70 KB
+I (275255299) RELAY_MGR: [09/02/2026, 18:30:32] Verifying GPIO interrupt system for panel
+I (275255389) RELAY_MGR: [09/02/2026, 18:30:32] GPIO verification: 4/4 functional (active relays: 4)
+I (275255399) RELAY_MGR: [09/02/2026, 18:30:32] All active GPIOs functional - no reconfiguration needed
+I (275394729) HEALTH_MON: System healthy - Uptime: 4589 min, Heap: 70 KB
+I (275694809) HEALTH_MON: System healthy - Uptime: 4594 min, Heap: 70 KB
+I (275994819) HEALTH_MON: System healthy - Uptime: 4599 min, Heap: 70 KB
+I (276294829) HEALTH_MON: System healthy - Uptime: 4604 min, Heap: 70 KB
+I (276594839) HEALTH_MON: System healthy - Uptime: 4609 min, Heap: 70 KB
+I (276894849) HEALTH_MON: System healthy - Uptime: 4614 min, Heap: 70 KB
+I (277194859) HEALTH_MON: System healthy - Uptime: 4619 min, Heap: 70 KB
+I (277205969) HDDESP32: [09/02/2026, 19:03:02] Main task: heap free=72540 min=50956
+I (277235409) RELAY_MGR: [09/02/2026, 19:03:32] Verifying GPIO interrupt system for panel
+I (277235499) RELAY_MGR: [09/02/2026, 19:03:32] GPIO verification: 4/4 functional (active relays: 4)
+I (277235509) RELAY_MGR: [09/02/2026, 19:03:32] All active GPIOs functional - no reconfiguration needed
+I (277235519) HDDESP32: [09/02/2026, 19:03:32] Memory: free=72540 min=50956
+I (277235519) HDDESP32: [09/02/2026, 19:03:32] System OK - WiFi+MQTT connected
+I (277276849) TIME_MGR: NTP synchronized successfully
+I (277276919) TIME_MGR: Lima time: 09/02/2026, 19:04:14
+I (277276939) HDDESP32: [09/02/2026, 19:04:14] Sending network info
+I (277276949) MQTT_MGR: [09/02/2026, 19:04:14] Sending network info to esp32/network_info (len=195)
+I (277494869) HEALTH_MON: System healthy - Uptime: 4624 min, Heap: 70 KB
+I (277794879) HEALTH_MON: System healthy - Uptime: 4629 min, Heap: 70 KB
+I (278094889) HEALTH_MON: System healthy - Uptime: 4634 min, Heap: 70 KB
+I (278394899) HEALTH_MON: System healthy - Uptime: 4639 min, Heap: 70 KB
+I (278694969) HEALTH_MON: System healthy - Uptime: 4644 min, Heap: 70 KB
+I (278994979) HEALTH_MON: System healthy - Uptime: 4649 min, Heap: 70 KB
+I (279215559) RELAY_MGR: [09/02/2026, 19:36:32] Verifying GPIO interrupt system for panel
+I (279215649) RELAY_MGR: [09/02/2026, 19:36:32] GPIO verification: 4/4 functional (active relays: 4)
+I (279215659) RELAY_MGR: [09/02/2026, 19:36:32] All active GPIOs functional - no reconfiguration needed
+I (279294989) HEALTH_MON: System healthy - Uptime: 4654 min, Heap: 70 KB
+I (279595069) HEALTH_MON: System healthy - Uptime: 4659 min, Heap: 70 KB
+I (279895079) HEALTH_MON: System healthy - Uptime: 4664 min, Heap: 70 KB
+I (280195089) HEALTH_MON: System healthy - Uptime: 4669 min, Heap: 70 KB
+I (280495099) HEALTH_MON: System healthy - Uptime: 4674 min, Heap: 70 KB
+I (280795109) HEALTH_MON: System healthy - Uptime: 4679 min, Heap: 70 KB
+I (280806049) HDDESP32: [09/02/2026, 20:03:03] Main task: heap free=72540 min=50956
+I (280876929) TIME_MGR: NTP synchronized successfully
+I (280877009) TIME_MGR: Lima time: 09/02/2026, 20:04:14
+I (280878769) HDDESP32: [09/02/2026, 20:04:16] Sending network info
+I (280878779) MQTT_MGR: [09/02/2026, 20:04:16] Sending network info to esp32/network_info (len=195)
+I (281095119) HEALTH_MON: System healthy - Uptime: 4684 min, Heap: 70 KB
+I (281195689) RELAY_MGR: [09/02/2026, 20:09:32] Verifying GPIO interrupt system for panel
+I (281195779) RELAY_MGR: [09/02/2026, 20:09:33] GPIO verification: 4/4 functional (active relays: 4)
+I (281195859) RELAY_MGR: [09/02/2026, 20:09:33] All active GPIOs functional - no reconfiguration needed
+I (281195859) HDDESP32: [09/02/2026, 20:09:33] Memory: free=72540 min=50956
+I (281195869) HDDESP32: [09/02/2026, 20:09:33] System OK - WiFi+MQTT connected
+I (281395129) HEALTH_MON: System healthy - Uptime: 4689 min, Heap: 70 KB
+I (281695139) HEALTH_MON: System healthy - Uptime: 4694 min, Heap: 70 KB
+I (281995149) HEALTH_MON: System healthy - Uptime: 4699 min, Heap: 70 KB
+I (282295159) HEALTH_MON: System healthy - Uptime: 4704 min, Heap: 70 KB
+I (282595239) HEALTH_MON: System healthy - Uptime: 4709 min, Heap: 70 KB
+I (282895249) HEALTH_MON: System healthy - Uptime: 4714 min, Heap: 70 KB
+I (283175889) RELAY_MGR: [09/02/2026, 20:42:33] Verifying GPIO interrupt system for panel
+I (283175979) RELAY_MGR: [09/02/2026, 20:42:33] GPIO verification: 4/4 functional (active relays: 4)
+I (283175989) RELAY_MGR: [09/02/2026, 20:42:33] All active GPIOs functional - no reconfiguration needed
+I (283195259) HEALTH_MON: System healthy - Uptime: 4719 min, Heap: 70 KB
+I (283495339) HEALTH_MON: System healthy - Uptime: 4724 min, Heap: 70 KB
+I (283795349) HEALTH_MON: System healthy - Uptime: 4729 min, Heap: 70 KB
+I (284095359) HEALTH_MON: System healthy - Uptime: 4734 min, Heap: 70 KB
+I (284395369) HEALTH_MON: System healthy - Uptime: 4739 min, Heap: 70 KB
+I (284406059) HDDESP32: [09/02/2026, 21:03:03] Main task: heap free=72548 min=50956
+I (284552029) TIME_MGR: NTP synchronized successfully
+I (284552039) TIME_MGR: Lima time: 09/02/2026, 21:05:29
+I (284553099) HDDESP32: [09/02/2026, 21:05:30] Sending network info
+I (284553109) MQTT_MGR: [09/02/2026, 21:05:30] Sending network info to esp32/network_info (len=195)
+I (284695379) HEALTH_MON: System healthy - Uptime: 4744 min, Heap: 70 KB
+I (284995389) HEALTH_MON: System healthy - Uptime: 4749 min, Heap: 70 KB
+I (285156019) RELAY_MGR: [09/02/2026, 21:15:33] Verifying GPIO interrupt system for panel
+I (285156109) RELAY_MGR: [09/02/2026, 21:15:33] GPIO verification: 4/4 functional (active relays: 4)
+I (285156189) RELAY_MGR: [09/02/2026, 21:15:33] All active GPIOs functional - no reconfiguration needed
+I (285156199) HDDESP32: [09/02/2026, 21:15:33] Memory: free=72544 min=50956
+I (285156199) HDDESP32: [09/02/2026, 21:15:33] System OK - WiFi+MQTT connected
+I (285295399) HEALTH_MON: System healthy - Uptime: 4754 min, Heap: 70 KB
+I (285595409) HEALTH_MON: System healthy - Uptime: 4759 min, Heap: 70 KB
+I (285895419) HEALTH_MON: System healthy - Uptime: 4764 min, Heap: 70 KB
+I (286195429) HEALTH_MON: System healthy - Uptime: 4769 min, Heap: 70 KB
+I (286495509) HEALTH_MON: System healthy - Uptime: 4774 min, Heap: 70 KB
+I (286795519) HEALTH_MON: System healthy - Uptime: 4779 min, Heap: 70 KB
+I (287095529) HEALTH_MON: System healthy - Uptime: 4784 min, Heap: 70 KB
+I (287136219) RELAY_MGR: [09/02/2026, 21:48:33] Verifying GPIO interrupt system for panel
+I (287136309) RELAY_MGR: [09/02/2026, 21:48:33] GPIO verification: 4/4 functional (active relays: 4)
+I (287136319) RELAY_MGR: [09/02/2026, 21:48:33] All active GPIOs functional - no reconfiguration needed
+I (287395539) HEALTH_MON: System healthy - Uptime: 4789 min, Heap: 70 KB
+I (287695549) HEALTH_MON: System healthy - Uptime: 4794 min, Heap: 70 KB
+I (287995559) HEALTH_MON: System healthy - Uptime: 4799 min, Heap: 70 KB
+I (288006069) HDDESP32: [09/02/2026, 22:03:03] Main task: heap free=72536 min=50956
+I (288152129) TIME_MGR: NTP synchronized successfully
+I (288152139) TIME_MGR: Lima time: 09/02/2026, 22:05:29
+I (288152599) HDDESP32: [09/02/2026, 22:05:30] Sending network info
+I (288152679) MQTT_MGR: [09/02/2026, 22:05:30] Sending network info to esp32/network_info (len=195)
+I (288295569) HEALTH_MON: System healthy - Uptime: 4804 min, Heap: 70 KB
+I (288595579) HEALTH_MON: System healthy - Uptime: 4809 min, Heap: 70 KB
+I (288895589) HEALTH_MON: System healthy - Uptime: 4814 min, Heap: 70 KB
+I (289116489) RELAY_MGR: [09/02/2026, 22:21:33] Verifying GPIO interrupt system for panel
+I (289116579) RELAY_MGR: [09/02/2026, 22:21:34] GPIO verification: 4/4 functional (active relays: 4)
+I (289116659) RELAY_MGR: [09/02/2026, 22:21:34] All active GPIOs functional - no reconfiguration needed
+I (289116669) HDDESP32: [09/02/2026, 22:21:34] Memory: free=72540 min=50956
+I (289116669) HDDESP32: [09/02/2026, 22:21:34] System OK - WiFi+MQTT connected
+I (289195599) HEALTH_MON: System healthy - Uptime: 4819 min, Heap: 70 KB
+I (289495609) HEALTH_MON: System healthy - Uptime: 4824 min, Heap: 70 KB
+I (289795619) HEALTH_MON: System healthy - Uptime: 4829 min, Heap: 70 KB
+I (290095629) HEALTH_MON: System healthy - Uptime: 4834 min, Heap: 70 KB
+I (290169209) HDDESP32: [09/02/2026, 22:39:06] Relay relay_1 state: DISC -> OK
+I (290169999) HDDESP32: [09/02/2026, 22:39:07] Processed 1 MQTT message from queue
+I (290395709) HEALTH_MON: System healthy - Uptime: 4839 min, Heap: 70 KB
+I (290695719) HEALTH_MON: System healthy - Uptime: 4844 min, Heap: 70 KB
+I (290995729) HEALTH_MON: System healthy - Uptime: 4849 min, Heap: 70 KB
+I (291096609) RELAY_MGR: [09/02/2026, 22:54:34] Verifying GPIO interrupt system for panel
+I (291096689) RELAY_MGR: [09/02/2026, 22:54:34] Recent interrupt activity detected - system OK
+I (291295739) HEALTH_MON: System healthy - Uptime: 4854 min, Heap: 70 KB
+I (291595749) HEALTH_MON: System healthy - Uptime: 4859 min, Heap: 70 KB
+I (291606079) HDDESP32: [09/02/2026, 23:03:03] Main task: heap free=72540 min=50956
+I (291752159) TIME_MGR: NTP synchronized successfully
+I (291752169) TIME_MGR: Lima time: 09/02/2026, 23:05:29
+I (291754099) HDDESP32: [09/02/2026, 23:05:31] Sending network info
+I (291754179) MQTT_MGR: [09/02/2026, 23:05:31] Sending network info to esp32/network_info (len=195)
+I (291895759) HEALTH_MON: System healthy - Uptime: 4864 min, Heap: 70 KB
+I (292195769) HEALTH_MON: System healthy - Uptime: 4869 min, Heap: 70 KB
+I (292495779) HEALTH_MON: System healthy - Uptime: 4874 min, Heap: 70 KB
+I (292795789) HEALTH_MON: System healthy - Uptime: 4879 min, Heap: 70 KB
+I (293076789) RELAY_MGR: [09/02/2026, 23:27:34] Verifying GPIO interrupt system for panel
+I (293076869) RELAY_MGR: [09/02/2026, 23:27:34] Recent interrupt activity detected - system OK
+I (293076879) HDDESP32: [09/02/2026, 23:27:34] Memory: free=72528 min=50956
+I (293076879) HDDESP32: [09/02/2026, 23:27:34] System OK - WiFi+MQTT connected
+I (293095799) HEALTH_MON: System healthy - Uptime: 4884 min, Heap: 70 KB
+I (293395809) HEALTH_MON: System healthy - Uptime: 4889 min, Heap: 70 KB
+I (293695819) HEALTH_MON: System healthy - Uptime: 4894 min, Heap: 70 KB
+I (293995829) HEALTH_MON: System healthy - Uptime: 4899 min, Heap: 70 KB
+I (294295909) HEALTH_MON: System healthy - Uptime: 4904 min, Heap: 70 KB
+I (294595919) HEALTH_MON: System healthy - Uptime: 4909 min, Heap: 70 KB
+I (294895929) HEALTH_MON: System healthy - Uptime: 4914 min, Heap: 70 KB
+I (295024079) LOG_UPLOADER: [10/02/2026, 00:00:01] Daily upload triggered at midnight Lima
+I (295024089) LOG_UPLOADER: [10/02/2026, 00:00:01] === FORCING DAILY LOG ROTATION AND UPLOAD (MIDNIGHT LIMA) ===
+I (295024099) LOG_UPLOADER: [10/02/2026, 00:00:01] Current log.txt exists (25542 bytes), forcing rotation
+I (295024169) LOG_STORAGE: [10/02/2026, 00:00:01] Forcing log rotation...

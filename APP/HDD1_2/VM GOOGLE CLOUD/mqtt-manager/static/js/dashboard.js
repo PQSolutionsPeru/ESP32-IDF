@@ -52,7 +52,8 @@ async function updateDashboardMetrics() {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json'
-            }
+            },
+            credentials: 'include'
         });
 
         if (!response.ok) {
@@ -226,3 +227,53 @@ function stopDashboardRefresh() {
 window.updateDashboardMetrics = updateDashboardMetrics;
 window.startDashboardRefresh = startDashboardRefresh;
 window.stopDashboardRefresh = stopDashboardRefresh;
+
+// ============================================================================
+// REAL-TIME EVENT HANDLERS (called by realtime.js)
+// ============================================================================
+
+/**
+ * Handle metrics refresh signal from real-time updates
+ */
+window.onMetricsRefreshNeeded = function() {
+    console.log('[Dashboard] Metrics refresh needed - updating...');
+    updateDashboardMetrics();
+};
+
+/**
+ * Handle initial metrics from WebSocket
+ */
+window.onInitialMetrics = function(metrics) {
+    console.log('[Dashboard] Received initial metrics via WebSocket');
+    if (metrics) {
+        updateMetricsUI(metrics);
+        updateStatusMessage('success', 'All systems operational');
+    }
+};
+
+/**
+ * Handle ESP32 going offline
+ */
+window.onESP32Offline = function(data) {
+    console.log('[Dashboard] ESP32 offline event:', data.esp32_id);
+    // Refresh metrics to reflect new offline status
+    updateDashboardMetrics();
+};
+
+// ============================================================================
+// AUTO-INITIALIZATION
+// ============================================================================
+
+// Start dashboard auto-refresh when page loads
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('[Dashboard] Initializing auto-refresh...');
+        updateDashboardMetrics(); // Initial load
+        startDashboardRefresh(); // Start polling
+    });
+} else {
+    // DOM already loaded
+    console.log('[Dashboard] Initializing auto-refresh (DOM already loaded)...');
+    updateDashboardMetrics();
+    startDashboardRefresh();
+}

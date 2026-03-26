@@ -1,0 +1,1384 @@
+I (295524469) LOG_UPLOADER: [10/02/2026, 00:08:22] Daily log rotation successful
+I (295524479) LOG_UPLOADER: [10/02/2026, 00:08:22] === STARTING LOG UPLOAD CHECK ===
+I (295527209) LOG_UPLOADER: [10/02/2026, 00:08:24] Found timestamped file with time variance: /spiffs/log_20260210_000821.txt, size: 4036 bytes
+I (295527289) LOG_UPLOADER: [10/02/2026, 00:08:24] === STARTING HTTP UPLOAD PROCESS ===
+I (295527299) LOG_UPLOADER: [10/02/2026, 00:08:24] Found 1 log file(s) for upload
+I (295527299) LOG_UPLOADER: [10/02/2026, 00:08:24] Processing file 1/1: /spiffs/log_20260210_000821.txt
+I (295527319) LOG_UPLOADER: [10/02/2026, 00:08:24] Upload attempt 1/3 for /spiffs/log_20260210_000821.txt
+I (295527369) LOG_UPLOADER: [10/02/2026, 00:08:25] Full connectivity confirmed (WiFi + MQTT + Internet)
+I (295527379) LOG_UPLOADER: [10/02/2026, 00:08:25] Attempting to send file: /spiffs/log_20260210_000821.txt
+I (295527499) LOG_UPLOADER: [10/02/2026, 00:08:25] Full connectivity confirmed (WiFi + MQTT + Internet)
+I (295527539) LOG_UPLOADER: [10/02/2026, 00:08:25] File /spiffs/log_20260210_000821.txt found, size: 4036 bytes - proceeding with upload
+I (295527549) LOG_UPLOADER: [10/02/2026, 00:08:25] Free heap before upload: 72548 bytes
+I (295527559) LOG_UPLOADER: [10/02/2026, 00:08:25] Preparing streaming HTTP upload for file: log_20260210_000821.txt
+I (295527579) LOG_UPLOADER: [10/02/2026, 00:08:25] HTTP body size: 4282 bytes (streaming mode)
+I (295527629) LOG_UPLOADER: [10/02/2026, 00:08:25] Full connectivity confirmed (WiFi + MQTT + Internet)
+I (295527709) LOG_UPLOADER: [10/02/2026, 00:08:25] Sending streaming HTTP POST to: http://34.63.146.196:8080/upload
+I (295527719) LOG_UPLOADER: [10/02/2026, 00:08:25] Opening HTTP connection...
+I (295527899) LOG_UPLOADER: [10/02/2026, 00:08:25] Sending multipart headers...
+I (295527929) LOG_UPLOADER: [10/02/2026, 00:08:25] Streaming file content...
+I (295527949) LOG_UPLOADER: [10/02/2026, 00:08:25] Sending multipart footer...
+I (295528109) LOG_UPLOADER: [10/02/2026, 00:08:25] Fetching response...
+I (295528509) LOG_UPLOADER: [10/02/2026, 00:08:26] HTTP response - Status: 200, Content-Length: 88
+I (295528519) LOG_UPLOADER: [10/02/2026, 00:08:26] Upload successful! Deleting local file: /spiffs/log_20260210_000821.txt
+I (295528559) LOG_UPLOADER: [10/02/2026, 00:08:26] Local file deleted successfully
+I (295528569) LOG_UPLOADER: [10/02/2026, 00:08:26] Free heap after upload: 72228 bytes (delta: -320)
+I (295528589) LOG_UPLOADER: [10/02/2026, 00:08:26] Upload completed successfully for /spiffs/log_20260210_000821.txt on attempt 1
+I (295528599) LOG_UPLOADER: [10/02/2026, 00:08:26] === UPLOAD PROCESS COMPLETED ===
+I (295528669) LOG_UPLOADER: [10/02/2026, 00:08:26] Successfully uploaded 1/1 files
+I (295528669) LOG_UPLOADER: [10/02/2026, 00:08:26] === DAILY ROTATION AND UPLOAD COMPLETED ===
+I (295528679) LOG_UPLOADER: [10/02/2026, 00:08:26] Current Lima time: 00:08:26, seconds until midnight: 85894
+I (295796089) HEALTH_MON: System healthy - Uptime: 4929 min, Heap: 70 KB
+I (296096099) HEALTH_MON: System healthy - Uptime: 4934 min, Heap: 70 KB
+I (296396109) HEALTH_MON: System healthy - Uptime: 4939 min, Heap: 70 KB
+I (296696189) HEALTH_MON: System healthy - Uptime: 4944 min, Heap: 70 KB
+I (296996199) HEALTH_MON: System healthy - Uptime: 4949 min, Heap: 70 KB
+I (297036939) RELAY_MGR: [10/02/2026, 00:33:34] Verifying GPIO interrupt system for panel
+I (297036949) RELAY_MGR: [10/02/2026, 00:33:34] Recent interrupt activity detected - system OK
+I (297036959) HDDESP32: [10/02/2026, 00:33:34] Memory: free=72548 min=50956
+I (297036959) HDDESP32: [10/02/2026, 00:33:34] System OK - WiFi+MQTT connected
+W (297100289) CONN_MON: [10/02/2026, 00:34:37] Internet connectivity lost while connected to WiFi: PABLO-2.4G
+I (297100359) HDDESP32: [10/02/2026, 00:34:38] Connectivity event detected: type=2, panel=Panel_42A8ACA0, stored_in_ram
+E (297112289) mqtt_client: No PING_RESP, disconnected
+W (297112299) MQTT_MGR: [10/02/2026, 00:34:49] MQTT disconnected
+I (297112309) CONN_MON: [10/02/2026, 00:34:49] MQTT status change reported: connected -> disconnected
+W (297113679) WATCHDOG_MGR: [10/02/2026, 00:34:51] MQTT disconnected
+I (297113979) MQTT_MGR: [10/02/2026, 00:34:51] MQTT reconnect attempt 1 (infinite retries enabled)
+I (297114049) MQTT_MGR: [10/02/2026, 00:34:51] Connecting to MQTT broker
+W (297121679) WATCHDOG_MGR: [10/02/2026, 00:34:59] MQTT disconnected
+I (297123789) CONN_MON: [10/02/2026, 00:35:01] MQTT connection recovered on WiFi: PABLO-2.4G
+W (297129679) WATCHDOG_MGR: [10/02/2026, 00:35:07] MQTT disconnected
+W (297137679) WATCHDOG_MGR: [10/02/2026, 00:35:15] MQTT disconnected
+I (297143829) MQTT_MGR: [10/02/2026, 00:35:21] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297145679) WATCHDOG_MGR: [10/02/2026, 00:35:23] MQTT disconnected
+W (297147289) CONN_MON: [10/02/2026, 00:35:24] MQTT connection lost while connected to WiFi: PABLO-2.4G
+I (297147299) HDDESP32: [10/02/2026, 00:35:24] Connectivity event detected: type=4, panel=Panel_42A8ACA0, stored_in_ram
+E (297150839) MQTT_MGR: [10/02/2026, 00:35:28] DNS resolution failed for hddm.pqsolutionsperu.com
+I (297152949) MQTT_MGR: [10/02/2026, 00:35:30] Connecting to MQTT broker
+I (297152959) MQTT_MGR: [10/02/2026, 00:35:30] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297153679) WATCHDOG_MGR: [10/02/2026, 00:35:31] MQTT disconnected
+E (297159969) MQTT_MGR: [10/02/2026, 00:35:37] DNS resolution failed for hddm.pqsolutionsperu.com
+I (297159979) MQTT_MGR: [10/02/2026, 00:35:37] Setting credentials for ESP32 ID: 42A8ACA0
+I (297159989) MQTT_MGR: [10/02/2026, 00:35:37] Credentials configured
+I (297159989) MQTT_MGR: [10/02/2026, 00:35:37] Connecting to MQTT broker
+I (297160009) MQTT_MGR: [10/02/2026, 00:35:37] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297161679) WATCHDOG_MGR: [10/02/2026, 00:35:39] MQTT disconnected
+E (297167009) MQTT_MGR: [10/02/2026, 00:35:44] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297169679) WATCHDOG_MGR: [10/02/2026, 00:35:47] MQTT disconnected
+W (297177679) WATCHDOG_MGR: [10/02/2026, 00:35:55] MQTT disconnected
+I (297184319) MQTT_MGR: [10/02/2026, 00:36:01] Connecting to MQTT broker
+I (297184329) MQTT_MGR: [10/02/2026, 00:36:01] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297185679) WATCHDOG_MGR: [10/02/2026, 00:36:03] MQTT disconnected
+E (297191339) MQTT_MGR: [10/02/2026, 00:36:09] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297193679) WATCHDOG_MGR: [10/02/2026, 00:36:11] MQTT disconnected
+W (297201679) WATCHDOG_MGR: [10/02/2026, 00:36:19] MQTT disconnected
+W (297209679) WATCHDOG_MGR: [10/02/2026, 00:36:27] MQTT disconnected
+I (297216019) MQTT_MGR: [10/02/2026, 00:36:33] Connecting to MQTT broker
+I (297216029) MQTT_MGR: [10/02/2026, 00:36:33] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297217679) WATCHDOG_MGR: [10/02/2026, 00:36:35] MQTT disconnected
+E (297223039) MQTT_MGR: [10/02/2026, 00:36:40] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297225679) WATCHDOG_MGR: [10/02/2026, 00:36:43] MQTT disconnected
+W (297233679) WATCHDOG_MGR: [10/02/2026, 00:36:51] MQTT disconnected
+W (297241679) WATCHDOG_MGR: [10/02/2026, 00:36:59] MQTT disconnected
+I (297247149) MQTT_MGR: [10/02/2026, 00:37:04] Connecting to MQTT broker
+I (297247159) MQTT_MGR: [10/02/2026, 00:37:04] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297249679) WATCHDOG_MGR: [10/02/2026, 00:37:07] MQTT disconnected
+E (297254169) MQTT_MGR: [10/02/2026, 00:37:11] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297257679) WATCHDOG_MGR: [10/02/2026, 00:37:15] MQTT disconnected
+W (297265679) WATCHDOG_MGR: [10/02/2026, 00:37:23] MQTT disconnected
+I (297267279) MQTT_MGR: [10/02/2026, 00:37:24] Setting credentials for ESP32 ID: 42A8ACA0
+I (297267289) MQTT_MGR: [10/02/2026, 00:37:24] Credentials configured
+I (297267299) MQTT_MGR: [10/02/2026, 00:37:24] Connecting to MQTT broker
+I (297267369) MQTT_MGR: [10/02/2026, 00:37:25] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297273679) WATCHDOG_MGR: [10/02/2026, 00:37:31] MQTT disconnected
+E (297274379) MQTT_MGR: [10/02/2026, 00:37:32] DNS resolution failed for hddm.pqsolutionsperu.com
+I (297278589) MQTT_MGR: [10/02/2026, 00:37:36] Connecting to MQTT broker
+I (297278599) MQTT_MGR: [10/02/2026, 00:37:36] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297281679) WATCHDOG_MGR: [10/02/2026, 00:37:39] MQTT disconnected
+E (297285609) MQTT_MGR: [10/02/2026, 00:37:43] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297289679) WATCHDOG_MGR: [10/02/2026, 00:37:47] MQTT disconnected
+I (297296209) HEALTH_MON: System healthy - Uptime: 4954 min, Heap: 114 KB
+W (297297679) WATCHDOG_MGR: [10/02/2026, 00:37:55] MQTT disconnected
+W (297305679) WATCHDOG_MGR: [10/02/2026, 00:38:03] MQTT disconnected
+I (297310289) MQTT_MGR: [10/02/2026, 00:38:07] Connecting to MQTT broker
+I (297310299) MQTT_MGR: [10/02/2026, 00:38:07] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297313679) WATCHDOG_MGR: [10/02/2026, 00:38:11] MQTT disconnected
+E (297317369) MQTT_MGR: [10/02/2026, 00:38:15] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297321679) WATCHDOG_MGR: [10/02/2026, 00:38:19] MQTT disconnected
+W (297328379) WATCHDOG_MGR: [10/02/2026, 00:38:26] MQTT disconnected
+W (297329679) WATCHDOG_MGR: [10/02/2026, 00:38:27] MQTT disconnected
+W (297337679) WATCHDOG_MGR: [10/02/2026, 00:38:35] MQTT disconnected
+I (297341489) MQTT_MGR: [10/02/2026, 00:38:39] Connecting to MQTT broker
+I (297341569) MQTT_MGR: [10/02/2026, 00:38:39] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297345679) WATCHDOG_MGR: [10/02/2026, 00:38:43] MQTT disconnected
+E (297348579) MQTT_MGR: [10/02/2026, 00:38:46] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297353679) WATCHDOG_MGR: [10/02/2026, 00:38:51] MQTT disconnected
+W (297361679) WATCHDOG_MGR: [10/02/2026, 00:38:59] MQTT disconnected
+W (297369679) WATCHDOG_MGR: [10/02/2026, 00:39:07] MQTT disconnected
+I (297372689) MQTT_MGR: [10/02/2026, 00:39:10] Connecting to MQTT broker
+I (297372699) MQTT_MGR: [10/02/2026, 00:39:10] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297377679) WATCHDOG_MGR: [10/02/2026, 00:39:15] MQTT disconnected
+E (297379709) MQTT_MGR: [10/02/2026, 00:39:17] DNS resolution failed for hddm.pqsolutionsperu.com
+I (297381819) MQTT_MGR: [10/02/2026, 00:39:19] Setting credentials for ESP32 ID: 42A8ACA0
+I (297381829) MQTT_MGR: [10/02/2026, 00:39:19] Credentials configured
+I (297381839) MQTT_MGR: [10/02/2026, 00:39:19] Connecting to MQTT broker
+I (297381909) MQTT_MGR: [10/02/2026, 00:39:19] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297385679) WATCHDOG_MGR: [10/02/2026, 00:39:23] MQTT disconnected
+E (297388919) MQTT_MGR: [10/02/2026, 00:39:26] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297393679) WATCHDOG_MGR: [10/02/2026, 00:39:31] MQTT disconnected
+W (297401679) WATCHDOG_MGR: [10/02/2026, 00:39:39] MQTT disconnected
+I (297404629) MQTT_MGR: [10/02/2026, 00:39:42] Connecting to MQTT broker
+I (297404709) MQTT_MGR: [10/02/2026, 00:39:42] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297409679) WATCHDOG_MGR: [10/02/2026, 00:39:47] MQTT disconnected
+E (297411719) MQTT_MGR: [10/02/2026, 00:39:49] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297417679) WATCHDOG_MGR: [10/02/2026, 00:39:55] MQTT disconnected
+W (297425679) WATCHDOG_MGR: [10/02/2026, 00:40:03] MQTT disconnected
+W (297433679) WATCHDOG_MGR: [10/02/2026, 00:40:11] MQTT disconnected
+I (297435829) MQTT_MGR: [10/02/2026, 00:40:13] Connecting to MQTT broker
+I (297435909) MQTT_MGR: [10/02/2026, 00:40:13] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297441679) WATCHDOG_MGR: [10/02/2026, 00:40:19] MQTT disconnected
+E (297442919) MQTT_MGR: [10/02/2026, 00:40:20] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297449679) WATCHDOG_MGR: [10/02/2026, 00:40:27] MQTT disconnected
+W (297457679) WATCHDOG_MGR: [10/02/2026, 00:40:35] MQTT disconnected
+W (297465679) WATCHDOG_MGR: [10/02/2026, 00:40:43] MQTT disconnected
+I (297467029) MQTT_MGR: [10/02/2026, 00:40:44] Connecting to MQTT broker
+I (297467039) MQTT_MGR: [10/02/2026, 00:40:44] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297473679) WATCHDOG_MGR: [10/02/2026, 00:40:51] MQTT disconnected
+E (297474049) MQTT_MGR: [10/02/2026, 00:40:51] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297481679) WATCHDOG_MGR: [10/02/2026, 00:40:59] MQTT disconnected
+I (297489259) MQTT_MGR: [10/02/2026, 00:41:06] Setting credentials for ESP32 ID: 42A8ACA0
+I (297489269) MQTT_MGR: [10/02/2026, 00:41:06] Credentials configured
+I (297489329) MQTT_MGR: [10/02/2026, 00:41:06] Connecting to MQTT broker
+I (297489329) MQTT_MGR: [10/02/2026, 00:41:07] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297489679) WATCHDOG_MGR: [10/02/2026, 00:41:07] MQTT disconnected
+E (297496339) MQTT_MGR: [10/02/2026, 00:41:14] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297497679) WATCHDOG_MGR: [10/02/2026, 00:41:15] MQTT disconnected
+I (297498949) MQTT_MGR: [10/02/2026, 00:41:16] Connecting to MQTT broker
+I (297499029) MQTT_MGR: [10/02/2026, 00:41:16] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297505679) WATCHDOG_MGR: [10/02/2026, 00:41:23] MQTT disconnected
+E (297506039) MQTT_MGR: [10/02/2026, 00:41:23] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297513679) WATCHDOG_MGR: [10/02/2026, 00:41:31] MQTT disconnected
+W (297521679) WATCHDOG_MGR: [10/02/2026, 00:41:39] MQTT disconnected
+W (297529679) WATCHDOG_MGR: [10/02/2026, 00:41:47] MQTT disconnected
+I (297530149) MQTT_MGR: [10/02/2026, 00:41:47] Connecting to MQTT broker
+I (297530229) MQTT_MGR: [10/02/2026, 00:41:47] Testing DNS resolution for: hddm.pqsolutionsperu.com
+E (297537239) MQTT_MGR: [10/02/2026, 00:41:54] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297537679) WATCHDOG_MGR: [10/02/2026, 00:41:55] MQTT disconnected
+W (297545679) WATCHDOG_MGR: [10/02/2026, 00:42:03] MQTT disconnected
+W (297553679) WATCHDOG_MGR: [10/02/2026, 00:42:11] MQTT disconnected
+I (297561349) MQTT_MGR: [10/02/2026, 00:42:19] Connecting to MQTT broker
+I (297561429) MQTT_MGR: [10/02/2026, 00:42:19] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297561679) WATCHDOG_MGR: [10/02/2026, 00:42:19] MQTT disconnected
+E (297568439) MQTT_MGR: [10/02/2026, 00:42:26] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297569679) WATCHDOG_MGR: [10/02/2026, 00:42:27] MQTT disconnected
+W (297577679) WATCHDOG_MGR: [10/02/2026, 00:42:35] MQTT disconnected
+W (297585679) WATCHDOG_MGR: [10/02/2026, 00:42:43] MQTT disconnected
+I (297592549) MQTT_MGR: [10/02/2026, 00:42:50] Connecting to MQTT broker
+I (297592639) MQTT_MGR: [10/02/2026, 00:42:50] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297593679) WATCHDOG_MGR: [10/02/2026, 00:42:51] MQTT disconnected
+I (297596219) HEALTH_MON: System healthy - Uptime: 4959 min, Heap: 114 KB
+E (297599649) MQTT_MGR: [10/02/2026, 00:42:57] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297601679) WATCHDOG_MGR: [10/02/2026, 00:42:59] MQTT disconnected
+I (297604359) MQTT_MGR: [10/02/2026, 00:43:02] Setting credentials for ESP32 ID: 42A8ACA0
+I (297604439) MQTT_MGR: [10/02/2026, 00:43:02] Credentials configured
+I (297604449) MQTT_MGR: [10/02/2026, 00:43:02] Connecting to MQTT broker
+I (297604449) MQTT_MGR: [10/02/2026, 00:43:02] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297609679) WATCHDOG_MGR: [10/02/2026, 00:43:07] MQTT disconnected
+E (297611469) MQTT_MGR: [10/02/2026, 00:43:09] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297611479) WATCHDOG_MGR: [10/02/2026, 00:43:09] MQTT disconnected
+W (297617679) WATCHDOG_MGR: [10/02/2026, 00:43:15] MQTT disconnected
+I (297622559) MQTT_MGR: [10/02/2026, 00:43:20] Connecting to MQTT broker
+I (297622569) MQTT_MGR: [10/02/2026, 00:43:20] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297625679) WATCHDOG_MGR: [10/02/2026, 00:43:23] MQTT disconnected
+E (297629579) MQTT_MGR: [10/02/2026, 00:43:27] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297633679) WATCHDOG_MGR: [10/02/2026, 00:43:31] MQTT disconnected
+W (297641679) WATCHDOG_MGR: [10/02/2026, 00:43:39] MQTT disconnected
+W (297649679) WATCHDOG_MGR: [10/02/2026, 00:43:47] MQTT disconnected
+I (297653689) MQTT_MGR: [10/02/2026, 00:43:51] Connecting to MQTT broker
+I (297653699) MQTT_MGR: [10/02/2026, 00:43:51] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297657679) WATCHDOG_MGR: [10/02/2026, 00:43:55] MQTT disconnected
+E (297660709) MQTT_MGR: [10/02/2026, 00:43:58] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297665679) WATCHDOG_MGR: [10/02/2026, 00:44:03] MQTT disconnected
+W (297673679) WATCHDOG_MGR: [10/02/2026, 00:44:11] MQTT disconnected
+W (297681679) WATCHDOG_MGR: [10/02/2026, 00:44:19] MQTT disconnected
+I (297684819) MQTT_MGR: [10/02/2026, 00:44:22] Connecting to MQTT broker
+I (297684829) MQTT_MGR: [10/02/2026, 00:44:22] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297689679) WATCHDOG_MGR: [10/02/2026, 00:44:27] MQTT disconnected
+E (297691839) MQTT_MGR: [10/02/2026, 00:44:29] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297697679) WATCHDOG_MGR: [10/02/2026, 00:44:35] MQTT disconnected
+W (297705679) WATCHDOG_MGR: [10/02/2026, 00:44:43] MQTT disconnected
+I (297711749) MQTT_MGR: [10/02/2026, 00:44:49] Setting credentials for ESP32 ID: 42A8ACA0
+I (297711759) MQTT_MGR: [10/02/2026, 00:44:49] Credentials configured
+I (297711769) MQTT_MGR: [10/02/2026, 00:44:49] Connecting to MQTT broker
+I (297711769) MQTT_MGR: [10/02/2026, 00:44:49] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297713679) WATCHDOG_MGR: [10/02/2026, 00:44:51] MQTT disconnected
+E (297718789) MQTT_MGR: [10/02/2026, 00:44:56] DNS resolution failed for hddm.pqsolutionsperu.com
+I (297720899) MQTT_MGR: [10/02/2026, 00:44:58] Connecting to MQTT broker
+I (297720909) MQTT_MGR: [10/02/2026, 00:44:58] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297721679) WATCHDOG_MGR: [10/02/2026, 00:44:59] MQTT disconnected
+E (297727919) MQTT_MGR: [10/02/2026, 00:45:05] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297729679) WATCHDOG_MGR: [10/02/2026, 00:45:07] MQTT disconnected
+W (297737679) WATCHDOG_MGR: [10/02/2026, 00:45:15] MQTT disconnected
+W (297745679) WATCHDOG_MGR: [10/02/2026, 00:45:23] MQTT disconnected
+I (297752029) MQTT_MGR: [10/02/2026, 00:45:29] Connecting to MQTT broker
+I (297752039) MQTT_MGR: [10/02/2026, 00:45:29] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297753679) WATCHDOG_MGR: [10/02/2026, 00:45:31] MQTT disconnected
+E (297759049) MQTT_MGR: [10/02/2026, 00:45:36] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297761679) WATCHDOG_MGR: [10/02/2026, 00:45:39] MQTT disconnected
+W (297769679) WATCHDOG_MGR: [10/02/2026, 00:45:47] MQTT disconnected
+W (297777679) WATCHDOG_MGR: [10/02/2026, 00:45:55] MQTT disconnected
+I (297783159) MQTT_MGR: [10/02/2026, 00:46:00] Connecting to MQTT broker
+I (297783169) MQTT_MGR: [10/02/2026, 00:46:00] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297785679) WATCHDOG_MGR: [10/02/2026, 00:46:03] MQTT disconnected
+E (297790179) MQTT_MGR: [10/02/2026, 00:46:07] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297793679) WATCHDOG_MGR: [10/02/2026, 00:46:11] MQTT disconnected
+W (297801679) WATCHDOG_MGR: [10/02/2026, 00:46:19] MQTT disconnected
+W (297809679) WATCHDOG_MGR: [10/02/2026, 00:46:27] MQTT disconnected
+I (297814789) MQTT_MGR: [10/02/2026, 00:46:32] Connecting to MQTT broker
+I (297814799) MQTT_MGR: [10/02/2026, 00:46:32] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297817679) WATCHDOG_MGR: [10/02/2026, 00:46:35] MQTT disconnected
+E (297821809) MQTT_MGR: [10/02/2026, 00:46:39] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297825679) WATCHDOG_MGR: [10/02/2026, 00:46:43] MQTT disconnected
+I (297826089) MQTT_MGR: [10/02/2026, 00:46:43] Setting credentials for ESP32 ID: 42A8ACA0
+I (297826099) MQTT_MGR: [10/02/2026, 00:46:43] Credentials configured
+I (297826109) MQTT_MGR: [10/02/2026, 00:46:43] Connecting to MQTT broker
+I (297826109) MQTT_MGR: [10/02/2026, 00:46:43] Testing DNS resolution for: hddm.pqsolutionsperu.com
+E (297833129) MQTT_MGR: [10/02/2026, 00:46:50] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297833679) WATCHDOG_MGR: [10/02/2026, 00:46:51] MQTT disconnected
+W (297841679) WATCHDOG_MGR: [10/02/2026, 00:46:59] MQTT disconnected
+I (297846239) MQTT_MGR: [10/02/2026, 00:47:03] Connecting to MQTT broker
+I (297846249) MQTT_MGR: [10/02/2026, 00:47:03] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297849679) WATCHDOG_MGR: [10/02/2026, 00:47:07] MQTT disconnected
+E (297853259) MQTT_MGR: [10/02/2026, 00:47:10] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297857679) WATCHDOG_MGR: [10/02/2026, 00:47:15] MQTT disconnected
+W (297865679) WATCHDOG_MGR: [10/02/2026, 00:47:23] MQTT disconnected
+W (297873679) WATCHDOG_MGR: [10/02/2026, 00:47:31] MQTT disconnected
+I (297877369) MQTT_MGR: [10/02/2026, 00:47:35] Connecting to MQTT broker
+I (297877379) MQTT_MGR: [10/02/2026, 00:47:35] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297881679) WATCHDOG_MGR: [10/02/2026, 00:47:39] MQTT disconnected
+E (297884389) MQTT_MGR: [10/02/2026, 00:47:42] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297886999) WATCHDOG_MGR: [10/02/2026, 00:47:44] MQTT disconnected
+W (297889679) WATCHDOG_MGR: [10/02/2026, 00:47:47] MQTT disconnected
+I (297896229) HEALTH_MON: System healthy - Uptime: 4964 min, Heap: 114 KB
+W (297897679) WATCHDOG_MGR: [10/02/2026, 00:47:55] MQTT disconnected
+W (297905679) WATCHDOG_MGR: [10/02/2026, 00:48:03] MQTT disconnected
+I (297909079) MQTT_MGR: [10/02/2026, 00:48:06] Connecting to MQTT broker
+I (297909089) MQTT_MGR: [10/02/2026, 00:48:06] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297913679) WATCHDOG_MGR: [10/02/2026, 00:48:11] MQTT disconnected
+E (297916159) MQTT_MGR: [10/02/2026, 00:48:13] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297921679) WATCHDOG_MGR: [10/02/2026, 00:48:19] MQTT disconnected
+W (297929679) WATCHDOG_MGR: [10/02/2026, 00:48:27] MQTT disconnected
+I (297933469) MQTT_MGR: [10/02/2026, 00:48:31] Setting credentials for ESP32 ID: 42A8ACA0
+I (297933479) MQTT_MGR: [10/02/2026, 00:48:31] Credentials configured
+I (297933489) MQTT_MGR: [10/02/2026, 00:48:31] Connecting to MQTT broker
+I (297933559) MQTT_MGR: [10/02/2026, 00:48:31] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297937679) WATCHDOG_MGR: [10/02/2026, 00:48:35] MQTT disconnected
+E (297940569) MQTT_MGR: [10/02/2026, 00:48:38] DNS resolution failed for hddm.pqsolutionsperu.com
+I (297942679) MQTT_MGR: [10/02/2026, 00:48:40] Connecting to MQTT broker
+I (297942689) MQTT_MGR: [10/02/2026, 00:48:40] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297945679) WATCHDOG_MGR: [10/02/2026, 00:48:43] MQTT disconnected
+E (297949699) MQTT_MGR: [10/02/2026, 00:48:47] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297953679) WATCHDOG_MGR: [10/02/2026, 00:48:51] MQTT disconnected
+W (297961679) WATCHDOG_MGR: [10/02/2026, 00:48:59] MQTT disconnected
+W (297969679) WATCHDOG_MGR: [10/02/2026, 00:49:07] MQTT disconnected
+I (297974309) MQTT_MGR: [10/02/2026, 00:49:11] Connecting to MQTT broker
+I (297974319) MQTT_MGR: [10/02/2026, 00:49:11] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (297977679) WATCHDOG_MGR: [10/02/2026, 00:49:15] MQTT disconnected
+E (297981329) MQTT_MGR: [10/02/2026, 00:49:18] DNS resolution failed for hddm.pqsolutionsperu.com
+W (297985679) WATCHDOG_MGR: [10/02/2026, 00:49:23] MQTT disconnected
+W (297993679) WATCHDOG_MGR: [10/02/2026, 00:49:31] MQTT disconnected
+W (298001679) WATCHDOG_MGR: [10/02/2026, 00:49:39] MQTT disconnected
+I (298005439) MQTT_MGR: [10/02/2026, 00:49:43] Connecting to MQTT broker
+I (298005449) MQTT_MGR: [10/02/2026, 00:49:43] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298009679) WATCHDOG_MGR: [10/02/2026, 00:49:47] MQTT disconnected
+E (298012519) MQTT_MGR: [10/02/2026, 00:49:50] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298017679) WATCHDOG_MGR: [10/02/2026, 00:49:55] MQTT disconnected
+W (298025679) WATCHDOG_MGR: [10/02/2026, 00:50:03] MQTT disconnected
+W (298033679) WATCHDOG_MGR: [10/02/2026, 00:50:11] MQTT disconnected
+I (298036629) MQTT_MGR: [10/02/2026, 00:50:14] Connecting to MQTT broker
+I (298036639) MQTT_MGR: [10/02/2026, 00:50:14] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298041679) WATCHDOG_MGR: [10/02/2026, 00:50:19] MQTT disconnected
+E (298043719) MQTT_MGR: [10/02/2026, 00:50:21] DNS resolution failed for hddm.pqsolutionsperu.com
+I (298047929) MQTT_MGR: [10/02/2026, 00:50:25] Setting credentials for ESP32 ID: 42A8ACA0
+I (298047939) MQTT_MGR: [10/02/2026, 00:50:25] Credentials configured
+I (298047949) MQTT_MGR: [10/02/2026, 00:50:25] Connecting to MQTT broker
+I (298047949) MQTT_MGR: [10/02/2026, 00:50:25] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298049679) WATCHDOG_MGR: [10/02/2026, 00:50:27] MQTT disconnected
+E (298055029) MQTT_MGR: [10/02/2026, 00:50:32] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298057679) WATCHDOG_MGR: [10/02/2026, 00:50:35] MQTT disconnected
+W (298065679) WATCHDOG_MGR: [10/02/2026, 00:50:43] MQTT disconnected
+I (298068639) MQTT_MGR: [10/02/2026, 00:50:46] Connecting to MQTT broker
+I (298068649) MQTT_MGR: [10/02/2026, 00:50:46] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298073679) WATCHDOG_MGR: [10/02/2026, 00:50:51] MQTT disconnected
+E (298075659) MQTT_MGR: [10/02/2026, 00:50:53] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298081679) WATCHDOG_MGR: [10/02/2026, 00:50:59] MQTT disconnected
+W (298089679) WATCHDOG_MGR: [10/02/2026, 00:51:07] MQTT disconnected
+W (298097679) WATCHDOG_MGR: [10/02/2026, 00:51:15] MQTT disconnected
+I (298099769) MQTT_MGR: [10/02/2026, 00:51:17] Connecting to MQTT broker
+I (298099779) MQTT_MGR: [10/02/2026, 00:51:17] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298105679) WATCHDOG_MGR: [10/02/2026, 00:51:23] MQTT disconnected
+E (298106879) MQTT_MGR: [10/02/2026, 00:51:24] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298113679) WATCHDOG_MGR: [10/02/2026, 00:51:31] MQTT disconnected
+W (298121679) WATCHDOG_MGR: [10/02/2026, 00:51:39] MQTT disconnected
+W (298129679) WATCHDOG_MGR: [10/02/2026, 00:51:47] MQTT disconnected
+I (298131019) MQTT_MGR: [10/02/2026, 00:51:48] Connecting to MQTT broker
+I (298131119) MQTT_MGR: [10/02/2026, 00:51:48] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298137679) WATCHDOG_MGR: [10/02/2026, 00:51:55] MQTT disconnected
+E (298138149) MQTT_MGR: [10/02/2026, 00:51:55] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298145679) WATCHDOG_MGR: [10/02/2026, 00:52:03] MQTT disconnected
+W (298153679) WATCHDOG_MGR: [10/02/2026, 00:52:11] MQTT disconnected
+I (298155989) MQTT_MGR: [10/02/2026, 00:52:13] Setting credentials for ESP32 ID: 42A8ACA0
+I (298156089) MQTT_MGR: [10/02/2026, 00:52:13] Credentials configured
+I (298156119) MQTT_MGR: [10/02/2026, 00:52:13] Connecting to MQTT broker
+I (298156149) MQTT_MGR: [10/02/2026, 00:52:13] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298161679) WATCHDOG_MGR: [10/02/2026, 00:52:19] MQTT disconnected
+E (298163179) MQTT_MGR: [10/02/2026, 00:52:20] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298163219) WATCHDOG_MGR: [10/02/2026, 00:52:20] MQTT disconnected
+I (298165349) MQTT_MGR: [10/02/2026, 00:52:23] Connecting to MQTT broker
+I (298165449) MQTT_MGR: [10/02/2026, 00:52:23] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298169679) WATCHDOG_MGR: [10/02/2026, 00:52:27] MQTT disconnected
+E (298172479) MQTT_MGR: [10/02/2026, 00:52:30] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298177679) WATCHDOG_MGR: [10/02/2026, 00:52:35] MQTT disconnected
+W (298185679) WATCHDOG_MGR: [10/02/2026, 00:52:43] MQTT disconnected
+W (298193679) WATCHDOG_MGR: [10/02/2026, 00:52:51] MQTT disconnected
+I (298196239) HEALTH_MON: System healthy - Uptime: 4969 min, Heap: 114 KB
+I (298196619) MQTT_MGR: [10/02/2026, 00:52:54] Connecting to MQTT broker
+I (298196659) MQTT_MGR: [10/02/2026, 00:52:54] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298201679) WATCHDOG_MGR: [10/02/2026, 00:52:59] MQTT disconnected
+E (298203689) MQTT_MGR: [10/02/2026, 00:53:01] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298209679) WATCHDOG_MGR: [10/02/2026, 00:53:07] MQTT disconnected
+W (298217679) WATCHDOG_MGR: [10/02/2026, 00:53:15] MQTT disconnected
+W (298225679) WATCHDOG_MGR: [10/02/2026, 00:53:23] MQTT disconnected
+I (298227829) MQTT_MGR: [10/02/2026, 00:53:25] Connecting to MQTT broker
+I (298227869) MQTT_MGR: [10/02/2026, 00:53:25] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298233679) WATCHDOG_MGR: [10/02/2026, 00:53:31] MQTT disconnected
+E (298234899) MQTT_MGR: [10/02/2026, 00:53:32] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298241679) WATCHDOG_MGR: [10/02/2026, 00:53:39] MQTT disconnected
+W (298249679) WATCHDOG_MGR: [10/02/2026, 00:53:47] MQTT disconnected
+W (298257679) WATCHDOG_MGR: [10/02/2026, 00:53:55] MQTT disconnected
+I (298259039) MQTT_MGR: [10/02/2026, 00:53:56] Connecting to MQTT broker
+I (298259079) MQTT_MGR: [10/02/2026, 00:53:56] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298265679) WATCHDOG_MGR: [10/02/2026, 00:54:03] MQTT disconnected
+E (298266109) MQTT_MGR: [10/02/2026, 00:54:03] DNS resolution failed for hddm.pqsolutionsperu.com
+I (298270849) MQTT_MGR: [10/02/2026, 00:54:08] Setting credentials for ESP32 ID: 42A8ACA0
+I (298270949) MQTT_MGR: [10/02/2026, 00:54:08] Credentials configured
+I (298270979) MQTT_MGR: [10/02/2026, 00:54:08] Connecting to MQTT broker
+I (298271009) MQTT_MGR: [10/02/2026, 00:54:08] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298273679) WATCHDOG_MGR: [10/02/2026, 00:54:11] MQTT disconnected
+E (298278039) MQTT_MGR: [10/02/2026, 00:54:15] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298281679) WATCHDOG_MGR: [10/02/2026, 00:54:19] MQTT disconnected
+I (298289079) MQTT_MGR: [10/02/2026, 00:54:26] Connecting to MQTT broker
+I (298289119) MQTT_MGR: [10/02/2026, 00:54:26] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298289679) WATCHDOG_MGR: [10/02/2026, 00:54:27] MQTT disconnected
+E (298296149) MQTT_MGR: [10/02/2026, 00:54:33] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298297679) WATCHDOG_MGR: [10/02/2026, 00:54:35] MQTT disconnected
+W (298305679) WATCHDOG_MGR: [10/02/2026, 00:54:43] MQTT disconnected
+W (298313679) WATCHDOG_MGR: [10/02/2026, 00:54:51] MQTT disconnected
+I (298320289) MQTT_MGR: [10/02/2026, 00:54:57] Connecting to MQTT broker
+I (298320329) MQTT_MGR: [10/02/2026, 00:54:57] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298321679) WATCHDOG_MGR: [10/02/2026, 00:54:59] MQTT disconnected
+E (298327359) MQTT_MGR: [10/02/2026, 00:55:05] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298329679) WATCHDOG_MGR: [10/02/2026, 00:55:07] MQTT disconnected
+W (298337679) WATCHDOG_MGR: [10/02/2026, 00:55:15] MQTT disconnected
+W (298345679) WATCHDOG_MGR: [10/02/2026, 00:55:23] MQTT disconnected
+I (298351499) MQTT_MGR: [10/02/2026, 00:55:29] Connecting to MQTT broker
+I (298351539) MQTT_MGR: [10/02/2026, 00:55:29] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298353679) WATCHDOG_MGR: [10/02/2026, 00:55:31] MQTT disconnected
+E (298358569) MQTT_MGR: [10/02/2026, 00:55:36] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298361679) WATCHDOG_MGR: [10/02/2026, 00:55:39] MQTT disconnected
+W (298369679) WATCHDOG_MGR: [10/02/2026, 00:55:47] MQTT disconnected
+W (298377679) WATCHDOG_MGR: [10/02/2026, 00:55:55] MQTT disconnected
+I (298378509) MQTT_MGR: [10/02/2026, 00:55:56] Setting credentials for ESP32 ID: 42A8ACA0
+I (298378549) MQTT_MGR: [10/02/2026, 00:55:56] Credentials configured
+I (298378579) MQTT_MGR: [10/02/2026, 00:55:56] Connecting to MQTT broker
+I (298378609) MQTT_MGR: [10/02/2026, 00:55:56] Testing DNS resolution for: hddm.pqsolutionsperu.com
+E (298385639) MQTT_MGR: [10/02/2026, 00:56:03] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298385679) WATCHDOG_MGR: [10/02/2026, 00:56:03] MQTT disconnected
+I (298387839) MQTT_MGR: [10/02/2026, 00:56:05] Connecting to MQTT broker
+I (298387879) MQTT_MGR: [10/02/2026, 00:56:05] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298393679) WATCHDOG_MGR: [10/02/2026, 00:56:11] MQTT disconnected
+E (298394909) MQTT_MGR: [10/02/2026, 00:56:12] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298401679) WATCHDOG_MGR: [10/02/2026, 00:56:19] MQTT disconnected
+W (298409679) WATCHDOG_MGR: [10/02/2026, 00:56:27] MQTT disconnected
+W (298417679) WATCHDOG_MGR: [10/02/2026, 00:56:35] MQTT disconnected
+I (298419069) MQTT_MGR: [10/02/2026, 00:56:36] Connecting to MQTT broker
+I (298419109) MQTT_MGR: [10/02/2026, 00:56:36] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298425679) WATCHDOG_MGR: [10/02/2026, 00:56:43] MQTT disconnected
+E (298426139) MQTT_MGR: [10/02/2026, 00:56:43] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298433679) WATCHDOG_MGR: [10/02/2026, 00:56:51] MQTT disconnected
+W (298439779) WATCHDOG_MGR: [10/02/2026, 00:56:57] MQTT disconnected
+W (298441679) WATCHDOG_MGR: [10/02/2026, 00:56:59] MQTT disconnected
+W (298449679) WATCHDOG_MGR: [10/02/2026, 00:57:07] MQTT disconnected
+I (298450819) MQTT_MGR: [10/02/2026, 00:57:08] Connecting to MQTT broker
+I (298450859) MQTT_MGR: [10/02/2026, 00:57:08] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298457679) WATCHDOG_MGR: [10/02/2026, 00:57:15] MQTT disconnected
+E (298457889) MQTT_MGR: [10/02/2026, 00:57:15] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298465679) WATCHDOG_MGR: [10/02/2026, 00:57:23] MQTT disconnected
+W (298473679) WATCHDOG_MGR: [10/02/2026, 00:57:31] MQTT disconnected
+W (298481679) WATCHDOG_MGR: [10/02/2026, 00:57:39] MQTT disconnected
+I (298482029) MQTT_MGR: [10/02/2026, 00:57:39] Connecting to MQTT broker
+I (298482069) MQTT_MGR: [10/02/2026, 00:57:39] Testing DNS resolution for: hddm.pqsolutionsperu.com
+E (298489099) MQTT_MGR: [10/02/2026, 00:57:46] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298489679) WATCHDOG_MGR: [10/02/2026, 00:57:47] MQTT disconnected
+I (298493409) MQTT_MGR: [10/02/2026, 00:57:51] Setting credentials for ESP32 ID: 42A8ACA0
+I (298493449) MQTT_MGR: [10/02/2026, 00:57:51] Credentials configured
+I (298493479) MQTT_MGR: [10/02/2026, 00:57:51] Connecting to MQTT broker
+I (298493509) MQTT_MGR: [10/02/2026, 00:57:51] Testing DNS resolution for: hddm.pqsolutionsperu.com
+I (298496279) HEALTH_MON: System healthy - Uptime: 4974 min, Heap: 115 KB
+W (298497679) WATCHDOG_MGR: [10/02/2026, 00:57:55] MQTT disconnected
+E (298500539) MQTT_MGR: [10/02/2026, 00:57:58] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298505679) WATCHDOG_MGR: [10/02/2026, 00:58:03] MQTT disconnected
+I (298513679) MQTT_MGR: [10/02/2026, 00:58:11] Connecting to MQTT broker
+W (298513679) WATCHDOG_MGR: [10/02/2026, 00:58:11] MQTT disconnected
+I (298513719) MQTT_MGR: [10/02/2026, 00:58:11] Testing DNS resolution for: hddm.pqsolutionsperu.com
+E (298520779) MQTT_MGR: [10/02/2026, 00:58:18] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298521679) WATCHDOG_MGR: [10/02/2026, 00:58:19] MQTT disconnected
+W (298529679) WATCHDOG_MGR: [10/02/2026, 00:58:27] MQTT disconnected
+W (298537679) WATCHDOG_MGR: [10/02/2026, 00:58:35] MQTT disconnected
+I (298545479) MQTT_MGR: [10/02/2026, 00:58:43] Connecting to MQTT broker
+I (298545519) MQTT_MGR: [10/02/2026, 00:58:43] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298545679) WATCHDOG_MGR: [10/02/2026, 00:58:43] MQTT disconnected
+E (298552549) MQTT_MGR: [10/02/2026, 00:58:50] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298553679) WATCHDOG_MGR: [10/02/2026, 00:58:51] MQTT disconnected
+W (298561679) WATCHDOG_MGR: [10/02/2026, 00:58:59] MQTT disconnected
+W (298569679) WATCHDOG_MGR: [10/02/2026, 00:59:07] MQTT disconnected
+I (298576689) MQTT_MGR: [10/02/2026, 00:59:14] Connecting to MQTT broker
+I (298576729) MQTT_MGR: [10/02/2026, 00:59:14] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298577679) WATCHDOG_MGR: [10/02/2026, 00:59:15] MQTT disconnected
+E (298583769) MQTT_MGR: [10/02/2026, 00:59:21] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298585679) WATCHDOG_MGR: [10/02/2026, 00:59:23] MQTT disconnected
+W (298593679) WATCHDOG_MGR: [10/02/2026, 00:59:31] MQTT disconnected
+I (298601109) MQTT_MGR: [10/02/2026, 00:59:38] Setting credentials for ESP32 ID: 42A8ACA0
+I (298601149) MQTT_MGR: [10/02/2026, 00:59:38] Credentials configured
+I (298601179) MQTT_MGR: [10/02/2026, 00:59:38] Connecting to MQTT broker
+I (298601259) MQTT_MGR: [10/02/2026, 00:59:38] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298601679) WATCHDOG_MGR: [10/02/2026, 00:59:39] MQTT disconnected
+E (298608289) MQTT_MGR: [10/02/2026, 00:59:45] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298609679) WATCHDOG_MGR: [10/02/2026, 00:59:47] MQTT disconnected
+I (298610929) MQTT_MGR: [10/02/2026, 00:59:48] Connecting to MQTT broker
+I (298610969) MQTT_MGR: [10/02/2026, 00:59:48] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298617679) WATCHDOG_MGR: [10/02/2026, 00:59:55] MQTT disconnected
+E (298617999) MQTT_MGR: [10/02/2026, 00:59:55] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298625679) WATCHDOG_MGR: [10/02/2026, 01:00:03] MQTT disconnected
+W (298633679) WATCHDOG_MGR: [10/02/2026, 01:00:11] MQTT disconnected
+W (298641679) WATCHDOG_MGR: [10/02/2026, 01:00:19] MQTT disconnected
+I (298642139) MQTT_MGR: [10/02/2026, 01:00:19] Connecting to MQTT broker
+I (298642179) MQTT_MGR: [10/02/2026, 01:00:19] Testing DNS resolution for: hddm.pqsolutionsperu.com
+E (298649269) MQTT_MGR: [10/02/2026, 01:00:26] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298649679) WATCHDOG_MGR: [10/02/2026, 01:00:27] MQTT disconnected
+W (298657679) WATCHDOG_MGR: [10/02/2026, 01:00:35] MQTT disconnected
+W (298665679) WATCHDOG_MGR: [10/02/2026, 01:00:43] MQTT disconnected
+I (298673409) MQTT_MGR: [10/02/2026, 01:00:51] Connecting to MQTT broker
+I (298673449) MQTT_MGR: [10/02/2026, 01:00:51] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298673679) WATCHDOG_MGR: [10/02/2026, 01:00:51] MQTT disconnected
+E (298680479) MQTT_MGR: [10/02/2026, 01:00:58] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298681679) WATCHDOG_MGR: [10/02/2026, 01:00:59] MQTT disconnected
+W (298689679) WATCHDOG_MGR: [10/02/2026, 01:01:07] MQTT disconnected
+W (298697679) WATCHDOG_MGR: [10/02/2026, 01:01:15] MQTT disconnected
+I (298704619) MQTT_MGR: [10/02/2026, 01:01:22] Connecting to MQTT broker
+I (298704659) MQTT_MGR: [10/02/2026, 01:01:22] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298705679) WATCHDOG_MGR: [10/02/2026, 01:01:23] MQTT disconnected
+E (298711749) MQTT_MGR: [10/02/2026, 01:01:29] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298713679) WATCHDOG_MGR: [10/02/2026, 01:01:31] MQTT disconnected
+I (298716489) MQTT_MGR: [10/02/2026, 01:01:34] Setting credentials for ESP32 ID: 42A8ACA0
+I (298716529) MQTT_MGR: [10/02/2026, 01:01:34] Credentials configured
+I (298716559) MQTT_MGR: [10/02/2026, 01:01:34] Connecting to MQTT broker
+I (298716589) MQTT_MGR: [10/02/2026, 01:01:34] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298721679) WATCHDOG_MGR: [10/02/2026, 01:01:39] MQTT disconnected
+E (298723679) MQTT_MGR: [10/02/2026, 01:01:41] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298723719) WATCHDOG_MGR: [10/02/2026, 01:01:41] MQTT disconnected
+W (298729679) WATCHDOG_MGR: [10/02/2026, 01:01:47] MQTT disconnected
+I (298734749) MQTT_MGR: [10/02/2026, 01:01:52] Connecting to MQTT broker
+I (298734789) MQTT_MGR: [10/02/2026, 01:01:52] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298737679) WATCHDOG_MGR: [10/02/2026, 01:01:55] MQTT disconnected
+E (298741879) MQTT_MGR: [10/02/2026, 01:01:59] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298745679) WATCHDOG_MGR: [10/02/2026, 01:02:03] MQTT disconnected
+W (298753679) WATCHDOG_MGR: [10/02/2026, 01:02:11] MQTT disconnected
+W (298761679) WATCHDOG_MGR: [10/02/2026, 01:02:19] MQTT disconnected
+I (298766019) MQTT_MGR: [10/02/2026, 01:02:23] Connecting to MQTT broker
+I (298766059) MQTT_MGR: [10/02/2026, 01:02:23] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298769679) WATCHDOG_MGR: [10/02/2026, 01:02:27] MQTT disconnected
+E (298773149) MQTT_MGR: [10/02/2026, 01:02:30] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298777679) WATCHDOG_MGR: [10/02/2026, 01:02:35] MQTT disconnected
+W (298785679) WATCHDOG_MGR: [10/02/2026, 01:02:43] MQTT disconnected
+W (298793679) WATCHDOG_MGR: [10/02/2026, 01:02:51] MQTT disconnected
+I (298796379) HEALTH_MON: System healthy - Uptime: 4979 min, Heap: 116 KB
+I (298797289) MQTT_MGR: [10/02/2026, 01:02:54] Connecting to MQTT broker
+I (298797329) MQTT_MGR: [10/02/2026, 01:02:54] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298801679) WATCHDOG_MGR: [10/02/2026, 01:02:59] MQTT disconnected
+E (298804359) MQTT_MGR: [10/02/2026, 01:03:02] DNS resolution failed for hddm.pqsolutionsperu.com
+I (298806149) HDDESP32: [10/02/2026, 01:03:03] Main task: heap free=118816 min=50956
+W (298809679) WATCHDOG_MGR: [10/02/2026, 01:03:07] MQTT disconnected
+W (298817679) WATCHDOG_MGR: [10/02/2026, 01:03:15] MQTT disconnected
+I (298824299) MQTT_MGR: [10/02/2026, 01:03:21] Setting credentials for ESP32 ID: 42A8ACA0
+I (298824339) MQTT_MGR: [10/02/2026, 01:03:22] Credentials configured
+I (298824369) MQTT_MGR: [10/02/2026, 01:03:22] Connecting to MQTT broker
+I (298824399) MQTT_MGR: [10/02/2026, 01:03:22] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298825679) WATCHDOG_MGR: [10/02/2026, 01:03:23] MQTT disconnected
+E (298831429) MQTT_MGR: [10/02/2026, 01:03:29] DNS resolution failed for hddm.pqsolutionsperu.com
+I (298833629) MQTT_MGR: [10/02/2026, 01:03:31] Connecting to MQTT broker
+I (298833669) MQTT_MGR: [10/02/2026, 01:03:31] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298833679) WATCHDOG_MGR: [10/02/2026, 01:03:31] MQTT disconnected
+E (298840709) MQTT_MGR: [10/02/2026, 01:03:38] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298841679) WATCHDOG_MGR: [10/02/2026, 01:03:39] MQTT disconnected
+W (298849679) WATCHDOG_MGR: [10/02/2026, 01:03:47] MQTT disconnected
+W (298857679) WATCHDOG_MGR: [10/02/2026, 01:03:55] MQTT disconnected
+I (298864849) MQTT_MGR: [10/02/2026, 01:04:02] Connecting to MQTT broker
+I (298864889) MQTT_MGR: [10/02/2026, 01:04:02] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298865679) WATCHDOG_MGR: [10/02/2026, 01:04:03] MQTT disconnected
+E (298871919) MQTT_MGR: [10/02/2026, 01:04:09] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298873679) WATCHDOG_MGR: [10/02/2026, 01:04:11] MQTT disconnected
+W (298881679) WATCHDOG_MGR: [10/02/2026, 01:04:19] MQTT disconnected
+W (298889679) WATCHDOG_MGR: [10/02/2026, 01:04:27] MQTT disconnected
+I (298896059) MQTT_MGR: [10/02/2026, 01:04:33] Connecting to MQTT broker
+I (298896099) MQTT_MGR: [10/02/2026, 01:04:33] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298897679) WATCHDOG_MGR: [10/02/2026, 01:04:35] MQTT disconnected
+E (298903129) MQTT_MGR: [10/02/2026, 01:04:40] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298905679) WATCHDOG_MGR: [10/02/2026, 01:04:43] MQTT disconnected
+W (298913679) WATCHDOG_MGR: [10/02/2026, 01:04:51] MQTT disconnected
+W (298921679) WATCHDOG_MGR: [10/02/2026, 01:04:59] MQTT disconnected
+I (298927769) MQTT_MGR: [10/02/2026, 01:05:05] Connecting to MQTT broker
+I (298927809) MQTT_MGR: [10/02/2026, 01:05:05] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298929679) WATCHDOG_MGR: [10/02/2026, 01:05:07] MQTT disconnected
+E (298934839) MQTT_MGR: [10/02/2026, 01:05:12] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298937679) WATCHDOG_MGR: [10/02/2026, 01:05:15] MQTT disconnected
+I (298939079) MQTT_MGR: [10/02/2026, 01:05:16] Setting credentials for ESP32 ID: 42A8ACA0
+I (298939119) MQTT_MGR: [10/02/2026, 01:05:16] Credentials configured
+I (298939149) MQTT_MGR: [10/02/2026, 01:05:16] Connecting to MQTT broker
+I (298939179) MQTT_MGR: [10/02/2026, 01:05:16] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298945679) WATCHDOG_MGR: [10/02/2026, 01:05:23] MQTT disconnected
+E (298946209) MQTT_MGR: [10/02/2026, 01:05:23] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298953679) WATCHDOG_MGR: [10/02/2026, 01:05:31] MQTT disconnected
+I (298959409) MQTT_MGR: [10/02/2026, 01:05:37] Connecting to MQTT broker
+I (298959449) MQTT_MGR: [10/02/2026, 01:05:37] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298961679) WATCHDOG_MGR: [10/02/2026, 01:05:39] MQTT disconnected
+E (298966479) MQTT_MGR: [10/02/2026, 01:05:44] DNS resolution failed for hddm.pqsolutionsperu.com
+W (298969679) WATCHDOG_MGR: [10/02/2026, 01:05:47] MQTT disconnected
+W (298977679) WATCHDOG_MGR: [10/02/2026, 01:05:55] MQTT disconnected
+W (298985679) WATCHDOG_MGR: [10/02/2026, 01:06:03] MQTT disconnected
+I (298990619) MQTT_MGR: [10/02/2026, 01:06:08] Connecting to MQTT broker
+I (298990659) MQTT_MGR: [10/02/2026, 01:06:08] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (298993679) WATCHDOG_MGR: [10/02/2026, 01:06:11] MQTT disconnected
+E (298997689) MQTT_MGR: [10/02/2026, 01:06:15] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299000329) WATCHDOG_MGR: [10/02/2026, 01:06:17] MQTT disconnected
+W (299001679) WATCHDOG_MGR: [10/02/2026, 01:06:19] MQTT disconnected
+W (299009679) WATCHDOG_MGR: [10/02/2026, 01:06:27] MQTT disconnected
+W (299017679) WATCHDOG_MGR: [10/02/2026, 01:06:35] MQTT disconnected
+I (299022419) MQTT_MGR: [10/02/2026, 01:06:40] Connecting to MQTT broker
+I (299022459) MQTT_MGR: [10/02/2026, 01:06:40] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299025679) WATCHDOG_MGR: [10/02/2026, 01:06:43] MQTT disconnected
+E (299029489) MQTT_MGR: [10/02/2026, 01:06:47] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299033679) WATCHDOG_MGR: [10/02/2026, 01:06:51] MQTT disconnected
+W (299041679) WATCHDOG_MGR: [10/02/2026, 01:06:59] MQTT disconnected
+I (299046889) MQTT_MGR: [10/02/2026, 01:07:04] Setting credentials for ESP32 ID: 42A8ACA0
+I (299046929) MQTT_MGR: [10/02/2026, 01:07:04] Credentials configured
+I (299046959) MQTT_MGR: [10/02/2026, 01:07:04] Connecting to MQTT broker
+I (299046989) MQTT_MGR: [10/02/2026, 01:07:04] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299049679) WATCHDOG_MGR: [10/02/2026, 01:07:07] MQTT disconnected
+E (299054079) MQTT_MGR: [10/02/2026, 01:07:11] DNS resolution failed for hddm.pqsolutionsperu.com
+I (299056219) MQTT_MGR: [10/02/2026, 01:07:13] Connecting to MQTT broker
+I (299056259) MQTT_MGR: [10/02/2026, 01:07:13] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299057679) WATCHDOG_MGR: [10/02/2026, 01:07:15] MQTT disconnected
+E (299063289) MQTT_MGR: [10/02/2026, 01:07:20] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299065679) WATCHDOG_MGR: [10/02/2026, 01:07:23] MQTT disconnected
+W (299073679) WATCHDOG_MGR: [10/02/2026, 01:07:31] MQTT disconnected
+W (299081679) WATCHDOG_MGR: [10/02/2026, 01:07:39] MQTT disconnected
+I (299087929) MQTT_MGR: [10/02/2026, 01:07:45] Connecting to MQTT broker
+I (299087969) MQTT_MGR: [10/02/2026, 01:07:45] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299089679) WATCHDOG_MGR: [10/02/2026, 01:07:47] MQTT disconnected
+E (299094999) MQTT_MGR: [10/02/2026, 01:07:52] DNS resolution failed for hddm.pqsolutionsperu.com
+I (299096479) HEALTH_MON: System healthy - Uptime: 4984 min, Heap: 116 KB
+W (299097679) WATCHDOG_MGR: [10/02/2026, 01:07:55] MQTT disconnected
+W (299105679) WATCHDOG_MGR: [10/02/2026, 01:08:03] MQTT disconnected
+W (299113679) WATCHDOG_MGR: [10/02/2026, 01:08:11] MQTT disconnected
+I (299119199) MQTT_MGR: [10/02/2026, 01:08:16] Connecting to MQTT broker
+I (299119239) MQTT_MGR: [10/02/2026, 01:08:16] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299121679) WATCHDOG_MGR: [10/02/2026, 01:08:19] MQTT disconnected
+E (299126269) MQTT_MGR: [10/02/2026, 01:08:23] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299129679) WATCHDOG_MGR: [10/02/2026, 01:08:27] MQTT disconnected
+W (299137679) WATCHDOG_MGR: [10/02/2026, 01:08:35] MQTT disconnected
+W (299145679) WATCHDOG_MGR: [10/02/2026, 01:08:43] MQTT disconnected
+I (299150409) MQTT_MGR: [10/02/2026, 01:08:48] Connecting to MQTT broker
+I (299150449) MQTT_MGR: [10/02/2026, 01:08:48] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299153679) WATCHDOG_MGR: [10/02/2026, 01:08:51] MQTT disconnected
+E (299157539) MQTT_MGR: [10/02/2026, 01:08:55] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299161679) WATCHDOG_MGR: [10/02/2026, 01:08:59] MQTT disconnected
+I (299161779) MQTT_MGR: [10/02/2026, 01:08:59] Setting credentials for ESP32 ID: 42A8ACA0
+I (299161819) MQTT_MGR: [10/02/2026, 01:08:59] Credentials configured
+I (299161849) MQTT_MGR: [10/02/2026, 01:08:59] Connecting to MQTT broker
+I (299161879) MQTT_MGR: [10/02/2026, 01:08:59] Testing DNS resolution for: hddm.pqsolutionsperu.com
+E (299168969) MQTT_MGR: [10/02/2026, 01:09:06] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299169679) WATCHDOG_MGR: [10/02/2026, 01:09:07] MQTT disconnected
+W (299177679) WATCHDOG_MGR: [10/02/2026, 01:09:15] MQTT disconnected
+I (299182609) MQTT_MGR: [10/02/2026, 01:09:20] Connecting to MQTT broker
+I (299182649) MQTT_MGR: [10/02/2026, 01:09:20] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299185679) WATCHDOG_MGR: [10/02/2026, 01:09:23] MQTT disconnected
+E (299189679) MQTT_MGR: [10/02/2026, 01:09:27] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299193679) WATCHDOG_MGR: [10/02/2026, 01:09:31] MQTT disconnected
+W (299201679) WATCHDOG_MGR: [10/02/2026, 01:09:39] MQTT disconnected
+W (299209679) WATCHDOG_MGR: [10/02/2026, 01:09:47] MQTT disconnected
+I (299213819) MQTT_MGR: [10/02/2026, 01:09:51] Connecting to MQTT broker
+I (299213859) MQTT_MGR: [10/02/2026, 01:09:51] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299217679) WATCHDOG_MGR: [10/02/2026, 01:09:55] MQTT disconnected
+E (299220889) MQTT_MGR: [10/02/2026, 01:09:58] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299225679) WATCHDOG_MGR: [10/02/2026, 01:10:03] MQTT disconnected
+W (299233679) WATCHDOG_MGR: [10/02/2026, 01:10:11] MQTT disconnected
+W (299241679) WATCHDOG_MGR: [10/02/2026, 01:10:19] MQTT disconnected
+I (299245029) MQTT_MGR: [10/02/2026, 01:10:22] Connecting to MQTT broker
+I (299245069) MQTT_MGR: [10/02/2026, 01:10:22] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299249679) WATCHDOG_MGR: [10/02/2026, 01:10:27] MQTT disconnected
+E (299252159) MQTT_MGR: [10/02/2026, 01:10:29] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299257679) WATCHDOG_MGR: [10/02/2026, 01:10:35] MQTT disconnected
+W (299265679) WATCHDOG_MGR: [10/02/2026, 01:10:43] MQTT disconnected
+I (299269999) MQTT_MGR: [10/02/2026, 01:10:47] Setting credentials for ESP32 ID: 42A8ACA0
+I (299270039) MQTT_MGR: [10/02/2026, 01:10:47] Credentials configured
+I (299270069) MQTT_MGR: [10/02/2026, 01:10:47] Connecting to MQTT broker
+I (299270159) MQTT_MGR: [10/02/2026, 01:10:47] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299273679) WATCHDOG_MGR: [10/02/2026, 01:10:51] MQTT disconnected
+E (299277189) MQTT_MGR: [10/02/2026, 01:10:54] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299277229) WATCHDOG_MGR: [10/02/2026, 01:10:54] MQTT disconnected
+I (299279359) MQTT_MGR: [10/02/2026, 01:10:57] Connecting to MQTT broker
+I (299279399) MQTT_MGR: [10/02/2026, 01:10:57] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299281679) WATCHDOG_MGR: [10/02/2026, 01:10:59] MQTT disconnected
+E (299286489) MQTT_MGR: [10/02/2026, 01:11:04] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299289679) WATCHDOG_MGR: [10/02/2026, 01:11:07] MQTT disconnected
+W (299297679) WATCHDOG_MGR: [10/02/2026, 01:11:15] MQTT disconnected
+W (299305679) WATCHDOG_MGR: [10/02/2026, 01:11:23] MQTT disconnected
+I (299310629) MQTT_MGR: [10/02/2026, 01:11:28] Connecting to MQTT broker
+I (299310719) MQTT_MGR: [10/02/2026, 01:11:28] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299313679) WATCHDOG_MGR: [10/02/2026, 01:11:31] MQTT disconnected
+E (299317749) MQTT_MGR: [10/02/2026, 01:11:35] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299321679) WATCHDOG_MGR: [10/02/2026, 01:11:39] MQTT disconnected
+W (299329679) WATCHDOG_MGR: [10/02/2026, 01:11:47] MQTT disconnected
+W (299337679) WATCHDOG_MGR: [10/02/2026, 01:11:55] MQTT disconnected
+I (299341889) MQTT_MGR: [10/02/2026, 01:11:59] Connecting to MQTT broker
+I (299341989) MQTT_MGR: [10/02/2026, 01:11:59] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299345679) WATCHDOG_MGR: [10/02/2026, 01:12:03] MQTT disconnected
+E (299349019) MQTT_MGR: [10/02/2026, 01:12:06] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299353679) WATCHDOG_MGR: [10/02/2026, 01:12:11] MQTT disconnected
+W (299361679) WATCHDOG_MGR: [10/02/2026, 01:12:19] MQTT disconnected
+W (299369679) WATCHDOG_MGR: [10/02/2026, 01:12:27] MQTT disconnected
+I (299373159) MQTT_MGR: [10/02/2026, 01:12:30] Connecting to MQTT broker
+I (299373199) MQTT_MGR: [10/02/2026, 01:12:30] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299377679) WATCHDOG_MGR: [10/02/2026, 01:12:35] MQTT disconnected
+E (299380229) MQTT_MGR: [10/02/2026, 01:12:37] DNS resolution failed for hddm.pqsolutionsperu.com
+I (299384969) MQTT_MGR: [10/02/2026, 01:12:42] Setting credentials for ESP32 ID: 42A8ACA0
+I (299385009) MQTT_MGR: [10/02/2026, 01:12:42] Credentials configured
+I (299385039) MQTT_MGR: [10/02/2026, 01:12:42] Connecting to MQTT broker
+I (299385119) MQTT_MGR: [10/02/2026, 01:12:42] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299385679) WATCHDOG_MGR: [10/02/2026, 01:12:43] MQTT disconnected
+E (299392149) MQTT_MGR: [10/02/2026, 01:12:49] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299393679) WATCHDOG_MGR: [10/02/2026, 01:12:51] MQTT disconnected
+I (299396519) HEALTH_MON: System healthy - Uptime: 4989 min, Heap: 116 KB
+W (299401679) WATCHDOG_MGR: [10/02/2026, 01:12:59] MQTT disconnected
+I (299403189) MQTT_MGR: [10/02/2026, 01:13:00] Connecting to MQTT broker
+I (299403229) MQTT_MGR: [10/02/2026, 01:13:00] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299409679) WATCHDOG_MGR: [10/02/2026, 01:13:07] MQTT disconnected
+E (299410259) MQTT_MGR: [10/02/2026, 01:13:07] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299417679) WATCHDOG_MGR: [10/02/2026, 01:13:15] MQTT disconnected
+W (299425679) WATCHDOG_MGR: [10/02/2026, 01:13:23] MQTT disconnected
+W (299433679) WATCHDOG_MGR: [10/02/2026, 01:13:31] MQTT disconnected
+I (299434399) MQTT_MGR: [10/02/2026, 01:13:32] Connecting to MQTT broker
+I (299434439) MQTT_MGR: [10/02/2026, 01:13:32] Testing DNS resolution for: hddm.pqsolutionsperu.com
+E (299441469) MQTT_MGR: [10/02/2026, 01:13:39] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299441679) WATCHDOG_MGR: [10/02/2026, 01:13:39] MQTT disconnected
+W (299449679) WATCHDOG_MGR: [10/02/2026, 01:13:47] MQTT disconnected
+W (299457679) WATCHDOG_MGR: [10/02/2026, 01:13:55] MQTT disconnected
+I (299465609) MQTT_MGR: [10/02/2026, 01:14:03] Connecting to MQTT broker
+I (299465649) MQTT_MGR: [10/02/2026, 01:14:03] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299465679) WATCHDOG_MGR: [10/02/2026, 01:14:03] MQTT disconnected
+E (299472689) MQTT_MGR: [10/02/2026, 01:14:10] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299473679) WATCHDOG_MGR: [10/02/2026, 01:14:11] MQTT disconnected
+W (299481679) WATCHDOG_MGR: [10/02/2026, 01:14:19] MQTT disconnected
+W (299489679) WATCHDOG_MGR: [10/02/2026, 01:14:27] MQTT disconnected
+I (299492629) MQTT_MGR: [10/02/2026, 01:14:30] Setting credentials for ESP32 ID: 42A8ACA0
+I (299492669) MQTT_MGR: [10/02/2026, 01:14:30] Credentials configured
+I (299492699) MQTT_MGR: [10/02/2026, 01:14:30] Connecting to MQTT broker
+I (299492729) MQTT_MGR: [10/02/2026, 01:14:30] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299497679) WATCHDOG_MGR: [10/02/2026, 01:14:35] MQTT disconnected
+E (299499759) MQTT_MGR: [10/02/2026, 01:14:37] DNS resolution failed for hddm.pqsolutionsperu.com
+I (299501949) MQTT_MGR: [10/02/2026, 01:14:39] Connecting to MQTT broker
+I (299501989) MQTT_MGR: [10/02/2026, 01:14:39] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299505679) WATCHDOG_MGR: [10/02/2026, 01:14:43] MQTT disconnected
+E (299509019) MQTT_MGR: [10/02/2026, 01:14:46] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299513679) WATCHDOG_MGR: [10/02/2026, 01:14:51] MQTT disconnected
+W (299521679) WATCHDOG_MGR: [10/02/2026, 01:14:59] MQTT disconnected
+W (299529679) WATCHDOG_MGR: [10/02/2026, 01:15:07] MQTT disconnected
+I (299533159) MQTT_MGR: [10/02/2026, 01:15:10] Connecting to MQTT broker
+I (299533189) MQTT_MGR: [10/02/2026, 01:15:10] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299537679) WATCHDOG_MGR: [10/02/2026, 01:15:15] MQTT disconnected
+E (299540229) MQTT_MGR: [10/02/2026, 01:15:17] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299545679) WATCHDOG_MGR: [10/02/2026, 01:15:23] MQTT disconnected
+W (299553679) WATCHDOG_MGR: [10/02/2026, 01:15:31] MQTT disconnected
+W (299553869) WATCHDOG_MGR: [10/02/2026, 01:15:31] MQTT disconnected
+W (299561679) WATCHDOG_MGR: [10/02/2026, 01:15:39] MQTT disconnected
+I (299564909) MQTT_MGR: [10/02/2026, 01:15:42] Connecting to MQTT broker
+I (299564949) MQTT_MGR: [10/02/2026, 01:15:42] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299569679) WATCHDOG_MGR: [10/02/2026, 01:15:47] MQTT disconnected
+E (299571979) MQTT_MGR: [10/02/2026, 01:15:49] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299577679) WATCHDOG_MGR: [10/02/2026, 01:15:55] MQTT disconnected
+W (299585679) WATCHDOG_MGR: [10/02/2026, 01:16:03] MQTT disconnected
+W (299593679) WATCHDOG_MGR: [10/02/2026, 01:16:11] MQTT disconnected
+I (299596179) MQTT_MGR: [10/02/2026, 01:16:13] Connecting to MQTT broker
+I (299596219) MQTT_MGR: [10/02/2026, 01:16:13] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299601679) WATCHDOG_MGR: [10/02/2026, 01:16:19] MQTT disconnected
+E (299603249) MQTT_MGR: [10/02/2026, 01:16:20] DNS resolution failed for hddm.pqsolutionsperu.com
+I (299607489) MQTT_MGR: [10/02/2026, 01:16:25] Setting credentials for ESP32 ID: 42A8ACA0
+I (299607529) MQTT_MGR: [10/02/2026, 01:16:25] Credentials configured
+I (299607559) MQTT_MGR: [10/02/2026, 01:16:25] Connecting to MQTT broker
+I (299607589) MQTT_MGR: [10/02/2026, 01:16:25] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299609679) WATCHDOG_MGR: [10/02/2026, 01:16:27] MQTT disconnected
+E (299614619) MQTT_MGR: [10/02/2026, 01:16:32] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299617679) WATCHDOG_MGR: [10/02/2026, 01:16:35] MQTT disconnected
+W (299625679) WATCHDOG_MGR: [10/02/2026, 01:16:43] MQTT disconnected
+I (299627819) MQTT_MGR: [10/02/2026, 01:16:45] Connecting to MQTT broker
+I (299627859) MQTT_MGR: [10/02/2026, 01:16:45] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299633679) WATCHDOG_MGR: [10/02/2026, 01:16:51] MQTT disconnected
+E (299634889) MQTT_MGR: [10/02/2026, 01:16:52] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299641679) WATCHDOG_MGR: [10/02/2026, 01:16:59] MQTT disconnected
+W (299649679) WATCHDOG_MGR: [10/02/2026, 01:17:07] MQTT disconnected
+W (299657679) WATCHDOG_MGR: [10/02/2026, 01:17:15] MQTT disconnected
+I (299659589) MQTT_MGR: [10/02/2026, 01:17:17] Connecting to MQTT broker
+I (299659629) MQTT_MGR: [10/02/2026, 01:17:17] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299665679) WATCHDOG_MGR: [10/02/2026, 01:17:23] MQTT disconnected
+E (299666659) MQTT_MGR: [10/02/2026, 01:17:24] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299673679) WATCHDOG_MGR: [10/02/2026, 01:17:31] MQTT disconnected
+W (299681679) WATCHDOG_MGR: [10/02/2026, 01:17:39] MQTT disconnected
+W (299689679) WATCHDOG_MGR: [10/02/2026, 01:17:47] MQTT disconnected
+I (299690859) MQTT_MGR: [10/02/2026, 01:17:48] Connecting to MQTT broker
+I (299690899) MQTT_MGR: [10/02/2026, 01:17:48] Testing DNS resolution for: hddm.pqsolutionsperu.com
+I (299696559) HEALTH_MON: System healthy - Uptime: 4994 min, Heap: 115 KB
+W (299697679) WATCHDOG_MGR: [10/02/2026, 01:17:55] MQTT disconnected
+E (299697929) MQTT_MGR: [10/02/2026, 01:17:55] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299705679) WATCHDOG_MGR: [10/02/2026, 01:18:03] MQTT disconnected
+W (299713679) WATCHDOG_MGR: [10/02/2026, 01:18:11] MQTT disconnected
+I (299715269) MQTT_MGR: [10/02/2026, 01:18:12] Setting credentials for ESP32 ID: 42A8ACA0
+I (299715309) MQTT_MGR: [10/02/2026, 01:18:12] Credentials configured
+I (299715339) MQTT_MGR: [10/02/2026, 01:18:13] Connecting to MQTT broker
+I (299715429) MQTT_MGR: [10/02/2026, 01:18:13] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299721679) WATCHDOG_MGR: [10/02/2026, 01:18:19] MQTT disconnected
+E (299722459) MQTT_MGR: [10/02/2026, 01:18:20] DNS resolution failed for hddm.pqsolutionsperu.com
+I (299725099) MQTT_MGR: [10/02/2026, 01:18:22] Connecting to MQTT broker
+I (299725139) MQTT_MGR: [10/02/2026, 01:18:22] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299729679) WATCHDOG_MGR: [10/02/2026, 01:18:27] MQTT disconnected
+E (299732169) MQTT_MGR: [10/02/2026, 01:18:29] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299737679) WATCHDOG_MGR: [10/02/2026, 01:18:35] MQTT disconnected
+W (299745679) WATCHDOG_MGR: [10/02/2026, 01:18:43] MQTT disconnected
+W (299753679) WATCHDOG_MGR: [10/02/2026, 01:18:51] MQTT disconnected
+I (299756309) MQTT_MGR: [10/02/2026, 01:18:53] Connecting to MQTT broker
+I (299756349) MQTT_MGR: [10/02/2026, 01:18:54] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299761679) WATCHDOG_MGR: [10/02/2026, 01:18:59] MQTT disconnected
+E (299763379) MQTT_MGR: [10/02/2026, 01:19:01] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299769679) WATCHDOG_MGR: [10/02/2026, 01:19:07] MQTT disconnected
+W (299777679) WATCHDOG_MGR: [10/02/2026, 01:19:15] MQTT disconnected
+W (299785679) WATCHDOG_MGR: [10/02/2026, 01:19:23] MQTT disconnected
+I (299787519) MQTT_MGR: [10/02/2026, 01:19:25] Connecting to MQTT broker
+I (299787559) MQTT_MGR: [10/02/2026, 01:19:25] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299793679) WATCHDOG_MGR: [10/02/2026, 01:19:31] MQTT disconnected
+E (299794649) MQTT_MGR: [10/02/2026, 01:19:32] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299801679) WATCHDOG_MGR: [10/02/2026, 01:19:39] MQTT disconnected
+W (299809679) WATCHDOG_MGR: [10/02/2026, 01:19:47] MQTT disconnected
+W (299817679) WATCHDOG_MGR: [10/02/2026, 01:19:55] MQTT disconnected
+I (299818789) MQTT_MGR: [10/02/2026, 01:19:56] Connecting to MQTT broker
+I (299818829) MQTT_MGR: [10/02/2026, 01:19:56] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299825679) WATCHDOG_MGR: [10/02/2026, 01:20:03] MQTT disconnected
+E (299825919) MQTT_MGR: [10/02/2026, 01:20:03] DNS resolution failed for hddm.pqsolutionsperu.com
+I (299830659) RELAY_MGR: [10/02/2026, 01:20:08] Verifying GPIO interrupt system for panel
+I (299830779) RELAY_MGR: [10/02/2026, 01:20:08] GPIO verification: 4/4 functional (active relays: 4)
+I (299830819) RELAY_MGR: [10/02/2026, 01:20:08] All active GPIOs functional - no reconfiguration needed
+I (299830849) MQTT_MGR: [10/02/2026, 01:20:08] Setting credentials for ESP32 ID: 42A8ACA0
+I (299830939) MQTT_MGR: [10/02/2026, 01:20:08] Credentials configured
+I (299830969) MQTT_MGR: [10/02/2026, 01:20:08] Connecting to MQTT broker
+I (299830999) MQTT_MGR: [10/02/2026, 01:20:08] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299833679) WATCHDOG_MGR: [10/02/2026, 01:20:11] MQTT disconnected
+E (299838029) MQTT_MGR: [10/02/2026, 01:20:15] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299838069) WATCHDOG_MGR: [10/02/2026, 01:20:15] MQTT disconnected
+W (299841679) WATCHDOG_MGR: [10/02/2026, 01:20:19] MQTT disconnected
+I (299849159) MQTT_MGR: [10/02/2026, 01:20:26] Connecting to MQTT broker
+I (299849199) MQTT_MGR: [10/02/2026, 01:20:26] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299849679) WATCHDOG_MGR: [10/02/2026, 01:20:27] MQTT disconnected
+E (299856229) MQTT_MGR: [10/02/2026, 01:20:33] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299857679) WATCHDOG_MGR: [10/02/2026, 01:20:35] MQTT disconnected
+W (299865679) WATCHDOG_MGR: [10/02/2026, 01:20:43] MQTT disconnected
+W (299873679) WATCHDOG_MGR: [10/02/2026, 01:20:51] MQTT disconnected
+I (299880369) MQTT_MGR: [10/02/2026, 01:20:58] Connecting to MQTT broker
+I (299880409) MQTT_MGR: [10/02/2026, 01:20:58] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299881679) WATCHDOG_MGR: [10/02/2026, 01:20:59] MQTT disconnected
+E (299887439) MQTT_MGR: [10/02/2026, 01:21:05] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299889679) WATCHDOG_MGR: [10/02/2026, 01:21:07] MQTT disconnected
+W (299897679) WATCHDOG_MGR: [10/02/2026, 01:21:15] MQTT disconnected
+W (299905679) WATCHDOG_MGR: [10/02/2026, 01:21:23] MQTT disconnected
+I (299911579) MQTT_MGR: [10/02/2026, 01:21:29] Connecting to MQTT broker
+I (299911619) MQTT_MGR: [10/02/2026, 01:21:29] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299913679) WATCHDOG_MGR: [10/02/2026, 01:21:31] MQTT disconnected
+E (299918649) MQTT_MGR: [10/02/2026, 01:21:36] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299921679) WATCHDOG_MGR: [10/02/2026, 01:21:39] MQTT disconnected
+W (299929679) WATCHDOG_MGR: [10/02/2026, 01:21:47] MQTT disconnected
+W (299937679) WATCHDOG_MGR: [10/02/2026, 01:21:55] MQTT disconnected
+I (299938589) MQTT_MGR: [10/02/2026, 01:21:56] Setting credentials for ESP32 ID: 42A8ACA0
+I (299938629) MQTT_MGR: [10/02/2026, 01:21:56] Credentials configured
+I (299938659) MQTT_MGR: [10/02/2026, 01:21:56] Connecting to MQTT broker
+I (299938689) MQTT_MGR: [10/02/2026, 01:21:56] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299945679) WATCHDOG_MGR: [10/02/2026, 01:22:03] MQTT disconnected
+E (299945779) MQTT_MGR: [10/02/2026, 01:22:03] DNS resolution failed for hddm.pqsolutionsperu.com
+I (299947919) MQTT_MGR: [10/02/2026, 01:22:05] Connecting to MQTT broker
+I (299947959) MQTT_MGR: [10/02/2026, 01:22:05] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299953679) WATCHDOG_MGR: [10/02/2026, 01:22:11] MQTT disconnected
+E (299954989) MQTT_MGR: [10/02/2026, 01:22:12] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299961679) WATCHDOG_MGR: [10/02/2026, 01:22:19] MQTT disconnected
+W (299969679) WATCHDOG_MGR: [10/02/2026, 01:22:27] MQTT disconnected
+W (299977679) WATCHDOG_MGR: [10/02/2026, 01:22:35] MQTT disconnected
+I (299979129) MQTT_MGR: [10/02/2026, 01:22:36] Connecting to MQTT broker
+I (299979169) MQTT_MGR: [10/02/2026, 01:22:36] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (299985679) WATCHDOG_MGR: [10/02/2026, 01:22:43] MQTT disconnected
+E (299986199) MQTT_MGR: [10/02/2026, 01:22:43] DNS resolution failed for hddm.pqsolutionsperu.com
+W (299993679) WATCHDOG_MGR: [10/02/2026, 01:22:51] MQTT disconnected
+I (299996659) HEALTH_MON: System healthy - Uptime: 4999 min, Heap: 115 KB
+W (300001679) WATCHDOG_MGR: [10/02/2026, 01:22:59] MQTT disconnected
+W (300009679) WATCHDOG_MGR: [10/02/2026, 01:23:07] MQTT disconnected
+I (300010399) MQTT_MGR: [10/02/2026, 01:23:08] Connecting to MQTT broker
+I (300010439) MQTT_MGR: [10/02/2026, 01:23:08] Testing DNS resolution for: hddm.pqsolutionsperu.com
+E (300017469) MQTT_MGR: [10/02/2026, 01:23:15] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300017679) WATCHDOG_MGR: [10/02/2026, 01:23:15] MQTT disconnected
+W (300025679) WATCHDOG_MGR: [10/02/2026, 01:23:23] MQTT disconnected
+W (300033679) WATCHDOG_MGR: [10/02/2026, 01:23:31] MQTT disconnected
+W (300041679) WATCHDOG_MGR: [10/02/2026, 01:23:39] MQTT disconnected
+I (300042169) MQTT_MGR: [10/02/2026, 01:23:39] Connecting to MQTT broker
+I (300042209) MQTT_MGR: [10/02/2026, 01:23:39] Testing DNS resolution for: hddm.pqsolutionsperu.com
+E (300049299) MQTT_MGR: [10/02/2026, 01:23:46] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300049679) WATCHDOG_MGR: [10/02/2026, 01:23:47] MQTT disconnected
+I (300053539) MQTT_MGR: [10/02/2026, 01:23:51] Setting credentials for ESP32 ID: 42A8ACA0
+I (300053579) MQTT_MGR: [10/02/2026, 01:23:51] Credentials configured
+I (300053609) MQTT_MGR: [10/02/2026, 01:23:51] Connecting to MQTT broker
+I (300053639) MQTT_MGR: [10/02/2026, 01:23:51] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (300057679) WATCHDOG_MGR: [10/02/2026, 01:23:55] MQTT disconnected
+E (300060669) MQTT_MGR: [10/02/2026, 01:23:58] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300065679) WATCHDOG_MGR: [10/02/2026, 01:24:03] MQTT disconnected
+W (300073679) WATCHDOG_MGR: [10/02/2026, 01:24:11] MQTT disconnected
+I (300073809) MQTT_MGR: [10/02/2026, 01:24:11] Connecting to MQTT broker
+I (300073849) MQTT_MGR: [10/02/2026, 01:24:11] Testing DNS resolution for: hddm.pqsolutionsperu.com
+E (300080879) MQTT_MGR: [10/02/2026, 01:24:18] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300081679) WATCHDOG_MGR: [10/02/2026, 01:24:19] MQTT disconnected
+W (300089679) WATCHDOG_MGR: [10/02/2026, 01:24:27] MQTT disconnected
+W (300097679) WATCHDOG_MGR: [10/02/2026, 01:24:35] MQTT disconnected
+I (300105079) MQTT_MGR: [10/02/2026, 01:24:42] Connecting to MQTT broker
+I (300105119) MQTT_MGR: [10/02/2026, 01:24:42] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (300105679) WATCHDOG_MGR: [10/02/2026, 01:24:43] MQTT disconnected
+E (300112149) MQTT_MGR: [10/02/2026, 01:24:49] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300113679) WATCHDOG_MGR: [10/02/2026, 01:24:51] MQTT disconnected
+W (300114839) WATCHDOG_MGR: [10/02/2026, 01:24:52] MQTT disconnected
+W (300121679) WATCHDOG_MGR: [10/02/2026, 01:24:59] MQTT disconnected
+W (300129679) WATCHDOG_MGR: [10/02/2026, 01:25:07] MQTT disconnected
+I (300136879) MQTT_MGR: [10/02/2026, 01:25:14] Connecting to MQTT broker
+I (300136919) MQTT_MGR: [10/02/2026, 01:25:14] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (300137679) WATCHDOG_MGR: [10/02/2026, 01:25:15] MQTT disconnected
+E (300143999) MQTT_MGR: [10/02/2026, 01:25:21] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300145679) WATCHDOG_MGR: [10/02/2026, 01:25:23] MQTT disconnected
+W (300153679) WATCHDOG_MGR: [10/02/2026, 01:25:31] MQTT disconnected
+I (300161339) MQTT_MGR: [10/02/2026, 01:25:39] Setting credentials for ESP32 ID: 42A8ACA0
+I (300161379) MQTT_MGR: [10/02/2026, 01:25:39] Credentials configured
+I (300161409) MQTT_MGR: [10/02/2026, 01:25:39] Connecting to MQTT broker
+I (300161499) MQTT_MGR: [10/02/2026, 01:25:39] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (300161679) WATCHDOG_MGR: [10/02/2026, 01:25:39] MQTT disconnected
+E (300168529) MQTT_MGR: [10/02/2026, 01:25:46] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300169679) WATCHDOG_MGR: [10/02/2026, 01:25:47] MQTT disconnected
+I (300170669) MQTT_MGR: [10/02/2026, 01:25:48] Connecting to MQTT broker
+I (300170709) MQTT_MGR: [10/02/2026, 01:25:48] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (300177679) WATCHDOG_MGR: [10/02/2026, 01:25:55] MQTT disconnected
+E (300177799) MQTT_MGR: [10/02/2026, 01:25:55] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300185679) WATCHDOG_MGR: [10/02/2026, 01:26:03] MQTT disconnected
+W (300193679) WATCHDOG_MGR: [10/02/2026, 01:26:11] MQTT disconnected
+W (300201679) WATCHDOG_MGR: [10/02/2026, 01:26:19] MQTT disconnected
+I (300202439) MQTT_MGR: [10/02/2026, 01:26:20] Connecting to MQTT broker
+I (300202479) MQTT_MGR: [10/02/2026, 01:26:20] Testing DNS resolution for: hddm.pqsolutionsperu.com
+E (300209569) MQTT_MGR: [10/02/2026, 01:26:27] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300209679) WATCHDOG_MGR: [10/02/2026, 01:26:27] MQTT disconnected
+W (300217679) WATCHDOG_MGR: [10/02/2026, 01:26:35] MQTT disconnected
+W (300225679) WATCHDOG_MGR: [10/02/2026, 01:26:43] MQTT disconnected
+W (300233679) WATCHDOG_MGR: [10/02/2026, 01:26:51] MQTT disconnected
+I (300233709) MQTT_MGR: [10/02/2026, 01:26:51] Connecting to MQTT broker
+I (300233809) MQTT_MGR: [10/02/2026, 01:26:51] Testing DNS resolution for: hddm.pqsolutionsperu.com
+E (300240839) MQTT_MGR: [10/02/2026, 01:26:58] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300241679) WATCHDOG_MGR: [10/02/2026, 01:26:59] MQTT disconnected
+W (300249679) WATCHDOG_MGR: [10/02/2026, 01:27:07] MQTT disconnected
+W (300257679) WATCHDOG_MGR: [10/02/2026, 01:27:15] MQTT disconnected
+I (300264979) MQTT_MGR: [10/02/2026, 01:27:22] Connecting to MQTT broker
+I (300265019) MQTT_MGR: [10/02/2026, 01:27:22] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (300265679) WATCHDOG_MGR: [10/02/2026, 01:27:23] MQTT disconnected
+E (300272109) MQTT_MGR: [10/02/2026, 01:27:29] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300273679) WATCHDOG_MGR: [10/02/2026, 01:27:31] MQTT disconnected
+I (300276349) MQTT_MGR: [10/02/2026, 01:27:34] Setting credentials for ESP32 ID: 42A8ACA0
+I (300276389) MQTT_MGR: [10/02/2026, 01:27:34] Credentials configured
+I (300276419) MQTT_MGR: [10/02/2026, 01:27:34] Connecting to MQTT broker
+I (300276509) MQTT_MGR: [10/02/2026, 01:27:34] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (300281679) WATCHDOG_MGR: [10/02/2026, 01:27:39] MQTT disconnected
+E (300283539) MQTT_MGR: [10/02/2026, 01:27:41] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300289679) WATCHDOG_MGR: [10/02/2026, 01:27:47] MQTT disconnected
+I (300296699) HEALTH_MON: System healthy - Uptime: 5004 min, Heap: 116 KB
+I (300297179) MQTT_MGR: [10/02/2026, 01:27:54] Connecting to MQTT broker
+I (300297219) MQTT_MGR: [10/02/2026, 01:27:54] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (300297679) WATCHDOG_MGR: [10/02/2026, 01:27:55] MQTT disconnected
+E (300304309) MQTT_MGR: [10/02/2026, 01:28:01] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300305679) WATCHDOG_MGR: [10/02/2026, 01:28:03] MQTT disconnected
+W (300313679) WATCHDOG_MGR: [10/02/2026, 01:28:11] MQTT disconnected
+W (300321679) WATCHDOG_MGR: [10/02/2026, 01:28:19] MQTT disconnected
+I (300328449) MQTT_MGR: [10/02/2026, 01:28:26] Connecting to MQTT broker
+I (300328549) MQTT_MGR: [10/02/2026, 01:28:26] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (300329679) WATCHDOG_MGR: [10/02/2026, 01:28:27] MQTT disconnected
+E (300335579) MQTT_MGR: [10/02/2026, 01:28:33] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300337679) WATCHDOG_MGR: [10/02/2026, 01:28:35] MQTT disconnected
+W (300345679) WATCHDOG_MGR: [10/02/2026, 01:28:43] MQTT disconnected
+W (300353679) WATCHDOG_MGR: [10/02/2026, 01:28:51] MQTT disconnected
+I (300359719) MQTT_MGR: [10/02/2026, 01:28:57] Connecting to MQTT broker
+I (300359759) MQTT_MGR: [10/02/2026, 01:28:57] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (300361679) WATCHDOG_MGR: [10/02/2026, 01:28:59] MQTT disconnected
+E (300366789) MQTT_MGR: [10/02/2026, 01:29:04] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300369679) WATCHDOG_MGR: [10/02/2026, 01:29:07] MQTT disconnected
+W (300377679) WATCHDOG_MGR: [10/02/2026, 01:29:15] MQTT disconnected
+I (300384629) MQTT_MGR: [10/02/2026, 01:29:22] Setting credentials for ESP32 ID: 42A8ACA0
+I (300384729) MQTT_MGR: [10/02/2026, 01:29:22] Credentials configured
+I (300384759) MQTT_MGR: [10/02/2026, 01:29:22] Connecting to MQTT broker
+I (300384789) MQTT_MGR: [10/02/2026, 01:29:22] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (300385679) WATCHDOG_MGR: [10/02/2026, 01:29:23] MQTT disconnected
+E (300391819) MQTT_MGR: [10/02/2026, 01:29:29] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300391859) WATCHDOG_MGR: [10/02/2026, 01:29:29] MQTT disconnected
+W (300393679) WATCHDOG_MGR: [10/02/2026, 01:29:31] MQTT disconnected
+I (300394049) MQTT_MGR: [10/02/2026, 01:29:31] Connecting to MQTT broker
+I (300394089) MQTT_MGR: [10/02/2026, 01:29:31] Testing DNS resolution for: hddm.pqsolutionsperu.com
+E (300401119) MQTT_MGR: [10/02/2026, 01:29:38] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300401679) WATCHDOG_MGR: [10/02/2026, 01:29:39] MQTT disconnected
+W (300409679) WATCHDOG_MGR: [10/02/2026, 01:29:47] MQTT disconnected
+W (300417679) WATCHDOG_MGR: [10/02/2026, 01:29:55] MQTT disconnected
+I (300425259) MQTT_MGR: [10/02/2026, 01:30:02] Connecting to MQTT broker
+I (300425299) MQTT_MGR: [10/02/2026, 01:30:02] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (300425679) WATCHDOG_MGR: [10/02/2026, 01:30:03] MQTT disconnected
+E (300432329) MQTT_MGR: [10/02/2026, 01:30:09] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300433679) WATCHDOG_MGR: [10/02/2026, 01:30:11] MQTT disconnected
+W (300441679) WATCHDOG_MGR: [10/02/2026, 01:30:19] MQTT disconnected
+W (300449679) WATCHDOG_MGR: [10/02/2026, 01:30:27] MQTT disconnected
+I (300456469) MQTT_MGR: [10/02/2026, 01:30:34] Connecting to MQTT broker
+I (300456509) MQTT_MGR: [10/02/2026, 01:30:34] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (300457679) WATCHDOG_MGR: [10/02/2026, 01:30:35] MQTT disconnected
+E (300463539) MQTT_MGR: [10/02/2026, 01:30:41] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300465679) WATCHDOG_MGR: [10/02/2026, 01:30:43] MQTT disconnected
+W (300473679) WATCHDOG_MGR: [10/02/2026, 01:30:51] MQTT disconnected
+W (300481679) WATCHDOG_MGR: [10/02/2026, 01:30:59] MQTT disconnected
+I (300487679) MQTT_MGR: [10/02/2026, 01:31:05] Connecting to MQTT broker
+I (300487719) MQTT_MGR: [10/02/2026, 01:31:05] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (300489679) WATCHDOG_MGR: [10/02/2026, 01:31:07] MQTT disconnected
+E (300494749) MQTT_MGR: [10/02/2026, 01:31:12] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300497679) WATCHDOG_MGR: [10/02/2026, 01:31:15] MQTT disconnected
+I (300499489) MQTT_MGR: [10/02/2026, 01:31:17] Setting credentials for ESP32 ID: 42A8ACA0
+I (300499529) MQTT_MGR: [10/02/2026, 01:31:17] Credentials configured
+I (300499559) MQTT_MGR: [10/02/2026, 01:31:17] Connecting to MQTT broker
+I (300499589) MQTT_MGR: [10/02/2026, 01:31:17] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (300505679) WATCHDOG_MGR: [10/02/2026, 01:31:23] MQTT disconnected
+E (300506619) MQTT_MGR: [10/02/2026, 01:31:24] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300513679) WATCHDOG_MGR: [10/02/2026, 01:31:31] MQTT disconnected
+I (300519759) MQTT_MGR: [10/02/2026, 01:31:37] Connecting to MQTT broker
+I (300519799) MQTT_MGR: [10/02/2026, 01:31:37] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (300521679) WATCHDOG_MGR: [10/02/2026, 01:31:39] MQTT disconnected
+E (300526829) MQTT_MGR: [10/02/2026, 01:31:44] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300529679) WATCHDOG_MGR: [10/02/2026, 01:31:47] MQTT disconnected
+W (300537679) WATCHDOG_MGR: [10/02/2026, 01:31:55] MQTT disconnected
+W (300545679) WATCHDOG_MGR: [10/02/2026, 01:32:03] MQTT disconnected
+I (300550969) MQTT_MGR: [10/02/2026, 01:32:08] Connecting to MQTT broker
+I (300551009) MQTT_MGR: [10/02/2026, 01:32:08] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (300553679) WATCHDOG_MGR: [10/02/2026, 01:32:11] MQTT disconnected
+E (300558039) MQTT_MGR: [10/02/2026, 01:32:15] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300561679) WATCHDOG_MGR: [10/02/2026, 01:32:19] MQTT disconnected
+W (300569679) WATCHDOG_MGR: [10/02/2026, 01:32:27] MQTT disconnected
+W (300577679) WATCHDOG_MGR: [10/02/2026, 01:32:35] MQTT disconnected
+I (300582179) MQTT_MGR: [10/02/2026, 01:32:39] Connecting to MQTT broker
+I (300582219) MQTT_MGR: [10/02/2026, 01:32:39] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (300585679) WATCHDOG_MGR: [10/02/2026, 01:32:43] MQTT disconnected
+E (300589249) MQTT_MGR: [10/02/2026, 01:32:46] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300593679) WATCHDOG_MGR: [10/02/2026, 01:32:51] MQTT disconnected
+I (300596739) HEALTH_MON: System healthy - Uptime: 5009 min, Heap: 115 KB
+W (300601679) WATCHDOG_MGR: [10/02/2026, 01:32:59] MQTT disconnected
+I (300607089) MQTT_MGR: [10/02/2026, 01:33:04] Setting credentials for ESP32 ID: 42A8ACA0
+I (300607129) MQTT_MGR: [10/02/2026, 01:33:04] Credentials configured
+I (300607159) MQTT_MGR: [10/02/2026, 01:33:04] Connecting to MQTT broker
+I (300607189) MQTT_MGR: [10/02/2026, 01:33:04] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (300609679) WATCHDOG_MGR: [10/02/2026, 01:33:07] MQTT disconnected
+E (300614219) MQTT_MGR: [10/02/2026, 01:33:11] DNS resolution failed for hddm.pqsolutionsperu.com
+I (300616359) MQTT_MGR: [10/02/2026, 01:33:14] Connecting to MQTT broker
+I (300616399) MQTT_MGR: [10/02/2026, 01:33:14] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (300617679) WATCHDOG_MGR: [10/02/2026, 01:33:15] MQTT disconnected
+E (300623429) MQTT_MGR: [10/02/2026, 01:33:21] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300625679) WATCHDOG_MGR: [10/02/2026, 01:33:23] MQTT disconnected
+W (300633679) WATCHDOG_MGR: [10/02/2026, 01:33:31] MQTT disconnected
+W (300641679) WATCHDOG_MGR: [10/02/2026, 01:33:39] MQTT disconnected
+I (300647569) MQTT_MGR: [10/02/2026, 01:33:45] Connecting to MQTT broker
+I (300647609) MQTT_MGR: [10/02/2026, 01:33:45] Testing DNS resolution for: hddm.pqsolutionsperu.com
+W (300649679) WATCHDOG_MGR: [10/02/2026, 01:33:47] MQTT disconnected
+E (300654639) MQTT_MGR: [10/02/2026, 01:33:52] DNS resolution failed for hddm.pqsolutionsperu.com
+W (300657679) WATCHDOG_MGR: [10/02/2026, 01:33:55] MQTT disconnected
+W (300665679) WATCHDOG_MGR: [10/02/2026, 01:34:03] MQTT disconnected
+W (300668279) WATCHDOG_MGR: [10/02/2026, 01:34:05] MQTT disconnected
+W (300673679) WATCHDOG_MGR: [10/02/2026, 01:34:11] MQTT disconnected
+I (300676889) CONN_MON: [10/02/2026, 01:34:14] Internet connectivity recovered on WiFi: PABLO-2.4G
+I (300676929) CONN_MON: [10/02/2026, 01:34:14] save_event_to_ram called: start=297081237, end=300676257, type=2, ssid=PABLO-2.4G, panel=Panel_42A8ACA0
+I (300677029) CONN_MON: [10/02/2026, 01:34:14] Before save: pending_event_count=0, write_index=0
+I (300677059) CONN_MON: [10/02/2026, 01:34:14] Event saved to RAM at index 0: internet_lost from 297081237 to 300676257, ssid=PABLO-2.4G, panel=Panel_42A8ACA0
+I (300677089) CONN_MON: [10/02/2026, 01:34:14] After save: pending_event_count=1, write_index=1
+I (300677119) HDDESP32: [10/02/2026, 01:34:14] Connectivity event detected: type=3, panel=Panel_42A8ACA0, stored_in_ram
+I (300679319) MQTT_MGR: [10/02/2026, 01:34:16] Connecting to MQTT broker
+I (300679359) MQTT_MGR: [10/02/2026, 01:34:17] Testing DNS resolution for: hddm.pqsolutionsperu.com
+I (300679679) MQTT_MGR: [10/02/2026, 01:34:17] DNS resolution successful for hddm.pqsolutionsperu.com
+I (300679719) MQTT_MGR: [10/02/2026, 01:34:17] Connecting to URI: mqtts://hddm.pqsolutionsperu.com:8883
+I (300679749) MQTT_SSL: Setting up SSL with ESP-IDF Certificate Bundle
+I (300679779) MQTT_SSL: Memory before SSL setup - Free: 119512 bytes, Largest block: 59392 bytes
+I (300679809) MQTT_SSL: SSL configuration applied successfully with ESP-IDF Certificate Bundle
+I (300679839) MQTT_SSL: Memory after SSL setup - Free: 119512 bytes
+I (300680799) esp-x509-crt-bundle: Certificate validated
+W (300681679) WATCHDOG_MGR: [10/02/2026, 01:34:19] Significant memory decrease detected: 119768 -> 72868
+W (300681719) MQTT_MGR: [10/02/2026, 01:34:19] Performing emergency memory cleanup
+I (300681749) MQTT_MGR: [10/02/2026, 01:34:19] Memory cleanup completed, free heap: 72868
+W (300681779) WATCHDOG_MGR: [10/02/2026, 01:34:19] MQTT disconnected
+I (300682139) MQTT_MGR: [10/02/2026, 01:34:19] MQTT connected
+I (300682179) CONN_MON: [10/02/2026, 01:34:19] MQTT status change reported: disconnected -> connected
+I (300682269) HDDESP32: [10/02/2026, 01:34:19] MQTT connected
+W (300682269) CONN_MON: [10/02/2026, 01:34:19] MQTT connection lost while connected to WiFi: PABLO-2.4G
+I (300682329) HDDESP32: [10/02/2026, 01:34:19] Connectivity event detected: type=4, panel=Panel_42A8ACA0, stored_in_ram
+I (300684299) HDDESP32: [10/02/2026, 01:34:21] Checking for pending RAM connectivity events after MQTT connection
+I (300684339) CONN_MON: [10/02/2026, 01:34:22] Pending events: count=1, valid=1
+I (300684369) CONN_MON: [10/02/2026, 01:34:22] RAM events found: count=1, valid=1
+I (300684459) HDDESP32: [10/02/2026, 01:34:22] Event count: 1, has_events: true
+I (300684489) HDDESP32: [10/02/2026, 01:34:22] Processing stored RAM connectivity events (count: 1)
+I (300684519) CONN_MON: [10/02/2026, 01:34:22] Processing RAM events - total pending: 1
+I (300684549) CONN_MON: [10/02/2026, 01:34:22] Processing event 0: type=2, start=297081237, end=300676257, ssid=PABLO-2.4G
+I (300684579) CONN_MON: [10/02/2026, 01:34:22] RAM event 0 sent successfully: internet_lost
+I (300684709) CONN_MON: [10/02/2026, 01:34:22] Processed 1 RAM events successfully, 0 failed, 0 remaining
+I (300684749) HDDESP32: [10/02/2026, 01:34:22] RAM connectivity events processed successfully on attempt 1
+I (300684839) HDDESP32: [10/02/2026, 01:34:22] Events remaining after processing: 0
+I (300685869) MQTT_MGR: [10/02/2026, 01:34:23] Sending network info to esp32/network_info (len=195)
+I (300685909) HDDESP32: [10/02/2026, 01:34:23] Suscrito a topics generales del ESP32
+I (300685949) MQTT_MGR: [10/02/2026, 01:34:23] Panel config set: client=client_1, panel=panel_PANEE4QS_client_1
+I (300685979) MQTT_MGR: [10/02/2026, 01:34:23] Subscribed to panel relay_config: clients/client_1/panels/panel_PANEE4QS_client_1/relay_config
+I (300686179) MQTT_MGR: [10/02/2026, 01:34:23] Subscribed to panel relays: clients/client_1/panels/panel_PANEE4QS_client_1/relays
+I (300686319) MQTT_MGR: [10/02/2026, 01:34:23] Subscribed to panel command: clients/client_1/panels/panel_PANEE4QS_client_1/command
+I (300686459) MQTT_MGR: [10/02/2026, 01:34:24] Subscribed to panel status: clients/client_1/panels/panel_PANEE4QS_client_1/status
+I (300686499) MQTT_MGR: [10/02/2026, 01:34:24] MQTT subscribed, msg_id=18035
+I (300686549) MQTT_MGR: [10/02/2026, 01:34:24] MQTT subscribed, msg_id=30759
+I (300686639) MQTT_MGR: [10/02/2026, 01:34:24] MQTT subscribed, msg_id=10606
+I (300686669) MQTT_MGR: [10/02/2026, 01:34:24] MQTT subscribed, msg_id=20311
+I (300686699) MQTT_MGR: [10/02/2026, 01:34:24] MQTT subscribed, msg_id=52077
+I (300686729) MQTT_MGR: [10/02/2026, 01:34:24] MQTT subscribed, msg_id=19948
+I (300686759) MQTT_MGR: [10/02/2026, 01:34:24] MQTT subscribed, msg_id=25274
+I (300686789) MQTT_MGR: [10/02/2026, 01:34:24] MQTT subscribed, msg_id=60804
+I (300687399) CONN_MON: [10/02/2026, 01:34:25] MQTT connection recovered on WiFi: PABLO-2.4G
+I (300687479) CONN_MON: [10/02/2026, 01:34:25] save_event_to_ram called: start=300681558, end=300686767, type=4, ssid=PABLO-2.4G, panel=Panel_42A8ACA0
+I (300687509) CONN_MON: [10/02/2026, 01:34:25] Before save: pending_event_count=0, write_index=0
+I (300687539) CONN_MON: [10/02/2026, 01:34:25] Event saved to RAM at index 0: mqtt_lost from 300681558 to 300686767, ssid=PABLO-2.4G, panel=Panel_42A8ACA0
+I (300687569) CONN_MON: [10/02/2026, 01:34:25] After save: pending_event_count=1, write_index=1
+I (300687599) HDDESP32: [10/02/2026, 01:34:25] Connectivity event detected: type=5, panel=Panel_42A8ACA0, stored_in_ram
+I (300737279) CONN_MON: [10/02/2026, 01:35:14] Pending events: count=1, valid=1
+I (300737319) CONN_MON: [10/02/2026, 01:35:14] RAM events found: count=1, valid=1
+I (300737349) HDDESP32: [10/02/2026, 01:35:15] Found 1 pending RAM connectivity events - processing
+I (300737379) CONN_MON: [10/02/2026, 01:35:15] Processing RAM events - total pending: 1
+I (300737409) CONN_MON: [10/02/2026, 01:35:15] Processing event 0: type=4, start=300681558, end=300686767, ssid=PABLO-2.4G
+I (300737439) CONN_MON: [10/02/2026, 01:35:15] RAM event 0 sent successfully: mqtt_lost
+I (300737569) CONN_MON: [10/02/2026, 01:35:15] Processed 1 RAM events successfully, 0 failed, 0 remaining
+I (300737659) HDDESP32: [10/02/2026, 01:35:15] RAM connectivity events processed successfully
+I (300773439) TIME_MGR: NTP synchronized successfully
+I (300773479) TIME_MGR: Lima time: 10/02/2026, 01:35:51
+I (300774889) HDDESP32: [10/02/2026, 01:35:52] Sending network info
+I (300774929) MQTT_MGR: [10/02/2026, 01:35:52] Sending network info to esp32/network_info (len=195)
+I (300896779) HEALTH_MON: System healthy - Uptime: 5014 min, Heap: 70 KB
+I (301196879) HEALTH_MON: System healthy - Uptime: 5019 min, Heap: 70 KB
+I (301496919) HEALTH_MON: System healthy - Uptime: 5024 min, Heap: 70 KB
+I (301796959) HEALTH_MON: System healthy - Uptime: 5029 min, Heap: 70 KB
+I (302057769) RELAY_MGR: [10/02/2026, 01:57:15] Verifying GPIO interrupt system for panel
+I (302057889) RELAY_MGR: [10/02/2026, 01:57:15] GPIO verification: 4/4 functional (active relays: 4)
+I (302057929) RELAY_MGR: [10/02/2026, 01:57:15] All active GPIOs functional - no reconfiguration needed
+I (302058019) HDDESP32: [10/02/2026, 01:57:15] Memory: free=72512 min=50956
+I (302058049) HDDESP32: [10/02/2026, 01:57:15] System OK - WiFi+MQTT connected
+I (302096999) HEALTH_MON: System healthy - Uptime: 5034 min, Heap: 70 KB
+I (302397039) HEALTH_MON: System healthy - Uptime: 5039 min, Heap: 70 KB
+I (302406189) HDDESP32: [10/02/2026, 02:03:03] Main task: heap free=72512 min=50956
+I (302697079) HEALTH_MON: System healthy - Uptime: 5044 min, Heap: 70 KB
+I (302997179) HEALTH_MON: System healthy - Uptime: 5049 min, Heap: 70 KB
+I (303297219) HEALTH_MON: System healthy - Uptime: 5054 min, Heap: 70 KB
+I (303597259) HEALTH_MON: System healthy - Uptime: 5059 min, Heap: 70 KB
+I (303897299) HEALTH_MON: System healthy - Uptime: 5064 min, Heap: 70 KB
+I (304038079) RELAY_MGR: [10/02/2026, 02:30:15] Verifying GPIO interrupt system for panel
+I (304038199) RELAY_MGR: [10/02/2026, 02:30:15] GPIO verification: 4/4 functional (active relays: 4)
+I (304038239) RELAY_MGR: [10/02/2026, 02:30:16] All active GPIOs functional - no reconfiguration needed
+I (304197339) HEALTH_MON: System healthy - Uptime: 5069 min, Heap: 70 KB
+I (304373519) TIME_MGR: NTP synchronized successfully
+I (304373559) TIME_MGR: Lima time: 10/02/2026, 02:35:51
+I (304374629) HDDESP32: [10/02/2026, 02:35:52] Sending network info
+I (304374669) MQTT_MGR: [10/02/2026, 02:35:52] Sending network info to esp32/network_info (len=195)
+I (304497379) HEALTH_MON: System healthy - Uptime: 5074 min, Heap: 70 KB
+I (304797479) HEALTH_MON: System healthy - Uptime: 5079 min, Heap: 70 KB
+I (305097519) HEALTH_MON: System healthy - Uptime: 5084 min, Heap: 70 KB
+I (305397559) HEALTH_MON: System healthy - Uptime: 5089 min, Heap: 70 KB
+I (305697599) HEALTH_MON: System healthy - Uptime: 5094 min, Heap: 70 KB
+I (305997639) HEALTH_MON: System healthy - Uptime: 5099 min, Heap: 70 KB
+I (306006229) HDDESP32: [10/02/2026, 03:03:04] Main task: heap free=72504 min=50956
+I (306018399) RELAY_MGR: [10/02/2026, 03:03:16] Verifying GPIO interrupt system for panel
+I (306018579) RELAY_MGR: [10/02/2026, 03:03:16] GPIO verification: 4/4 functional (active relays: 4)
+I (306018619) RELAY_MGR: [10/02/2026, 03:03:16] All active GPIOs functional - no reconfiguration needed
+I (306018649) HDDESP32: [10/02/2026, 03:03:16] Memory: free=72504 min=50956
+I (306018679) HDDESP32: [10/02/2026, 03:03:16] System OK - WiFi+MQTT connected
+I (306297679) HEALTH_MON: System healthy - Uptime: 5104 min, Heap: 70 KB
+I (306597719) HEALTH_MON: System healthy - Uptime: 5109 min, Heap: 70 KB
+I (306897819) HEALTH_MON: System healthy - Uptime: 5114 min, Heap: 70 KB
+I (307197859) HEALTH_MON: System healthy - Uptime: 5119 min, Heap: 70 KB
+I (307497899) HEALTH_MON: System healthy - Uptime: 5124 min, Heap: 70 KB
+I (307797939) HEALTH_MON: System healthy - Uptime: 5129 min, Heap: 70 KB
+E (307949049) mqtt_client: No PING_RESP, disconnected
+W (307949089) MQTT_MGR: [10/02/2026, 03:35:26] MQTT disconnected
+I (307949129) CONN_MON: [10/02/2026, 03:35:27] MQTT status change reported: connected -> disconnected
+I (307950009) MQTT_MGR: [10/02/2026, 03:35:27] MQTT reconnect attempt 1 (infinite retries enabled)
+I (307950049) MQTT_MGR: [10/02/2026, 03:35:27] Connecting to MQTT broker
+W (307953679) WATCHDOG_MGR: [10/02/2026, 03:35:31] MQTT disconnected
+W (307961679) WATCHDOG_MGR: [10/02/2026, 03:35:39] MQTT disconnected
+W (307969679) WATCHDOG_MGR: [10/02/2026, 03:35:47] MQTT disconnected
+I (307973599) TIME_MGR: NTP synchronized successfully
+I (307973699) TIME_MGR: Lima time: 10/02/2026, 03:35:51
+W (307977679) WATCHDOG_MGR: [10/02/2026, 03:35:55] MQTT disconnected
+I (307980719) MQTT_MGR: [10/02/2026, 03:35:58] Testing DNS resolution for: hddm.pqsolutionsperu.com
+I (307981019) MQTT_MGR: [10/02/2026, 03:35:59] DNS resolution successful for hddm.pqsolutionsperu.com
+I (307981059) MQTT_MGR: [10/02/2026, 03:35:59] Connecting to URI: mqtts://hddm.pqsolutionsperu.com:8883
+I (307981089) MQTT_SSL: Setting up SSL with ESP-IDF Certificate Bundle
+I (307981179) MQTT_SSL: Memory before SSL setup - Free: 116312 bytes, Largest block: 59392 bytes
+I (307981209) MQTT_SSL: SSL configuration applied successfully with ESP-IDF Certificate Bundle
+I (307981239) MQTT_SSL: Memory after SSL setup - Free: 116312 bytes
+I (307982149) esp-x509-crt-bundle: Certificate validated
+I (307983379) MQTT_MGR: [10/02/2026, 03:36:01] MQTT connected
+I (307983419) CONN_MON: [10/02/2026, 03:36:01] MQTT status change reported: disconnected -> connected
+I (307983419) MQTT_MGR: [10/02/2026, 03:36:01] MQTT connected successfully
+I (307983449) HDDESP32: [10/02/2026, 03:36:01] MQTT connected
+I (307985569) HDDESP32: [10/02/2026, 03:36:03] Checking for pending RAM connectivity events after MQTT connection
+I (307985609) HDDESP32: [10/02/2026, 03:36:03] Event count: 0, has_events: false
+I (307985639) HDDESP32: [10/02/2026, 03:36:03] Sending network info
+I (307985639) HDDESP32: [10/02/2026, 03:36:03] No RAM connectivity events to process
+I (307985669) MQTT_MGR: [10/02/2026, 03:36:03] Sending network info to esp32/network_info (len=195)
+W (307985779) MQTT_MGR: [10/02/2026, 03:36:03] Performing emergency memory cleanup
+I (307985819) MQTT_MGR: [10/02/2026, 03:36:03] Memory cleanup completed, free heap: 72596
+I (307987699) HDDESP32: [10/02/2026, 03:36:05] Suscrito a topics generales del ESP32
+I (307987739) MQTT_MGR: [10/02/2026, 03:36:05] Panel config set: client=client_1, panel=panel_PANEE4QS_client_1
+I (307987779) MQTT_MGR: [10/02/2026, 03:36:05] Subscribed to panel relay_config: clients/client_1/panels/panel_PANEE4QS_client_1/relay_config
+I (307987919) MQTT_MGR: [10/02/2026, 03:36:05] Subscribed to panel relays: clients/client_1/panels/panel_PANEE4QS_client_1/relays
+I (307988119) MQTT_MGR: [10/02/2026, 03:36:06] Subscribed to panel command: clients/client_1/panels/panel_PANEE4QS_client_1/command
+I (307988259) MQTT_MGR: [10/02/2026, 03:36:06] Subscribed to panel status: clients/client_1/panels/panel_PANEE4QS_client_1/status
+I (307988309) MQTT_MGR: [10/02/2026, 03:36:06] MQTT subscribed, msg_id=28565
+I (307988339) MQTT_MGR: [10/02/2026, 03:36:06] MQTT subscribed, msg_id=5415
+I (307988369) MQTT_MGR: [10/02/2026, 03:36:06] MQTT subscribed, msg_id=42489
+I (307988459) MQTT_MGR: [10/02/2026, 03:36:06] MQTT subscribed, msg_id=43281
+I (307988499) MQTT_MGR: [10/02/2026, 03:36:06] MQTT subscribed, msg_id=2438
+I (307988539) MQTT_MGR: [10/02/2026, 03:36:06] MQTT subscribed, msg_id=39109
+I (307988699) MQTT_MGR: [10/02/2026, 03:36:06] MQTT subscribed, msg_id=43703
+I (307988749) MQTT_MGR: [10/02/2026, 03:36:06] MQTT subscribed, msg_id=27962
+I (308034909) RELAY_MGR: [10/02/2026, 03:36:52] Verifying GPIO interrupt system for panel
+I (308035029) RELAY_MGR: [10/02/2026, 03:36:53] GPIO verification: 4/4 functional (active relays: 4)
+I (308035119) RELAY_MGR: [10/02/2026, 03:36:53] All active GPIOs functional - no reconfiguration needed
+I (308097979) HEALTH_MON: System healthy - Uptime: 5134 min, Heap: 70 KB
+I (308398019) HEALTH_MON: System healthy - Uptime: 5139 min, Heap: 70 KB
+I (308698059) HEALTH_MON: System healthy - Uptime: 5144 min, Heap: 70 KB
+I (308998099) HEALTH_MON: System healthy - Uptime: 5149 min, Heap: 70 KB
+I (309298139) HEALTH_MON: System healthy - Uptime: 5154 min, Heap: 70 KB
+I (309598239) HEALTH_MON: System healthy - Uptime: 5159 min, Heap: 70 KB
+I (309606449) HDDESP32: [10/02/2026, 04:03:04] Main task: heap free=72512 min=50956
+I (309898279) HEALTH_MON: System healthy - Uptime: 5164 min, Heap: 70 KB
+I (310015149) RELAY_MGR: [10/02/2026, 04:09:53] Verifying GPIO interrupt system for panel
+I (310015269) RELAY_MGR: [10/02/2026, 04:09:53] GPIO verification: 4/4 functional (active relays: 4)
+I (310015309) RELAY_MGR: [10/02/2026, 04:09:53] All active GPIOs functional - no reconfiguration needed
+I (310015339) HDDESP32: [10/02/2026, 04:09:53] Memory: free=72512 min=50956
+I (310015429) HDDESP32: [10/02/2026, 04:09:53] System OK - WiFi+MQTT connected
+I (310198319) HEALTH_MON: System healthy - Uptime: 5169 min, Heap: 70 KB
+I (310498359) HEALTH_MON: System healthy - Uptime: 5174 min, Heap: 70 KB
+I (310798399) HEALTH_MON: System healthy - Uptime: 5179 min, Heap: 70 KB
+I (311098439) HEALTH_MON: System healthy - Uptime: 5184 min, Heap: 70 KB
+I (311398479) HEALTH_MON: System healthy - Uptime: 5189 min, Heap: 70 KB
+I (311603889) TIME_MGR: NTP synchronized successfully
+I (311603929) TIME_MGR: Lima time: 10/02/2026, 04:36:21
+I (311605759) HDDESP32: [10/02/2026, 04:36:23] Sending network info
+I (311605799) MQTT_MGR: [10/02/2026, 04:36:23] Sending network info to esp32/network_info (len=195)
+I (311698579) HEALTH_MON: System healthy - Uptime: 5194 min, Heap: 70 KB
+I (311995529) RELAY_MGR: [10/02/2026, 04:42:53] Verifying GPIO interrupt system for panel
+I (311995649) RELAY_MGR: [10/02/2026, 04:42:53] GPIO verification: 4/4 functional (active relays: 4)
+I (311995749) RELAY_MGR: [10/02/2026, 04:42:53] All active GPIOs functional - no reconfiguration needed
+I (311998619) HEALTH_MON: System healthy - Uptime: 5199 min, Heap: 70 KB
+I (312298659) HEALTH_MON: System healthy - Uptime: 5204 min, Heap: 70 KB
+I (312598699) HEALTH_MON: System healthy - Uptime: 5209 min, Heap: 70 KB
+I (312898739) HEALTH_MON: System healthy - Uptime: 5214 min, Heap: 70 KB
+I (313198779) HEALTH_MON: System healthy - Uptime: 5219 min, Heap: 70 KB
+I (313206489) HDDESP32: [10/02/2026, 05:03:04] Main task: heap free=72508 min=50956
+I (313498879) HEALTH_MON: System healthy - Uptime: 5224 min, Heap: 70 KB
+I (313798919) HEALTH_MON: System healthy - Uptime: 5229 min, Heap: 70 KB
+I (313975779) RELAY_MGR: [10/02/2026, 05:15:53] Verifying GPIO interrupt system for panel
+I (313975899) RELAY_MGR: [10/02/2026, 05:15:53] GPIO verification: 4/4 functional (active relays: 4)
+I (313975939) RELAY_MGR: [10/02/2026, 05:15:53] All active GPIOs functional - no reconfiguration needed
+I (313976029) HDDESP32: [10/02/2026, 05:15:53] Memory: free=72508 min=50956
+I (313976059) HDDESP32: [10/02/2026, 05:15:54] System OK - WiFi+MQTT connected
+I (314098959) HEALTH_MON: System healthy - Uptime: 5234 min, Heap: 70 KB
+I (314398999) HEALTH_MON: System healthy - Uptime: 5239 min, Heap: 70 KB
+I (314699039) HEALTH_MON: System healthy - Uptime: 5244 min, Heap: 70 KB
+I (314999079) HEALTH_MON: System healthy - Uptime: 5249 min, Heap: 70 KB
+I (315203969) TIME_MGR: NTP synchronized successfully
+I (315204069) TIME_MGR: Lima time: 10/02/2026, 05:36:22
+I (315205489) HDDESP32: [10/02/2026, 05:36:23] Sending network info
+I (315205529) MQTT_MGR: [10/02/2026, 05:36:23] Sending network info to esp32/network_info (len=195)
+I (315299119) HEALTH_MON: System healthy - Uptime: 5254 min, Heap: 70 KB
+I (315599159) HEALTH_MON: System healthy - Uptime: 5259 min, Heap: 70 KB
+I (315899199) HEALTH_MON: System healthy - Uptime: 5264 min, Heap: 70 KB
+I (315956159) RELAY_MGR: [10/02/2026, 05:48:54] Verifying GPIO interrupt system for panel
+I (315956279) RELAY_MGR: [10/02/2026, 05:48:54] GPIO verification: 4/4 functional (active relays: 4)
+I (315956319) RELAY_MGR: [10/02/2026, 05:48:54] All active GPIOs functional - no reconfiguration needed
+I (316199299) HEALTH_MON: System healthy - Uptime: 5269 min, Heap: 70 KB
+I (316499339) HEALTH_MON: System healthy - Uptime: 5274 min, Heap: 70 KB
+I (316799379) HEALTH_MON: System healthy - Uptime: 5279 min, Heap: 70 KB
+I (316806529) HDDESP32: [10/02/2026, 06:03:04] Main task: heap free=72516 min=50956
+I (317099419) HEALTH_MON: System healthy - Uptime: 5284 min, Heap: 70 KB
+I (317399459) HEALTH_MON: System healthy - Uptime: 5289 min, Heap: 70 KB
+I (317699499) HEALTH_MON: System healthy - Uptime: 5294 min, Heap: 70 KB
+I (317936349) RELAY_MGR: [10/02/2026, 06:21:54] Verifying GPIO interrupt system for panel
+I (317936469) RELAY_MGR: [10/02/2026, 06:21:54] GPIO verification: 4/4 functional (active relays: 4)
+I (317936509) RELAY_MGR: [10/02/2026, 06:21:54] All active GPIOs functional - no reconfiguration needed
+I (317936599) HDDESP32: [10/02/2026, 06:21:54] Memory: free=70956 min=50956
+I (317936629) HDDESP32: [10/02/2026, 06:21:54] System OK - WiFi+MQTT connected
+I (317999539) HEALTH_MON: System healthy - Uptime: 5299 min, Heap: 70 KB
+I (318299579) HEALTH_MON: System healthy - Uptime: 5304 min, Heap: 70 KB
+I (318599619) HEALTH_MON: System healthy - Uptime: 5309 min, Heap: 70 KB
+I (318804109) TIME_MGR: NTP synchronized successfully
+I (318804149) TIME_MGR: Lima time: 10/02/2026, 06:36:22
+I (318805659) HDDESP32: [10/02/2026, 06:36:23] Sending network info
+I (318805699) MQTT_MGR: [10/02/2026, 06:36:23] Sending network info to esp32/network_info (len=195)
+I (318899659) HEALTH_MON: System healthy - Uptime: 5314 min, Heap: 70 KB
+I (319199699) HEALTH_MON: System healthy - Uptime: 5319 min, Heap: 70 KB
+I (319499739) HEALTH_MON: System healthy - Uptime: 5324 min, Heap: 70 KB
+I (319799779) HEALTH_MON: System healthy - Uptime: 5329 min, Heap: 70 KB
+I (319916729) RELAY_MGR: [10/02/2026, 06:54:54] Verifying GPIO interrupt system for panel
+I (319916849) RELAY_MGR: [10/02/2026, 06:54:55] GPIO verification: 4/4 functional (active relays: 4)
+I (319916889) RELAY_MGR: [10/02/2026, 06:54:55] All active GPIOs functional - no reconfiguration needed
+I (320099879) HEALTH_MON: System healthy - Uptime: 5334 min, Heap: 70 KB
+I (320399919) HEALTH_MON: System healthy - Uptime: 5339 min, Heap: 70 KB
+I (320406629) HDDESP32: [10/02/2026, 07:03:04] Main task: heap free=72500 min=50956
+I (320699959) HEALTH_MON: System healthy - Uptime: 5344 min, Heap: 70 KB
+I (321000059) HEALTH_MON: System healthy - Uptime: 5349 min, Heap: 70 KB
+I (321300099) HEALTH_MON: System healthy - Uptime: 5354 min, Heap: 70 KB
+I (321600139) HEALTH_MON: System healthy - Uptime: 5359 min, Heap: 70 KB
+I (321896919) RELAY_MGR: [10/02/2026, 07:27:55] Verifying GPIO interrupt system for panel
+I (321897039) RELAY_MGR: [10/02/2026, 07:27:55] GPIO verification: 4/4 functional (active relays: 4)
+I (321897079) RELAY_MGR: [10/02/2026, 07:27:55] All active GPIOs functional - no reconfiguration needed
+I (321897169) HDDESP32: [10/02/2026, 07:27:55] Memory: free=72500 min=50956
+I (321897199) HDDESP32: [10/02/2026, 07:27:55] System OK - WiFi+MQTT connected
+I (321900179) HEALTH_MON: System healthy - Uptime: 5364 min, Heap: 70 KB
+I (322200219) HEALTH_MON: System healthy - Uptime: 5369 min, Heap: 70 KB
+I (322404249) TIME_MGR: NTP synchronized successfully
+I (322404299) TIME_MGR: Lima time: 10/02/2026, 07:36:22
+I (322405329) HDDESP32: [10/02/2026, 07:36:23] Sending network info
+I (322405419) MQTT_MGR: [10/02/2026, 07:36:23] Sending network info to esp32/network_info (len=195)
+I (322500259) HEALTH_MON: System healthy - Uptime: 5374 min, Heap: 70 KB
+I (322800299) HEALTH_MON: System healthy - Uptime: 5379 min, Heap: 70 KB
+I (323100339) HEALTH_MON: System healthy - Uptime: 5384 min, Heap: 70 KB
+I (323400379) HEALTH_MON: System healthy - Uptime: 5389 min, Heap: 70 KB
+I (323700419) HEALTH_MON: System healthy - Uptime: 5394 min, Heap: 70 KB
+I (323877349) RELAY_MGR: [10/02/2026, 08:00:55] Verifying GPIO interrupt system for panel
+I (323877469) RELAY_MGR: [10/02/2026, 08:00:55] GPIO verification: 4/4 functional (active relays: 4)
+I (323877509) RELAY_MGR: [10/02/2026, 08:00:55] All active GPIOs functional - no reconfiguration needed
+I (324000509) HEALTH_MON: System healthy - Uptime: 5399 min, Heap: 70 KB
+I (324006669) HDDESP32: [10/02/2026, 08:03:05] Main task: heap free=72496 min=50956
+I (324300549) HEALTH_MON: System healthy - Uptime: 5404 min, Heap: 70 KB
+I (324600589) HEALTH_MON: System healthy - Uptime: 5409 min, Heap: 70 KB
+I (324900689) HEALTH_MON: System healthy - Uptime: 5415 min, Heap: 70 KB
+I (325200729) HEALTH_MON: System healthy - Uptime: 5420 min, Heap: 70 KB
+I (325500769) HEALTH_MON: System healthy - Uptime: 5425 min, Heap: 70 KB
+I (325800809) HEALTH_MON: System healthy - Uptime: 5430 min, Heap: 70 KB
+I (325857539) RELAY_MGR: [10/02/2026, 08:33:55] Verifying GPIO interrupt system for panel
+I (325857659) RELAY_MGR: [10/02/2026, 08:33:55] GPIO verification: 4/4 functional (active relays: 4)
+I (325857759) RELAY_MGR: [10/02/2026, 08:33:56] All active GPIOs functional - no reconfiguration needed
+I (325857789) HDDESP32: [10/02/2026, 08:33:56] Memory: free=72496 min=50956
+I (325857819) HDDESP32: [10/02/2026, 08:33:56] System OK - WiFi+MQTT connected
+I (326004339) TIME_MGR: NTP synchronized successfully
+I (326004379) TIME_MGR: Lima time: 10/02/2026, 08:36:22
+I (326005049) HDDESP32: [10/02/2026, 08:36:23] Sending network info
+I (326005089) MQTT_MGR: [10/02/2026, 08:36:23] Sending network info to esp32/network_info (len=195)
+I (326100849) HEALTH_MON: System healthy - Uptime: 5435 min, Heap: 70 KB
+I (326400889) HEALTH_MON: System healthy - Uptime: 5440 min, Heap: 70 KB
+I (326700929) HEALTH_MON: System healthy - Uptime: 5445 min, Heap: 70 KB
+I (327000969) HEALTH_MON: System healthy - Uptime: 5450 min, Heap: 70 KB
+I (327301009) HEALTH_MON: System healthy - Uptime: 5455 min, Heap: 70 KB
+I (327601049) HEALTH_MON: System healthy - Uptime: 5460 min, Heap: 70 KB
+I (327606709) HDDESP32: [10/02/2026, 09:03:05] Main task: heap free=72504 min=50956
+I (327837979) RELAY_MGR: [10/02/2026, 09:06:56] Verifying GPIO interrupt system for panel
+I (327838099) RELAY_MGR: [10/02/2026, 09:06:56] GPIO verification: 4/4 functional (active relays: 4)
+I (327838139) RELAY_MGR: [10/02/2026, 09:06:56] All active GPIOs functional - no reconfiguration needed
+I (327901149) HEALTH_MON: System healthy - Uptime: 5465 min, Heap: 70 KB
+I (328201189) HEALTH_MON: System healthy - Uptime: 5470 min, Heap: 70 KB
+I (328501229) HEALTH_MON: System healthy - Uptime: 5475 min, Heap: 70 KB
+I (328801329) HEALTH_MON: System healthy - Uptime: 5480 min, Heap: 70 KB
+I (329101369) HEALTH_MON: System healthy - Uptime: 5485 min, Heap: 70 KB
+I (329401409) HEALTH_MON: System healthy - Uptime: 5490 min, Heap: 70 KB
+I (329604419) TIME_MGR: NTP synchronized successfully
+I (329604459) TIME_MGR: Lima time: 10/02/2026, 09:36:22
+I (329604469) HDDESP32: [10/02/2026, 09:36:23] Sending network info
+I (329604579) MQTT_MGR: [10/02/2026, 09:36:23] Sending network info to esp32/network_info (len=195)
+I (329701449) HEALTH_MON: System healthy - Uptime: 5495 min, Heap: 70 KB
+I (329818309) RELAY_MGR: [10/02/2026, 09:39:56] Verifying GPIO interrupt system for panel
+I (329818429) RELAY_MGR: [10/02/2026, 09:39:56] GPIO verification: 4/4 functional (active relays: 4)
+I (329818469) RELAY_MGR: [10/02/2026, 09:39:56] All active GPIOs functional - no reconfiguration needed
+I (329818499) HDDESP32: [10/02/2026, 09:39:57] Memory: free=72496 min=50956
+I (329818529) HDDESP32: [10/02/2026, 09:39:57] System OK - WiFi+MQTT connected
+I (330001489) HEALTH_MON: System healthy - Uptime: 5500 min, Heap: 70 KB
+I (330301529) HEALTH_MON: System healthy - Uptime: 5505 min, Heap: 70 KB
+I (330601569) HEALTH_MON: System healthy - Uptime: 5510 min, Heap: 70 KB
+I (330901609) HEALTH_MON: System healthy - Uptime: 5515 min, Heap: 70 KB
+I (331201649) HEALTH_MON: System healthy - Uptime: 5520 min, Heap: 70 KB
+I (331206749) HDDESP32: [10/02/2026, 10:03:05] Main task: heap free=72504 min=50956
+I (331501689) HEALTH_MON: System healthy - Uptime: 5525 min, Heap: 70 KB
+I (331798619) RELAY_MGR: [10/02/2026, 10:12:57] Verifying GPIO interrupt system for panel
+I (331798739) RELAY_MGR: [10/02/2026, 10:12:57] GPIO verification: 4/4 functional (active relays: 4)
+I (331798779) RELAY_MGR: [10/02/2026, 10:12:57] All active GPIOs functional - no reconfiguration needed
+I (331801729) HEALTH_MON: System healthy - Uptime: 5530 min, Heap: 70 KB
+I (332101769) HEALTH_MON: System healthy - Uptime: 5535 min, Heap: 70 KB
+I (332401809) HEALTH_MON: System healthy - Uptime: 5540 min, Heap: 70 KB
+I (332701909) HEALTH_MON: System healthy - Uptime: 5545 min, Heap: 70 KB
+I (333001949) HEALTH_MON: System healthy - Uptime: 5550 min, Heap: 70 KB
+I (333204499) TIME_MGR: NTP synchronized successfully
+I (333204539) TIME_MGR: Lima time: 10/02/2026, 10:36:23
+I (333206809) HDDESP32: [10/02/2026, 10:36:25] Sending network info
+I (333206849) MQTT_MGR: [10/02/2026, 10:36:25] Sending network info to esp32/network_info (len=195)
+I (333301989) HEALTH_MON: System healthy - Uptime: 5555 min, Heap: 70 KB
+I (333602029) HEALTH_MON: System healthy - Uptime: 5560 min, Heap: 70 KB
+I (333778949) RELAY_MGR: [10/02/2026, 10:45:57] Verifying GPIO interrupt system for panel
+I (333779069) RELAY_MGR: [10/02/2026, 10:45:57] GPIO verification: 4/4 functional (active relays: 4)
+I (333779109) RELAY_MGR: [10/02/2026, 10:45:57] All active GPIOs functional - no reconfiguration needed
+I (333779139) HDDESP32: [10/02/2026, 10:45:57] Memory: free=72504 min=50956
+I (333779169) HDDESP32: [10/02/2026, 10:45:57] System OK - WiFi+MQTT connected
+I (333902069) HEALTH_MON: System healthy - Uptime: 5565 min, Heap: 70 KB
+I (334202109) HEALTH_MON: System healthy - Uptime: 5570 min, Heap: 70 KB
+I (334502149) HEALTH_MON: System healthy - Uptime: 5575 min, Heap: 70 KB
+I (334802189) HEALTH_MON: System healthy - Uptime: 5580 min, Heap: 70 KB
+I (334806889) HDDESP32: [10/02/2026, 11:03:05] Main task: heap free=72496 min=50956
+I (335102229) HEALTH_MON: System healthy - Uptime: 5585 min, Heap: 70 KB
+I (335402329) HEALTH_MON: System healthy - Uptime: 5590 min, Heap: 70 KB
+I (335702369) HEALTH_MON: System healthy - Uptime: 5595 min, Heap: 70 KB
+I (335759259) RELAY_MGR: [10/02/2026, 11:18:57] Verifying GPIO interrupt system for panel
+I (335759379) RELAY_MGR: [10/02/2026, 11:18:57] GPIO verification: 4/4 functional (active relays: 4)
+I (335759419) RELAY_MGR: [10/02/2026, 11:18:58] All active GPIOs functional - no reconfiguration needed
+I (336002409) HEALTH_MON: System healthy - Uptime: 5600 min, Heap: 70 KB
+I (336302509) HEALTH_MON: System healthy - Uptime: 5605 min, Heap: 70 KB
+I (336602549) HEALTH_MON: System healthy - Uptime: 5610 min, Heap: 70 KB
+I (336804579) TIME_MGR: NTP synchronized successfully
+I (336804619) TIME_MGR: Lima time: 10/02/2026, 11:36:23
+I (336806549) HDDESP32: [10/02/2026, 11:36:25] Sending network info
+I (336806589) MQTT_MGR: [10/02/2026, 11:36:25] Sending network info to esp32/network_info (len=195)
+I (336902589) HEALTH_MON: System healthy - Uptime: 5615 min, Heap: 70 KB
+I (337202689) HEALTH_MON: System healthy - Uptime: 5620 min, Heap: 70 KB
+I (337502729) HEALTH_MON: System healthy - Uptime: 5625 min, Heap: 70 KB
+I (337739519) RELAY_MGR: [10/02/2026, 11:51:58] Verifying GPIO interrupt system for panel
+I (337739559) RELAY_MGR: [10/02/2026, 11:51:58] Recent interrupt activity detected - system OK
+I (337739589) HDDESP32: [10/02/2026, 11:51:58] Memory: free=72492 min=50956
+I (337739619) HDDESP32: [10/02/2026, 11:51:58] System OK - WiFi+MQTT connected
+I (337802769) HEALTH_MON: System healthy - Uptime: 5630 min, Heap: 70 KB
+I (338102869) HEALTH_MON: System healthy - Uptime: 5635 min, Heap: 70 KB
+I (338402909) HEALTH_MON: System healthy - Uptime: 5640 min, Heap: 70 KB
+I (338406929) HDDESP32: [10/02/2026, 12:03:05] Main task: heap free=72500 min=50956
+I (338473019) LOG_UPLOADER: [10/02/2026, 12:04:11] Daily upload triggered at midnight Lima
+I (338473059) LOG_UPLOADER: [10/02/2026, 12:04:11] === FORCING DAILY LOG ROTATION AND UPLOAD (MIDNIGHT LIMA) ===
+I (338473089) LOG_UPLOADER: [10/02/2026, 12:04:11] Current log.txt exists (111765 bytes), forcing rotation
+I (338473189) LOG_STORAGE: [10/02/2026, 12:04:11] Forcing log rotation...

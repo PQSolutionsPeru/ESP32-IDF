@@ -1,119 +1,136 @@
 #!/bin/bash
-# Deployment Script for HDD Monitor Dashboard v2.0.0
-# Usage: ./deploy.sh
+###############################################################################
+# Deploy Script - HDD Monitor Dashboard
+# Sube archivos modificados a la VM de GCP y reinicia el servicio
+###############################################################################
 
 set -e  # Exit on error
 
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Configuration
+SSH_KEY="$HOME/.ssh/google_compute_engine"
 VM_USER="pqsolutionsperu"
-VM_HOST="34.63.146.196"
-VM_APP_DIR="/home/pqsolutions/mqtt-manager"
-LOCAL_PACKAGE="mqtt-manager-v2.0.0.tar.gz"
+VM_IP="34.63.146.196"
+VM_PATH="/home/pqsolutions/mqtt-manager"
+LOCAL_PATH="/mnt/e/PQSolutions/HDD-Monitor/ESP32-IDF/ESP32-IDF/APP/HDD1_2/VM GOOGLE CLOUD/mqtt-manager"
 
-echo "=========================================="
-echo "HDD Monitor Dashboard - Deployment Script"
-echo "Version: 2.0.0"
-echo "=========================================="
+echo "================================================================"
+echo "  HDD Monitor Dashboard - Deployment Script"
+echo "================================================================"
 echo ""
 
-# Step 1: Verify local package exists
-echo "[1/7] Verifying deployment package..."
-if [ ! -f "$LOCAL_PACKAGE" ]; then
-    echo "❌ Error: $LOCAL_PACKAGE not found!"
+# Check if SSH key exists
+if [ ! -f "$SSH_KEY" ]; then
+    echo -e "${RED}ERROR: SSH key not found at $SSH_KEY${NC}"
+    echo "Trying alternative key..."
+    SSH_KEY="$HOME/.ssh/id_ed25519"
+    if [ ! -f "$SSH_KEY" ]; then
+        echo -e "${RED}ERROR: No SSH key found${NC}"
+        exit 1
+    fi
+fi
+
+echo -e "${GREEN}✓${NC} Using SSH key: $SSH_KEY"
+echo ""
+
+# Function to upload file
+upload_file() {
+    local file=$1
+    local dest=$2
+    echo -e "Uploading ${YELLOW}$file${NC}..."
+    if scp -i "$SSH_KEY" "$LOCAL_PATH/$file" "$VM_USER@$VM_IP:$VM_PATH/$dest" 2>/dev/null; then
+        echo -e "${GREEN}✓${NC} Uploaded $file"
+    else
+        echo -e "${RED}✗${NC} Failed to upload $file"
+        return 1
+    fi
+}
+
+# Upload modified files
+echo "Step 1: Uploading modified files..."
+echo "-----------------------------------"
+upload_file "templates/base.html" "templates/"
+upload_file "templates/login.html" "templates/"
+upload_file "templates/mqtt_config.html" "templates/"
+upload_file "app.py" ""
+upload_file "diagnose.py" ""
+upload_file "modules/firestore_client.py" "modules/"
+upload_file "modules/firestore_realtime.py" "modules/"
+upload_file "static/js/app.js" "static/js/"
+upload_file "static/js/dashboard.js" "static/js/"
+upload_file "static/js/esp32.js" "static/js/"
+upload_file "static/js/events.js" "static/js/"
+upload_file "static/js/realtime.js" "static/js/"
+upload_file "install_realtime_deps.sh" ""
+echo ""
+
+# Make scripts executable
+echo "Step 2: Setting permissions..."
+echo "-----------------------------------"
+ssh -i "$SSH_KEY" "$VM_USER@$VM_IP" "chmod +x $VM_PATH/diagnose.py $VM_PATH/install_realtime_deps.sh" 2>/dev/null
+echo -e "${GREEN}✓${NC} Set executable permissions"
+echo ""
+
+# Install real-time dependencies
+echo "Step 3: Installing real-time dependencies..."
+echo "-----------------------------------"
+echo "This may take a few minutes..."
+ssh -i "$SSH_KEY" "$VM_USER@$VM_IP" "bash $VM_PATH/install_realtime_deps.sh" 2>&1 | grep -E "(✓|Step|Installing|Verifying)"
+echo -e "${GREEN}✓${NC} Dependencies installed"
+echo ""
+
+# Run diagnostic
+echo "Step 4: Running diagnostics..."
+echo "-----------------------------------"
+echo "Executing diagnostic script on VM..."
+ssh -i "$SSH_KEY" "$VM_USER@$VM_IP" "cd $VM_PATH && /home/pqsolutions/mqtt-manager-venv/bin/python3 diagnose.py"
+echo ""
+
+# Restart service
+echo "Step 5: Restarting mqtt-manager service..."
+echo "-----------------------------------"
+ssh -i "$SSH_KEY" "$VM_USER@$VM_IP" "sudo systemctl restart mqtt-manager"
+echo -e "${GREEN}✓${NC} Service restarted"
+echo ""
+
+# Check service status
+echo "Step 6: Checking service status..."
+echo "-----------------------------------"
+ssh -i "$SSH_KEY" "$VM_USER@$VM_IP" "sudo systemctl is-active mqtt-manager" > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}✓${NC} Service is running"
+else
+    echo -e "${RED}✗${NC} Service is not running!"
+    echo "Check logs with: sudo journalctl -u mqtt-manager -n 50"
     exit 1
 fi
-echo "✓ Package found: $(ls -lh $LOCAL_PACKAGE | awk '{print $5}')"
 echo ""
 
-# Step 2: Upload package to VM
-echo "[2/7] Uploading package to VM..."
-scp "$LOCAL_PACKAGE" "${VM_USER}@${VM_HOST}:/tmp/"
-echo "✓ Package uploaded successfully"
+# Show recent logs
+echo "Step 7: Recent logs (last 10 lines)..."
+echo "-----------------------------------"
+ssh -i "$SSH_KEY" "$VM_USER@$VM_IP" "sudo journalctl -u mqtt-manager -n 10 --no-pager"
 echo ""
 
-# Step 3: Connect to VM and execute deployment
-echo "[3/7] Connecting to VM and executing deployment..."
-ssh "${VM_USER}@${VM_HOST}" << 'ENDSSH'
-set -e
-
-echo "[3.1] Creating backup..."
-cd /home/pqsolutions/mqtt-manager/
-BACKUP_FILE="/home/pqsolutions/backups/mqtt-manager-backup-$(date +%Y%m%d-%H%M%S).tar.gz"
-mkdir -p /home/pqsolutions/backups/
-tar -czf "$BACKUP_FILE" . 2>/dev/null || echo "Warning: Backup may be incomplete"
-echo "✓ Backup created: $BACKUP_FILE"
-
-echo "[3.2] Stopping service..."
-sudo systemctl stop mqtt-manager
-echo "✓ Service stopped"
-
-echo "[3.3] Extracting new version..."
-cd /home/pqsolutions/mqtt-manager/
-tar -xzf /tmp/mqtt-manager-v2.0.0.tar.gz
-echo "✓ Files extracted"
-
-echo "[3.4] Verifying files..."
-if [ ! -d "modules" ] || [ ! -d "templates" ] || [ ! -d "static" ]; then
-    echo "❌ Error: Required directories missing!"
-    exit 1
-fi
-echo "✓ All required directories present"
-
-echo "[3.5] Installing dependencies..."
-pip3 install -r requirements.txt --quiet
-echo "✓ Dependencies installed"
-
-echo "[3.6] Starting service..."
-sudo systemctl start mqtt-manager
-sleep 5
-echo "✓ Service started"
-
-echo "[3.7] Checking service status..."
-sudo systemctl status mqtt-manager --no-pager | head -10
-ENDSSH
-
+echo "================================================================"
+echo -e "${GREEN}Deployment completed successfully!${NC}"
+echo "================================================================"
 echo ""
-echo "[4/7] Verifying deployment..."
-sleep 5
-
-# Test health endpoint
-echo "[5/7] Testing health endpoint..."
-HEALTH_RESPONSE=$(curl -s http://34.63.146.196:5000/api/health || echo "FAILED")
-if echo "$HEALTH_RESPONSE" | grep -q "healthy"; then
-    echo "✓ Health check passed"
-else
-    echo "⚠ Warning: Health check failed or service not responding"
-fi
+echo "🚀 Real-time updates are now ENABLED!"
 echo ""
-
-echo "[6/7] Testing HTTPS endpoint..."
-HTTPS_STATUS=$(curl -I -s https://hddm.pqsolutionsperu.com/login | head -1 || echo "FAILED")
-if echo "$HTTPS_STATUS" | grep -q "200"; then
-    echo "✓ HTTPS endpoint responding"
-else
-    echo "⚠ Warning: HTTPS endpoint check failed"
-fi
+echo "Next steps:"
+echo "1. Open https://hdd.pqsolutionsperu.com in your browser"
+echo "2. Press Ctrl+Shift+R to hard refresh"
+echo "3. Verify that:"
+echo "   - Real-time indicator shows 'Live' status (green)"
+echo "   - Dashboard updates automatically when data changes"
+echo "   - No need to refresh manually anymore!"
 echo ""
-
-echo "[7/7] Deployment Summary"
-echo "=========================================="
-echo "✓ Package uploaded"
-echo "✓ Backup created"
-echo "✓ Service restarted"
-echo "✓ Basic health checks completed"
+echo "To view live logs:"
+echo "  ssh -i $SSH_KEY $VM_USER@$VM_IP 'sudo journalctl -u mqtt-manager -f'"
 echo ""
-echo "📋 Next Steps:"
-echo "   1. Login at: https://hddm.pqsolutionsperu.com/login"
-echo "   2. Test all features (Dashboard, VM, ESP32, Clients, Events)"
-echo "   3. Monitor logs: ssh $VM_USER@$VM_HOST 'sudo journalctl -u mqtt-manager -f'"
-echo "   4. Check memory: ssh $VM_USER@$VM_HOST 'ps aux | grep gunicorn'"
-echo ""
-echo "🚨 Rollback if needed:"
-echo "   ssh $VM_USER@$VM_HOST"
-echo "   cd /home/pqsolutions/mqtt-manager/"
-echo "   sudo systemctl stop mqtt-manager"
-echo "   tar -xzf /home/pqsolutions/backups/mqtt-manager-backup-*.tar.gz"
-echo "   sudo systemctl start mqtt-manager"
-echo ""
-echo "=========================================="
-echo "✅ DEPLOYMENT COMPLETE!"
-echo "=========================================="

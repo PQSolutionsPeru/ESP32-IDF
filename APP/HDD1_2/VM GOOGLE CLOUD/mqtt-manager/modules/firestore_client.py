@@ -67,8 +67,12 @@ class FirestoreClient:
                 data = doc.to_dict()
                 data['id'] = doc.id
 
-                # Use existing status from document or determine from lastUpdate
-                if 'status' not in data:
+                # Use existing status from document (normalize to lowercase)
+                if 'status' in data:
+                    # Normalize status to lowercase for consistency
+                    data['status'] = data['status'].lower()
+                else:
+                    # Determine status from lastUpdate if not present
                     last_update = data.get('lastUpdate')
                     if last_update:
                         if isinstance(last_update, datetime):
@@ -145,21 +149,23 @@ class FirestoreClient:
                 data['id'] = doc.id
                 data['client_id'] = client_id
 
-                # Determine panel status based on relays
+                # Determine panel status based on ACTIVE relays only
                 relays = self.get_panel_relays(client_id, doc.id)
-                total_relays = len(relays)
-                ok_relays = sum(1 for r in relays if r.get('status') == 'OK')
+                active_relays = [r for r in relays if r.get('isActive', False)]
+                total_active_relays = len(active_relays)
+                ok_relays = sum(1 for r in active_relays if r.get('status') == 'OK')
 
-                if total_relays == 0:
+                if total_active_relays == 0:
                     data['panel_status'] = 'no_relays'
-                elif ok_relays == total_relays:
+                elif ok_relays == total_active_relays:
                     data['panel_status'] = 'ok'
                 elif ok_relays > 0:
                     data['panel_status'] = 'partial'
                 else:
                     data['panel_status'] = 'disconnected'
 
-                data['relay_count'] = total_relays
+                data['relay_count'] = total_active_relays
+                data['total_relays'] = len(relays)  # Keep total for reference
                 panels.append(data)
 
             logger.info(f"Retrieved {len(panels)} panels for client {client_id}")
@@ -244,6 +250,9 @@ class FirestoreClient:
                 # Map date_time to both fields for compatibility
                 data['fecha_inicio'] = data.get('date_time', data.get('lastUpdate'))
                 data['fecha_fin'] = data.get('date_time', data.get('lastUpdate'))
+                # Map title/titulo for compatibility
+                data['titulo'] = data.get('title', data.get('titulo', 'No Title'))
+                data['panel_name'] = data.get('panelName', data.get('panel_name'))
                 events.append(data)
 
             logger.info(f"Retrieved {len(events)} events for client {client_id}")

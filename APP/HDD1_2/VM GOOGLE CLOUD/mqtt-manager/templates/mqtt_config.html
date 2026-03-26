@@ -1,118 +1,166 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MQTT Manager - HDD Monitor</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body>
-    <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-content">
-                <h1>🔧 MQTT Manager</h1>
-                <p class="subtitle">Gestión de dispositivos ESP32 - HDD Monitor</p>
-            </div>
-            <div class="header-actions">
-                <div class="broker-status">
-                    <span class="status-label">Broker:</span>
-                    <span id="brokerStatus" class="status-badge status-loading">Verificando...</span>
-                </div>
-                <div class="user-info">
-                    <span class="username">👤 {{ username }}</span>
-                    <a href="/logout" class="btn-logout" title="Cerrar sesión">🚪 Salir</a>
-                </div>
-            </div>
-        </header>
+{% extends "base.html" %}
 
-        <!-- Add User Section -->
-        <section class="add-user-section">
-            <h2>➕ Registrar nuevo ESP32</h2>
-            <form id="addUserForm" class="add-user-form">
-                <div class="form-group">
-                    <label for="esp32Id">ESP32 ID:</label>
-                    <input
-                        type="text"
-                        id="esp32Id"
-                        name="esp32_id"
-                        placeholder="Ej: 42A8ACA0"
-                        maxlength="8"
-                        pattern="[A-Fa-f0-9]{8}"
-                        required
-                        autocomplete="off"
-                    >
-                    <small class="help-text">8 caracteres hexadecimales (0-9, A-F)</small>
-                </div>
-                <button type="submit" class="btn btn-primary" id="addBtn">
-                    <span class="btn-text">Agregar ESP32</span>
-                    <span class="btn-loading" style="display: none;">Agregando...</span>
-                </button>
-            </form>
-        </section>
+{% block title %}MQTT Configuration - HDD Monitor{% endblock %}
+{% block page_title %}MQTT Configuration{% endblock %}
+{% block page_description %}Manage ESP32 MQTT users and broker{% endblock %}
 
-        <!-- Users Table Section -->
-        <section class="users-section">
-            <div class="section-header">
-                <h2>📋 Dispositivos registrados</h2>
-                <button id="refreshBtn" class="btn btn-secondary">🔄 Actualizar</button>
+{% block header_actions %}
+<div class="broker-status-inline" style="display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: rgba(255,255,255,0.1); border-radius: 8px;">
+    <span style="font-size: 0.875rem; font-weight: 500;">Broker:</span>
+    <span id="brokerStatus" class="status-badge status-info">
+        <span class="status-dot"></span>
+        <span>Checking...</span>
+    </span>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Add User Section -->
+<div class="card" style="margin-bottom: 32px;">
+    <div style="padding: 24px;">
+        <h2 style="margin-bottom: 16px; font-size: 1.25rem; font-weight: 600;">➕ Register New ESP32</h2>
+        <form id="addUserForm" style="display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 250px;">
+                <label for="esp32Id" style="display: block; margin-bottom: 8px; font-weight: 500; font-size: 0.875rem;">ESP32 ID:</label>
+                <input
+                    type="text"
+                    id="esp32Id"
+                    name="esp32_id"
+                    placeholder="Example: 42A8ACA0"
+                    maxlength="8"
+                    pattern="[A-Fa-f0-9]{8}"
+                    required
+                    autocomplete="off"
+                    style="width: 100%; padding: 10px 12px; border: 2px solid var(--border-color); border-radius: 8px; font-size: 1rem; text-transform: uppercase; font-family: monospace; letter-spacing: 1px;"
+                >
+                <small style="display: block; margin-top: 4px; font-size: 0.813rem; color: var(--text-secondary);">8 hexadecimal characters (0-9, A-F)</small>
             </div>
+            <button type="submit" class="btn btn-primary" id="addBtn">
+                <span class="btn-text">Add ESP32</span>
+                <span class="btn-loading" style="display: none;">Adding...</span>
+            </button>
+        </form>
+    </div>
+</div>
 
-            <div id="loadingSpinner" class="loading-container">
-                <div class="spinner"></div>
-                <p>Cargando dispositivos...</p>
+<!-- Users Table Section -->
+<div class="card">
+    <div style="padding: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 16px;">
+            <div>
+                <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 4px;">📋 Registered Devices</h2>
+                <p style="font-size: 0.875rem; color: var(--text-secondary);" id="userCount">Loading...</p>
             </div>
+            <button id="refreshBtn" class="btn btn-secondary">
+                <span>🔄</span>
+                <span>Refresh</span>
+            </button>
+        </div>
 
-            <div id="errorContainer" class="error-container" style="display: none;">
-                <p id="errorMessage"></p>
-            </div>
+        <div id="loadingSpinner" style="text-align: center; padding: 40px;">
+            <div style="display: inline-block; width: 50px; height: 50px; border: 4px solid var(--border-color); border-top-color: var(--primary-color); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+            <p style="margin-top: 16px; color: var(--text-secondary);">Loading devices...</p>
+        </div>
 
-            <div id="tableContainer" style="display: none;">
-                <div class="table-info">
-                    <span id="userCount">0 dispositivos</span>
-                </div>
-                <table class="users-table">
+        <div id="errorContainer" style="display: none; padding: 16px; background: #fee2e2; border: 1px solid #fecaca; border-radius: 8px; color: #991b1b;">
+            <p id="errorMessage"></p>
+        </div>
+
+        <div id="tableContainer" style="display: none;">
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse;">
                     <thead>
-                        <tr>
-                            <th>Usuario</th>
-                            <th>Tipo</th>
-                            <th>Acciones</th>
+                        <tr style="background: var(--bg-color); border-bottom: 2px solid var(--border-color);">
+                            <th style="padding: 12px 16px; text-align: left; font-weight: 600; font-size: 0.875rem; color: var(--text-secondary); text-transform: uppercase;">Username</th>
+                            <th style="padding: 12px 16px; text-align: left; font-weight: 600; font-size: 0.875rem; color: var(--text-secondary); text-transform: uppercase;">Type</th>
+                            <th style="padding: 12px 16px; text-align: right; font-weight: 600; font-size: 0.875rem; color: var(--text-secondary); text-transform: uppercase;">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="usersTableBody">
-                        <!-- Rows populated by JavaScript -->
+                        <!-- Populated by JavaScript -->
                     </tbody>
                 </table>
-
-                <div id="emptyState" class="empty-state" style="display: none;">
-                    <p>📭 No hay dispositivos ESP32 registrados</p>
-                    <p class="empty-subtitle">Agrega tu primer ESP32 usando el formulario superior</p>
-                </div>
             </div>
-        </section>
 
-        <!-- Footer -->
-        <footer class="footer">
-            <p>PQ Solutions Peru &copy; 2025 | <a href="https://pqsolutionsperu.com" target="_blank">pqsolutionsperu.com</a></p>
-        </footer>
-    </div>
-
-    <!-- Toast Notifications -->
-    <div id="toastContainer" class="toast-container"></div>
-
-    <!-- Delete Confirmation Modal -->
-    <div id="deleteModal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <h3>⚠️ Confirmar eliminación</h3>
-            <p>¿Estás seguro de que quieres eliminar el usuario <strong id="deleteUsername"></strong>?</p>
-            <p class="warning-text">Esta acción no se puede deshacer.</p>
-            <div class="modal-actions">
-                <button id="cancelDeleteBtn" class="btn btn-secondary">Cancelar</button>
-                <button id="confirmDeleteBtn" class="btn btn-danger">Eliminar</button>
+            <div id="emptyState" style="display: none; text-align: center; padding: 60px 20px; color: var(--text-secondary);">
+                <p style="font-size: 1.125rem; margin-bottom: 8px;">📭 No ESP32 devices registered</p>
+                <p style="font-size: 0.875rem;">Add your first ESP32 using the form above</p>
             </div>
         </div>
     </div>
+</div>
 
-    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
-</body>
-</html>
+<!-- Delete Confirmation Modal -->
+<div id="deleteModal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; align-items: center; justify-content: center;">
+    <div style="background: white; border-radius: 12px; padding: 32px; max-width: 500px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+        <h3 style="margin-bottom: 16px; font-size: 1.25rem;">⚠️ Confirm Deletion</h3>
+        <p style="margin-bottom: 12px; color: var(--text-secondary);">Are you sure you want to delete user <strong id="deleteUsername" style="color: var(--text-primary);"></strong>?</p>
+        <p style="margin-bottom: 24px; color: var(--danger-color); font-weight: 600;">This action cannot be undone.</p>
+        <div style="display: flex; gap: 12px; justify-content: flex-end;">
+            <button id="cancelDeleteBtn" class="btn btn-secondary">Cancel</button>
+            <button id="confirmDeleteBtn" class="btn btn-danger" style="background: var(--danger-color); color: white;">Delete</button>
+        </div>
+    </div>
+</div>
+
+<style>
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.btn-danger {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+.btn-danger:hover {
+    background-color: #dc2626;
+}
+
+table tbody tr {
+    border-bottom: 1px solid var(--border-color);
+    transition: background 0.2s;
+}
+
+table tbody tr:hover {
+    background: var(--bg-color);
+}
+
+table tbody td {
+    padding: 16px;
+}
+
+.user-type-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.badge-esp32 {
+    background: rgba(59, 130, 246, 0.1);
+    color: #2563eb;
+}
+
+.badge-service {
+    background: rgba(245, 158, 11, 0.1);
+    color: #d97706;
+}
+
+.badge-admin {
+    background: rgba(239, 68, 68, 0.1);
+    color: #dc2626;
+}
+
+.badge-other {
+    background: var(--bg-color);
+    color: var(--text-secondary);
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% endblock %}

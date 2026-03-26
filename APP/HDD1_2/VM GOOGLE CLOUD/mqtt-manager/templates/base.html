@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}HDD Monitor Dashboard{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
     {% block extra_css %}{% endblock %}
 </head>
@@ -75,6 +74,10 @@
                 <p class="page-description">{% block page_description %}Unified monitoring and management{% endblock %}</p>
             </div>
             <div class="page-header-actions">
+                <!-- Real-time connection indicator -->
+                <div id="realtimeIndicator" style="display: flex; align-items: center; padding: 6px 12px; background: rgba(0,0,0,0.05); border-radius: 6px; font-size: 0.875rem; margin-right: 12px;">
+                    <span style="color: #6b7280;">⟳ Connecting...</span>
+                </div>
                 {% block header_actions %}{% endblock %}
             </div>
         </header>
@@ -144,6 +147,10 @@
         // Make showToast available globally
         window.showToast = showToast;
     </script>
+
+    <!-- Socket.IO for real-time updates -->
+    <script src="{{ url_for('static', filename='js/socket.io.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/realtime.js') }}"></script>
 
     {% block extra_js %}{% endblock %}
 </body>

@@ -19,6 +19,9 @@
 static const char *TAG = "LOG_STORAGE";
 static SemaphoreHandle_t s_log_mutex;
 static bool s_log_initialized = false;
+static int s_rotation_fail_count = 0;
+
+#define MAX_ROTATION_FAILURES 5
 
 // Nueva función para obtener timestamp formateado
 static void get_log_timestamp(char *buffer, size_t size) {
@@ -74,74 +77,65 @@ static esp_err_t generate_timestamped_filename(char *filename, size_t max_len) {
     if (ret >= max_len) {
         return ESP_ERR_INVALID_SIZE;
     }
-    
+
     return ESP_OK;
 }
 
-static esp_err_t check_rotate(FILE *f) {
-    if (!f) {
+static esp_err_t copy_and_delete(const char *src, const char *dst) {
+    if (access(dst, F_OK) == 0) {
+        unlink(dst);
+    }
+    FILE *fsrc = fopen(src, "r");
+    if (!fsrc) {
         return ESP_FAIL;
     }
-    
-    long size = ftell(f);
-    if (size < 0) {
+    FILE *fdst = fopen(dst, "w");
+    if (!fdst) {
+        fclose(fsrc);
         return ESP_FAIL;
     }
-    
-    if (size < LOG_MAX_SIZE) {
-        return ESP_OK;
-    }
-    
-    LOG_WITH_TS(I, "Log file size %ld exceeds limit %d, rotating", size, LOG_MAX_SIZE);
-    
-    fclose(f);
-    
-    // Generar nombre con timestamp
-    char timestamped_file[64];
-    esp_err_t ret = generate_timestamped_filename(timestamped_file, sizeof(timestamped_file));
-    if (ret != ESP_OK) {
-        LOG_WITH_TS(E, "Failed to generate timestamped filename, using legacy format");
-        // Fallback a formato anterior
-        if (access(PREV_LOG_FILE, F_OK) == 0) {
-            LOG_WITH_TS(I, "Removing existing log.prev");
-            unlink(PREV_LOG_FILE);
-        }
-        
-        if (rename(LOG_FILE, PREV_LOG_FILE) != 0) {
-            LOG_WITH_TS(E, "Failed to rename log.txt to log.prev");
-            return ESP_FAIL;
-        }
-        LOG_WITH_TS(I, "Log rotated to legacy format: log.prev");
-    } else {
-        // Usar nombre con timestamp
-        if (access(timestamped_file, F_OK) == 0) {
-            LOG_WITH_TS(I, "Removing existing timestamped file: %s", timestamped_file);
-            unlink(timestamped_file);
-        }
-        
-        if (rename(LOG_FILE, timestamped_file) != 0) {
-            LOG_WITH_TS(E, "Failed to rename log.txt to %s", timestamped_file);
-            // Fallback a formato anterior
-            if (rename(LOG_FILE, PREV_LOG_FILE) != 0) {
-                LOG_WITH_TS(E, "Failed fallback rename to log.prev");
-                return ESP_FAIL;
-            }
-            LOG_WITH_TS(I, "Log rotated to legacy format as fallback: log.prev");
-        } else {
-            LOG_WITH_TS(I, "Log rotated to timestamped file: %s", timestamped_file);
+    char buf[512];
+    size_t bytes_read;
+    bool ok = true;
+    while ((bytes_read = fread(buf, 1, sizeof(buf), fsrc)) > 0) {
+        if (fwrite(buf, 1, bytes_read, fdst) != bytes_read) {
+            ok = false;
+            break;
         }
     }
-    
-    FILE *nf = fopen(LOG_FILE, "w");
-    if (nf) {
-        fclose(nf);
-        LOG_WITH_TS(I, "New log.txt created after rotation");
-    } else {
-        LOG_WITH_TS(E, "Failed to create new log.txt");
+    fclose(fsrc);
+    fclose(fdst);
+    if (!ok) {
+        unlink(dst);
         return ESP_FAIL;
     }
-    
+    unlink(src);
     return ESP_OK;
+}
+
+static void do_rotation_no_mutex(void) {
+    char timestamped_file[64];
+    esp_err_t rot_ret = ESP_FAIL;
+    if (generate_timestamped_filename(timestamped_file, sizeof(timestamped_file)) == ESP_OK) {
+        rot_ret = copy_and_delete(LOG_FILE, timestamped_file);
+        if (rot_ret == ESP_OK) {
+            LOG_WITH_TS(I, "Log rotated to: %s", timestamped_file);
+        }
+    }
+    if (rot_ret != ESP_OK) {
+        rot_ret = copy_and_delete(LOG_FILE, PREV_LOG_FILE);
+        if (rot_ret == ESP_OK) {
+            LOG_WITH_TS(I, "Log rotated to legacy format");
+        }
+    }
+    if (rot_ret == ESP_OK) {
+        FILE *nf = fopen(LOG_FILE, "w");
+        if (nf) {
+            fclose(nf);
+        }
+    } else {
+        LOG_WITH_TS(E, "Size-based rotation failed");
+    }
 }
 
 esp_err_t log_storage_init(void) {
@@ -203,7 +197,7 @@ void log_storage_deinit(void) {
 int spiffs_vprintf(const char *fmt, va_list ap) {
     va_list ap_copy;
     va_copy(ap_copy, ap);
-    
+
     int res = vprintf(fmt, ap);
 
     if (s_log_initialized && s_log_mutex && xSemaphoreTake(s_log_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
@@ -211,17 +205,16 @@ int spiffs_vprintf(const char *fmt, va_list ap) {
         if (f) {
             vfprintf(f, fmt, ap_copy);
             fflush(f);
-            
-            esp_err_t check_result = check_rotate(f);
-            if (check_result != ESP_OK) {
-                
-            } else {
-                fclose(f);
+            long size = ftell(f);
+            fclose(f);
+
+            if (size >= LOG_MAX_SIZE) {
+                do_rotation_no_mutex();
             }
         }
         xSemaphoreGive(s_log_mutex);
     }
-    
+
     va_end(ap_copy);
     return res;
 }
@@ -250,56 +243,27 @@ esp_err_t log_storage_rotate_if_needed(void) {
     
     if (st.st_size > 0 && st.st_size >= (LOG_MAX_SIZE / 2)) {
         LOG_WITH_TS(I, "Log file size warrants rotation, proceeding...");
-        
-        // Generar nombre con timestamp
+
         char timestamped_file[64];
-        esp_err_t ret = generate_timestamped_filename(timestamped_file, sizeof(timestamped_file));
-        if (ret != ESP_OK) {
-            LOG_WITH_TS(E, "Failed to generate timestamped filename, using legacy format");
-            // Fallback a formato anterior
-            if (access(PREV_LOG_FILE, F_OK) == 0) {
-                LOG_WITH_TS(I, "Removing existing log.prev");
-                unlink(PREV_LOG_FILE);
-            }
-            
-            if (rename(LOG_FILE, PREV_LOG_FILE) == 0) {
-                LOG_WITH_TS(I, "Log rotation completed successfully (legacy format)");
-            } else {
-                LOG_WITH_TS(E, "Failed to rotate log file");
-                xSemaphoreGive(s_log_mutex);
-                return ESP_FAIL;
-            }
-        } else {
-            // Usar nombre con timestamp
-            if (access(timestamped_file, F_OK) == 0) {
-                LOG_WITH_TS(I, "Removing existing timestamped file: %s", timestamped_file);
-                unlink(timestamped_file);
-            }
-            
-            if (rename(LOG_FILE, timestamped_file) == 0) {
-                LOG_WITH_TS(I, "Log rotation completed successfully to: %s", timestamped_file);
-            } else {
-                LOG_WITH_TS(E, "Failed to rotate to timestamped file, trying legacy");
-                // Fallback a formato anterior
-                if (rename(LOG_FILE, PREV_LOG_FILE) == 0) {
-                    LOG_WITH_TS(I, "Log rotation completed successfully (legacy fallback)");
-                } else {
-                    LOG_WITH_TS(E, "Failed to rotate log file completely");
-                    xSemaphoreGive(s_log_mutex);
-                    return ESP_FAIL;
-                }
+        esp_err_t rot_ret = ESP_FAIL;
+        if (generate_timestamped_filename(timestamped_file, sizeof(timestamped_file)) == ESP_OK) {
+            rot_ret = copy_and_delete(LOG_FILE, timestamped_file);
+            if (rot_ret == ESP_OK) {
+                LOG_WITH_TS(I, "Log rotation completed to: %s", timestamped_file);
             }
         }
-        
-        // Verificar que se creó correctamente
-        if (stat(timestamped_file, &st) == 0 || stat(PREV_LOG_FILE, &st) == 0) {
-            LOG_WITH_TS(I, "Rotated log file created successfully, size: %ld bytes", st.st_size);
-        } else {
-            LOG_WITH_TS(E, "Rotated log file was not created properly");
+        if (rot_ret != ESP_OK) {
+            rot_ret = copy_and_delete(LOG_FILE, PREV_LOG_FILE);
+            if (rot_ret == ESP_OK) {
+                LOG_WITH_TS(I, "Log rotation completed to legacy format");
+            }
+        }
+        if (rot_ret != ESP_OK) {
+            LOG_WITH_TS(E, "Failed to rotate log file");
             xSemaphoreGive(s_log_mutex);
             return ESP_FAIL;
         }
-        
+
         FILE *new_log = fopen(LOG_FILE, "w");
         if (new_log) {
             fclose(new_log);
@@ -307,7 +271,7 @@ esp_err_t log_storage_rotate_if_needed(void) {
         } else {
             LOG_WITH_TS(W, "Failed to create new log.txt, will be created on next log write");
         }
-        
+
         xSemaphoreGive(s_log_mutex);
         return ESP_OK;
     } else {
@@ -448,62 +412,39 @@ esp_err_t log_storage_force_rotate(void) {
                     esp_err_to_name(space_check));
     }
 
-    // Generar nombre con timestamp para rotación forzada
     char timestamped_file[64];
-    esp_err_t ret = generate_timestamped_filename(timestamped_file, sizeof(timestamped_file));
-    if (ret != ESP_OK) {
-        LOG_WITH_TS(E, "Failed to generate timestamped filename, using legacy format");
-        // Fallback a formato anterior
-        if (access(PREV_LOG_FILE, F_OK) == 0) {
-            LOG_WITH_TS(I, "Removing existing log.prev for forced rotation");
-            if (unlink(PREV_LOG_FILE) != 0) {
-                LOG_WITH_TS(E, "Failed to unlink log.prev (errno=%d)", errno);
-            }
-        }
-
-        if (rename(LOG_FILE, PREV_LOG_FILE) == 0) {
-            LOG_WITH_TS(I, "Forced log rotation completed successfully (legacy format)");
-        } else {
-            LOG_WITH_TS(E, "Failed to perform forced rotation to legacy (errno=%d)", errno);
-            xSemaphoreGive(s_log_mutex);
-            return ESP_FAIL;
-        }
-    } else {
-        // Usar nombre con timestamp
-        if (access(timestamped_file, F_OK) == 0) {
-            LOG_WITH_TS(I, "Removing existing timestamped file for forced rotation: %s", timestamped_file);
-            if (unlink(timestamped_file) != 0) {
-                LOG_WITH_TS(E, "Failed to unlink timestamped file (errno=%d)", errno);
-            }
-        }
-
-        if (rename(LOG_FILE, timestamped_file) == 0) {
-            LOG_WITH_TS(I, "Forced log rotation completed successfully to: %s", timestamped_file);
-        } else {
-            int rename_errno = errno;
-            LOG_WITH_TS(E, "Failed to rotate to timestamped file (errno=%d), trying legacy", rename_errno);
-
-            // Fallback a formato anterior - pero solo si el archivo original aún existe
-            if (access(LOG_FILE, F_OK) == 0) {
-                if (access(PREV_LOG_FILE, F_OK) == 0) {
-                    if (unlink(PREV_LOG_FILE) != 0) {
-                        LOG_WITH_TS(E, "Failed to unlink log.prev for fallback (errno=%d)", errno);
-                    }
-                }
-                if (rename(LOG_FILE, PREV_LOG_FILE) == 0) {
-                    LOG_WITH_TS(I, "Forced log rotation completed successfully (legacy fallback)");
-                } else {
-                    LOG_WITH_TS(E, "Failed to perform forced rotation completely (errno=%d)", errno);
-                    xSemaphoreGive(s_log_mutex);
-                    return ESP_FAIL;
-                }
-            } else {
-                LOG_WITH_TS(E, "LOG_FILE disappeared during rotation, cannot complete");
-                xSemaphoreGive(s_log_mutex);
-                return ESP_FAIL;
-            }
+    esp_err_t rot_ret = ESP_FAIL;
+    if (generate_timestamped_filename(timestamped_file, sizeof(timestamped_file)) == ESP_OK) {
+        rot_ret = copy_and_delete(LOG_FILE, timestamped_file);
+        if (rot_ret == ESP_OK) {
+            LOG_WITH_TS(I, "Forced log rotation completed to: %s", timestamped_file);
         }
     }
+    if (rot_ret != ESP_OK) {
+        rot_ret = copy_and_delete(LOG_FILE, PREV_LOG_FILE);
+        if (rot_ret == ESP_OK) {
+            LOG_WITH_TS(I, "Forced log rotation completed to legacy format");
+        }
+    }
+    if (rot_ret != ESP_OK) {
+        s_rotation_fail_count++;
+        LOG_WITH_TS(E, "Forced rotation failed (attempt %d/%d)", s_rotation_fail_count, MAX_ROTATION_FAILURES);
+        xSemaphoreGive(s_log_mutex);
+        if (s_rotation_fail_count >= MAX_ROTATION_FAILURES) {
+            LOG_WITH_TS(E, "Max rotation failures reached, reformatting SPIFFS for self-recovery");
+            if (s_log_mutex) {
+                vSemaphoreDelete(s_log_mutex);
+                s_log_mutex = NULL;
+            }
+            esp_vfs_spiffs_unregister(NULL);
+            esp_spiffs_format(NULL);
+            s_log_initialized = false;
+            s_rotation_fail_count = 0;
+            log_storage_init();
+        }
+        return ESP_FAIL;
+    }
+    s_rotation_fail_count = 0;
 
     FILE *new_log = fopen(LOG_FILE, "w");
     if (new_log) {

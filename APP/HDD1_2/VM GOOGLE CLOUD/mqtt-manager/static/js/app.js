@@ -48,7 +48,9 @@ function hideDeleteModal() {
 
 async function fetchBrokerStatus() {
     try {
-        const response = await fetch(`${API_BASE}/api/mqtt/status`);
+        const response = await fetch(`${API_BASE}/api/mqtt/status`, {
+            credentials: 'include'
+        });
         const data = await response.json();
 
         const statusBadge = document.getElementById('brokerStatus');
@@ -78,7 +80,9 @@ async function fetchUsers() {
     tableContainer.style.display = 'none';
 
     try {
-        const response = await fetch(`${API_BASE}/api/mqtt/users`);
+        const response = await fetch(`${API_BASE}/api/mqtt/users`, {
+            credentials: 'include'
+        });
         const data = await response.json();
 
         loadingSpinner.style.display = 'none';
@@ -107,6 +111,7 @@ async function createUser(esp32Id) {
             headers: {
                 'Content-Type': 'application/json'
             },
+            credentials: 'include',
             body: JSON.stringify({ esp32_id: esp32Id })
         });
 
@@ -131,7 +136,8 @@ async function createUser(esp32Id) {
 async function deleteUser(username) {
     try {
         const response = await fetch(`${API_BASE}/api/mqtt/users/${username}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            credentials: 'include'
         });
 
         const data = await response.json();
@@ -210,83 +216,106 @@ function getTypeLabel(type) {
 // EVENT HANDLERS
 // ============================================================================
 
-document.getElementById('addUserForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
+const addUserForm = document.getElementById('addUserForm');
+if (addUserForm) {
+    addUserForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
 
-    const input = document.getElementById('esp32Id');
-    const esp32Id = input.value.trim().toUpperCase();
-    const addBtn = document.getElementById('addBtn');
-    const btnText = addBtn.querySelector('.btn-text');
-    const btnLoading = addBtn.querySelector('.btn-loading');
+        const input = document.getElementById('esp32Id');
+        const esp32Id = input.value.trim().toUpperCase();
+        const addBtn = document.getElementById('addBtn');
+        const btnText = addBtn.querySelector('.btn-text');
+        const btnLoading = addBtn.querySelector('.btn-loading');
 
-    // Validate format
-    if (!/^[A-F0-9]{8}$/.test(esp32Id)) {
-        showToast('❌ Formato inválido', 'El ESP32 ID debe tener 8 caracteres hexadecimales', 'error');
-        return;
-    }
+        // Validate format
+        if (!/^[A-F0-9]{8}$/.test(esp32Id)) {
+            showToast('❌ Formato inválido', 'El ESP32 ID debe tener 8 caracteres hexadecimales', 'error');
+            return;
+        }
 
-    // Disable button
-    addBtn.disabled = true;
-    btnText.style.display = 'none';
-    btnLoading.style.display = 'inline';
+        // Disable button
+        addBtn.disabled = true;
+        btnText.style.display = 'none';
+        btnLoading.style.display = 'inline';
 
-    const success = await createUser(esp32Id);
+        const success = await createUser(esp32Id);
 
-    // Re-enable button
-    addBtn.disabled = false;
-    btnText.style.display = 'inline';
-    btnLoading.style.display = 'none';
+        // Re-enable button
+        addBtn.disabled = false;
+        btnText.style.display = 'inline';
+        btnLoading.style.display = 'none';
 
-    if (success) {
-        input.value = '';
-    }
-});
+        if (success) {
+            input.value = '';
+        }
+    });
+}
 
-document.getElementById('refreshBtn').addEventListener('click', () => {
-    fetchUsers();
-    fetchBrokerStatus();
-    showToast('🔄 Actualizado', 'Lista de dispositivos actualizada', 'info');
-});
+const refreshBtn = document.getElementById('refreshBtn');
+if (refreshBtn) {
+    refreshBtn.addEventListener('click', () => {
+        fetchUsers();
+        fetchBrokerStatus();
+        showToast('🔄 Actualizado', 'Lista de dispositivos actualizada', 'info');
+    });
+}
 
-document.getElementById('cancelDeleteBtn').addEventListener('click', hideDeleteModal);
+// Only add event listeners if elements exist (this page is mqtt_config.html)
+const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
+const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+const deleteModal = document.getElementById('deleteModal');
+const esp32IdInput = document.getElementById('esp32Id');
 
-document.getElementById('confirmDeleteBtn').addEventListener('click', async () => {
-    if (!deleteUsername) return;
+if (cancelDeleteBtn) {
+    cancelDeleteBtn.addEventListener('click', hideDeleteModal);
+}
 
-    const btn = document.getElementById('confirmDeleteBtn');
-    btn.disabled = true;
-    btn.textContent = 'Eliminando...';
+if (confirmDeleteBtn) {
+    confirmDeleteBtn.addEventListener('click', async () => {
+        if (!deleteUsername) return;
 
-    await deleteUser(deleteUsername);
+        confirmDeleteBtn.disabled = true;
+        confirmDeleteBtn.textContent = 'Eliminando...';
 
-    btn.disabled = false;
-    btn.textContent = 'Eliminar';
-    hideDeleteModal();
-});
+        await deleteUser(deleteUsername);
+
+        confirmDeleteBtn.disabled = false;
+        confirmDeleteBtn.textContent = 'Eliminar';
+        hideDeleteModal();
+    });
+}
 
 // Close modal on background click
-document.getElementById('deleteModal').addEventListener('click', (e) => {
-    if (e.target.id === 'deleteModal') {
-        hideDeleteModal();
-    }
-});
+if (deleteModal) {
+    deleteModal.addEventListener('click', (e) => {
+        if (e.target.id === 'deleteModal') {
+            hideDeleteModal();
+        }
+    });
+}
 
 // Auto-uppercase ESP32 ID input
-document.getElementById('esp32Id').addEventListener('input', (e) => {
-    e.target.value = e.target.value.toUpperCase();
-});
+if (esp32IdInput) {
+    esp32IdInput.addEventListener('input', (e) => {
+        e.target.value = e.target.value.toUpperCase();
+    });
+}
 
 // ============================================================================
 // INITIALIZATION
 // ============================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
-    fetchUsers();
-    fetchBrokerStatus();
+    // Only initialize if we're on the MQTT Config page
+    const usersTableBody = document.getElementById('usersTableBody');
+    if (usersTableBody) {
+        fetchUsers();
+        fetchBrokerStatus();
 
-    // Auto-refresh broker status every 10 seconds
-    setInterval(fetchBrokerStatus, 10000);
+        // Auto-refresh broker status every 10 seconds
+        setInterval(fetchBrokerStatus, 10000);
 
-    // Auto-refresh users every 30 seconds
-    setInterval(fetchUsers, 30000);
+        // Auto-refresh users every 30 seconds
+        setInterval(fetchUsers, 30000);
+    }
 });

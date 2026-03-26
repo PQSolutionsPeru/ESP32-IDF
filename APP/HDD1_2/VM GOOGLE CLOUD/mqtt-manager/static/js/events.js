@@ -163,14 +163,29 @@ function formatDate(dateStr) {
     if (!dateStr) return 'N/A';
 
     try {
-        const date = new Date(dateStr);
-        const day = String(date.getDate()).padStart(2, '0');
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const year = date.getFullYear();
-        const hours = String(date.getHours()).padStart(2, '0');
-        const minutes = String(date.getMinutes()).padStart(2, '0');
+        // Handle format "dd-MM-yyyy HH:mm" from Firestore
+        if (typeof dateStr === 'string' && dateStr.includes('-')) {
+            const [datePart, timePart] = dateStr.split(' ');
+            const [day, month, year] = datePart.split('-');
 
-        return `${day}/${month}/${year} ${hours}:${minutes}`;
+            if (day && month && year) {
+                const time = timePart || '00:00';
+                return `${day}/${month}/${year} ${time}`;
+            }
+        }
+
+        // Fallback: try standard Date parsing
+        const date = new Date(dateStr);
+        if (!isNaN(date.getTime())) {
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            return `${day}/${month}/${year} ${hours}:${minutes}`;
+        }
+
+        return dateStr;
     } catch (error) {
         return 'Invalid Date';
     }
@@ -337,3 +352,61 @@ window.filterEventsByStatus = filterEventsByStatus;
 window.showEventDetails = showEventDetails;
 window.closeEventModal = closeEventModal;
 window.refreshEvents = refreshEvents;
+
+// ============================================================================
+// REAL-TIME EVENT HANDLERS (called by realtime.js)
+// ============================================================================
+
+/**
+ * Handle event added via WebSocket
+ */
+window.onEventAdded = function(event) {
+    console.log('[Events] Event added:', event.titulo || event.id);
+
+    // Only update if we're viewing events for this client
+    if (selectedClientId && event.client_id === selectedClientId) {
+        // Check if event already exists
+        const exists = currentEvents.find(e => e.id === event.id);
+        if (!exists) {
+            currentEvents.push(event);
+            renderEventsTable(currentEvents);
+            showToast(`New event: ${event.titulo || 'Untitled'}`, 'info');
+        }
+    }
+};
+
+/**
+ * Handle event updated via WebSocket
+ */
+window.onEventUpdated = function(event) {
+    console.log('[Events] Event updated:', event.titulo || event.id, 'Status:', event.status);
+
+    // Only update if we're viewing events for this client
+    if (selectedClientId && event.client_id === selectedClientId) {
+        // Find and update the event in the array
+        const index = currentEvents.findIndex(e => e.id === event.id);
+        if (index !== -1) {
+            currentEvents[index] = event;
+            renderEventsTable(currentEvents);
+            console.log('[Events] Table updated with new event data');
+        } else {
+            // Event not in current list, add it
+            currentEvents.push(event);
+            renderEventsTable(currentEvents);
+        }
+    }
+};
+
+/**
+ * Handle event removed via WebSocket
+ */
+window.onEventRemoved = function(eventId) {
+    console.log('[Events] Event removed:', eventId);
+
+    if (selectedClientId) {
+        // Remove event from array
+        currentEvents = currentEvents.filter(e => e.id !== eventId);
+        renderEventsTable(currentEvents);
+        showToast('Event removed', 'info');
+    }
+};

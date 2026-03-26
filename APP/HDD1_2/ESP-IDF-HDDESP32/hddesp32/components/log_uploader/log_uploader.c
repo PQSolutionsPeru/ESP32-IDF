@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <time.h>
+#include <dirent.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_http_client.h"
@@ -386,90 +387,37 @@ static void upload_pending_logs(void) {
         return;
     }
     
-    // Buscar archivos log con timestamp y log.prev
     struct stat st;
     char log_files[10][64];
     int file_count = 0;
-    
-    // Primero buscar log.prev (compatibilidad)
-    if (stat("/spiffs/log.prev", &st) == 0 && st.st_size > 0) {
-        strcpy(log_files[file_count], "/spiffs/log.prev");
-        file_count++;
-        LOG_WITH_TS(I, "Found legacy log.prev for upload, size: %ld bytes", st.st_size);
-    }
-    
-    // Buscar archivos con formato log_YYYYMMDD_HHMMSS.txt usando búsqueda ampliada
-    time_t now;
-    if (time_manager_is_synchronized()) {
-        now = time_manager_get_time();
-    } else {
-        time(&now);
-    }
-    now -= 5 * 3600;  // GMT-5
-    
-    // Expandir la búsqueda a las últimas 2 horas para mayor probabilidad de encontrar archivos
-    for (int i = 0; i < 120; i++) {  // Buscar en los últimos 120 minutos
-        time_t check_time = now - (i * 60);
-        struct tm timeinfo;
-        gmtime_r(&check_time, &timeinfo);
-        
-        char test_file[64];
-        snprintf(test_file, sizeof(test_file), 
-                 "/spiffs/log_%04d%02d%02d_%02d%02d%02d.txt",
-                 timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
-                 timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
-        
-        if (stat(test_file, &st) == 0) {
-            strcpy(log_files[file_count], test_file);
-            file_count++;
-            LOG_WITH_TS(I, "Found timestamped log file: %s, size: %ld bytes", test_file, st.st_size);
-            break;  // Solo tomar el primero encontrado para evitar duplicados
-        }
-    }
-    
-    // También buscar con segundos variantes (±5 segundos) del tiempo actual
-    if (file_count == 0) {
-        struct tm current_time;
-        gmtime_r(&now, &current_time);
-        
-        for (int sec_offset = -5; sec_offset <= 5; sec_offset++) {
-            char test_file[64];
-            int test_sec = current_time.tm_sec + sec_offset;
-            int test_min = current_time.tm_min;
-            int test_hour = current_time.tm_hour;
-            
-            // Ajustar si los segundos se salen del rango
-            if (test_sec < 0) {
-                test_sec += 60;
-                test_min -= 1;
-                if (test_min < 0) {
-                    test_min += 60;
-                    test_hour -= 1;
-                }
-            } else if (test_sec >= 60) {
-                test_sec -= 60;
-                test_min += 1;
-                if (test_min >= 60) {
-                    test_min -= 60;
-                    test_hour += 1;
-                }
+
+    DIR *spiffs_dir = opendir("/spiffs");
+    if (spiffs_dir) {
+        struct dirent *entry;
+        while ((entry = readdir(spiffs_dir)) != NULL && file_count < 10) {
+            if (strcmp(entry->d_name, "log.txt") == 0) {
+                continue;
             }
-            
-            snprintf(test_file, sizeof(test_file), 
-                     "/spiffs/log_%04d%02d%02d_%02d%02d%02d.txt",
-                     current_time.tm_year + 1900, current_time.tm_mon + 1, current_time.tm_mday,
-                     test_hour, test_min, test_sec);
-            
-            if (stat(test_file, &st) == 0) {
-                strcpy(log_files[file_count], test_file);
+            bool is_timestamped = (strncmp(entry->d_name, "log_", 4) == 0 &&
+                                   strstr(entry->d_name, ".txt") != NULL);
+            bool is_prev = (strcmp(entry->d_name, "log.prev") == 0);
+            if (!is_timestamped && !is_prev) {
+                continue;
+            }
+            char filepath[64];
+            snprintf(filepath, sizeof(filepath), "/spiffs/%s", entry->d_name);
+            if (stat(filepath, &st) == 0 && st.st_size > 0) {
+                strncpy(log_files[file_count], filepath, sizeof(log_files[0]) - 1);
+                log_files[file_count][sizeof(log_files[0]) - 1] = '\0';
                 file_count++;
-                LOG_WITH_TS(I, "Found timestamped file with time variance: %s, size: %ld bytes", test_file, st.st_size);
-                break;
+                LOG_WITH_TS(I, "Found pending log for upload: %s (%ld bytes)", filepath, st.st_size);
             }
         }
+        closedir(spiffs_dir);
+    } else {
+        LOG_WITH_TS(W, "Failed to open /spiffs directory for scan");
     }
-    
-    // Si TODAVÍA no encontramos archivos para subir, y hay log.txt actual significativo
+
     if (file_count == 0) {
         LOG_WITH_TS(I, "No timestamped log files found - checking current log");
         
