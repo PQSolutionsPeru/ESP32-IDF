@@ -319,8 +319,10 @@ async function toggleTestMode(deviceId, currentIsTest) {
         const data = await response.json();
         if (data.success) {
             showToast(`${deviceId} marcado como ${label}`, 'success');
+            const device = allDevices.find(d => d.id === deviceId);
+            if (device) device.test_device = newValue;
             closeDeviceModal();
-            loadDevices();
+            renderDevicesTable(allDevices);
         } else {
             showToast(`Error: ${data.error}`, 'error');
         }
