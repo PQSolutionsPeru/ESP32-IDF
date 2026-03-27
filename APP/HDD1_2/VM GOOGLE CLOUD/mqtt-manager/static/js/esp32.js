@@ -76,10 +76,9 @@ function renderDevicesTable(devices) {
         const statusBadge = getStatusBadge(status);
         const lastSeen = formatLastSeen(device.last_seen);
         const isTest = device.test_device === true;
-        const modoBadge = isTest
-            ? `<span class="badge-test">Pruebas</span>`
-            : `<span class="badge-production">Produccion</span>`;
-        const toggleLabel = isTest ? '✅ Produccion' : '🧪 Pruebas';
+        const modoToggle = isTest
+            ? `<button class="badge-test badge-toggle" onclick="event.stopPropagation(); toggleTestMode('${device.id}', true)" title="Clic para marcar como Produccion">🧪 Pruebas</button>`
+            : `<button class="badge-production badge-toggle" onclick="event.stopPropagation(); toggleTestMode('${device.id}', false)" title="Clic para marcar como Pruebas">✅ Produccion</button>`;
 
         return `
             <tr onclick="showDeviceDetails('${device.id}')">
@@ -89,13 +88,10 @@ function renderDevicesTable(devices) {
                 <td>${statusBadge}</td>
                 <td>${device.firmware_version || 'N/A'}</td>
                 <td>${lastSeen}</td>
-                <td>${modoBadge}</td>
+                <td>${modoToggle}</td>
                 <td onclick="event.stopPropagation()">
                     <button class="btn-icon" onclick="showDeviceDetails('${device.id}')" title="View Details">
                         👁️
-                    </button>
-                    <button class="btn-icon" onclick="toggleTestMode('${device.id}', ${isTest})" title="${toggleLabel}" style="font-size:0.8rem;">
-                        ${toggleLabel}
                     </button>
                 </td>
             </tr>
@@ -239,15 +235,9 @@ function renderDeviceModal(device) {
         </div>
         <div class="detail-row">
             <span class="detail-label">Modo:</span>
-            <span>
-                ${device.test_device
-                    ? '<span class="badge-test">Pruebas</span>'
-                    : '<span class="badge-production">Produccion</span>'}
-                <button class="btn-icon" style="margin-left:12px;font-size:0.8rem;"
-                    onclick="toggleTestMode('${device.id}', ${device.test_device === true})">
-                    ${device.test_device ? '✅ Marcar como Produccion' : '🧪 Marcar como Pruebas'}
-                </button>
-            </span>
+            ${device.test_device
+                ? `<button class="badge-test badge-toggle" onclick="toggleTestMode('${device.id}', true)" title="Clic para marcar como Produccion">🧪 Pruebas — clic para cambiar a Produccion</button>`
+                : `<button class="badge-production badge-toggle" onclick="toggleTestMode('${device.id}', false)" title="Clic para marcar como Pruebas">✅ Produccion — clic para cambiar a Pruebas</button>`}
         </div>
     `;
 
