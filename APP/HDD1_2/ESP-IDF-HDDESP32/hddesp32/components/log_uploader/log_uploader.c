@@ -404,7 +404,7 @@ static void upload_pending_logs(void) {
             if (!is_timestamped && !is_prev) {
                 continue;
             }
-            char filepath[64];
+            char filepath[272];
             snprintf(filepath, sizeof(filepath), "/spiffs/%s", entry->d_name);
             if (stat(filepath, &st) == 0 && st.st_size > 0) {
                 strncpy(log_files[file_count], filepath, sizeof(log_files[0]) - 1);
