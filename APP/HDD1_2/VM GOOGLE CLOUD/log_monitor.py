@@ -33,8 +33,22 @@ logger = logging.getLogger(__name__)
 LOG_BASE_DIR = Path("/home/pqsolutions/esp32_log")
 EMAIL_CONFIG_PATH = Path("/home/pqsolutions/mqtt-manager/config.email.json")
 FIREBASE_CREDENTIALS = Path("/home/pqsolutionsperu/vm-service-key.json")
+EXCLUDE_FILE = Path("/home/pqsolutionsperu/log_monitor_exclude.txt")
 MAX_LOG_AGE_HOURS = 26
 MONITOR_LOG = "/var/log/hdd_monitor_log_check.log"
+
+
+def get_excluded_device_ids() -> set:
+    """Return device IDs listed in the local exclude file (one ID per line)."""
+    if not EXCLUDE_FILE.exists():
+        return set()
+    excluded = set()
+    with open(EXCLUDE_FILE) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#'):
+                excluded.add(line)
+    return excluded
 
 
 def get_test_device_ids() -> set:
@@ -175,9 +189,9 @@ def check_logs():
     log_to_file("=" * 60)
     log_to_file(f"Iniciando verificacion de logs")
 
-    test_devices = get_test_device_ids()
+    test_devices = get_test_device_ids() | get_excluded_device_ids()
     if test_devices:
-        log_to_file(f"Dispositivos en modo pruebas (excluidos): {', '.join(sorted(test_devices))}")
+        log_to_file(f"Dispositivos excluidos del monitoreo: {', '.join(sorted(test_devices))}")
 
     if not LOG_BASE_DIR.exists():
         msg = f"ERROR: Directorio de logs no encontrado: {LOG_BASE_DIR}"
@@ -236,7 +250,7 @@ def check_logs():
             log_to_file(msg)
             sys.exit(1)
     else:
-        monitored = len(device_dirs) - len(test_devices)
+        monitored = sum(1 for d in device_dirs if d.name not in test_devices)
         msg = f"Todos los dispositivos monitoreados ({monitored}) estan subiendo logs correctamente"
         logger.info(msg)
         log_to_file(msg)

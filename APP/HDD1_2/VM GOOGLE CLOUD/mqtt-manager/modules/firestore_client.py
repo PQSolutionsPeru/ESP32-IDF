@@ -351,6 +351,8 @@ class FirestoreClient:
                 data['last_seen'] = data.get('lastUpdate')
                 data['firmware_version'] = data.get('firmwareVersion', 'N/A')
                 data['test_device'] = data.get('test_device', False)
+                if 'status' in data and isinstance(data['status'], str):
+                    data['status'] = data['status'].lower()
                 return data
             return None
         except Exception as e:
