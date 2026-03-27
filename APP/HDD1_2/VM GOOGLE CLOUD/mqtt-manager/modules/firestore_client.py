@@ -363,7 +363,7 @@ class FirestoreClient:
         """Delete an ESP32 device document from Firestore."""
         try:
             self.db.collection('hdd-monitor').document('esp32').collection('registered').document(device_id).delete()
-            self.cache.clear()
+            FirestoreClient.get_all_esp32_devices.cache_clear()
             logger.info(f"Device {device_id} deleted from Firestore")
             return True
         except Exception as e:
@@ -385,7 +385,7 @@ class FirestoreClient:
         try:
             doc_ref = self.db.collection('hdd-monitor').document('esp32').collection('registered').document(device_id)
             doc_ref.update({'test_device': is_test})
-            self.cache.clear()
+            FirestoreClient.get_all_esp32_devices.cache_clear()
             logger.info(f"Device {device_id} test_device set to {is_test}")
             return True
         except Exception as e:
