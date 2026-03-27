@@ -578,6 +578,28 @@ def get_esp32_device(device_id):
             'error': str(e)
         }), 500
 
+@app.route('/api/esp32/devices/<device_id>/test-mode', methods=['POST'])
+@login_required
+def set_esp32_test_mode(device_id):
+    """POST - Mark or unmark an ESP32 device as a test device"""
+    if not firestore_client:
+        return jsonify({
+            'success': False,
+            'error': 'Firestore client not initialized'
+        }), 503
+
+    try:
+        body = request.get_json(silent=True) or {}
+        is_test = bool(body.get('test_device', False))
+        ok = firestore_client.set_test_device(device_id, is_test)
+        if ok:
+            return jsonify({'success': True, 'device_id': device_id, 'test_device': is_test})
+        else:
+            return jsonify({'success': False, 'error': 'Failed to update device'}), 500
+    except Exception as e:
+        logger.error(f"Error setting test mode for {device_id}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/clients', methods=['GET'])
 @login_required
 def get_clients():

@@ -75,6 +75,11 @@ function renderDevicesTable(devices) {
         const status = device.status || 'unknown';
         const statusBadge = getStatusBadge(status);
         const lastSeen = formatLastSeen(device.last_seen);
+        const isTest = device.test_device === true;
+        const modoBadge = isTest
+            ? `<span class="badge-test">Pruebas</span>`
+            : `<span class="badge-production">Produccion</span>`;
+        const toggleLabel = isTest ? '✅ Produccion' : '🧪 Pruebas';
 
         return `
             <tr onclick="showDeviceDetails('${device.id}')">
@@ -84,9 +89,13 @@ function renderDevicesTable(devices) {
                 <td>${statusBadge}</td>
                 <td>${device.firmware_version || 'N/A'}</td>
                 <td>${lastSeen}</td>
+                <td>${modoBadge}</td>
                 <td onclick="event.stopPropagation()">
                     <button class="btn-icon" onclick="showDeviceDetails('${device.id}')" title="View Details">
                         👁️
+                    </button>
+                    <button class="btn-icon" onclick="toggleTestMode('${device.id}', ${isTest})" title="${toggleLabel}" style="font-size:0.8rem;">
+                        ${toggleLabel}
                     </button>
                 </td>
             </tr>
@@ -142,6 +151,9 @@ function filterDevices() {
 
     if (filter === 'all') {
         renderDevicesTable(allDevices);
+    } else if (filter === 'test') {
+        const filtered = allDevices.filter(device => device.test_device === true);
+        renderDevicesTable(filtered);
     } else {
         const filtered = allDevices.filter(device => device.status === filter);
         renderDevicesTable(filtered);
@@ -225,6 +237,18 @@ function renderDeviceModal(device) {
             <span class="detail-label">Capabilities:</span>
             <span class="detail-value">${device.capabilities?.join(', ') || 'N/A'}</span>
         </div>
+        <div class="detail-row">
+            <span class="detail-label">Modo:</span>
+            <span>
+                ${device.test_device
+                    ? '<span class="badge-test">Pruebas</span>'
+                    : '<span class="badge-production">Produccion</span>'}
+                <button class="btn-icon" style="margin-left:12px;font-size:0.8rem;"
+                    onclick="toggleTestMode('${device.id}', ${device.test_device === true})">
+                    ${device.test_device ? '✅ Marcar como Produccion' : '🧪 Marcar como Pruebas'}
+                </button>
+            </span>
+        </div>
     `;
 
     modal.style.display = 'flex';
@@ -286,8 +310,39 @@ function showErrorInTable(message) {
     }
 }
 
+/**
+ * Toggle test mode for a device
+ */
+async function toggleTestMode(deviceId, currentIsTest) {
+    const newValue = !currentIsTest;
+    const label = newValue ? 'Para Pruebas' : 'Produccion';
+
+    if (!confirm(`Marcar ${deviceId} como ${label}?`)) return;
+
+    try {
+        const response = await fetch(`/api/esp32/devices/${deviceId}/test-mode`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ test_device: newValue })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            showToast(`${deviceId} marcado como ${label}`, 'success');
+            closeDeviceModal();
+            loadDevices();
+        } else {
+            showToast(`Error: ${data.error}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error toggling test mode:', error);
+        showToast('Error al cambiar modo', 'error');
+    }
+}
+
 // Make functions available globally
 window.filterDevices = filterDevices;
 window.showDeviceDetails = showDeviceDetails;
 window.closeDeviceModal = closeDeviceModal;
 window.refreshDevices = refreshDevices;
+window.toggleTestMode = toggleTestMode;

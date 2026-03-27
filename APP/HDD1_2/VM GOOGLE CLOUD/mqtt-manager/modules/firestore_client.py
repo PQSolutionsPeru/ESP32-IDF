@@ -95,6 +95,7 @@ class FirestoreClient:
                 data['ip_address'] = data.get('IP', 'N/A')
                 data['last_seen'] = data.get('lastUpdate')
                 data['firmware_version'] = data.get('firmwareVersion', 'N/A')
+                data['test_device'] = data.get('test_device', False)
 
                 devices.append(data)
 
@@ -349,11 +350,34 @@ class FirestoreClient:
                 data['ip_address'] = data.get('IP', 'N/A')
                 data['last_seen'] = data.get('lastUpdate')
                 data['firmware_version'] = data.get('firmwareVersion', 'N/A')
+                data['test_device'] = data.get('test_device', False)
                 return data
             return None
         except Exception as e:
             logger.error(f"Error getting device {device_id}: {e}")
             return None
+
+    def set_test_device(self, device_id: str, is_test: bool) -> bool:
+        """
+        Mark or unmark an ESP32 device as a test device.
+        Devices marked as test are excluded from log upload monitoring alerts.
+
+        Args:
+            device_id: Device document ID
+            is_test: True to mark as test device, False to unmark
+
+        Returns:
+            True on success, False on failure
+        """
+        try:
+            doc_ref = self.db.collection('hdd-monitor').document('esp32').collection('registered').document(device_id)
+            doc_ref.update({'test_device': is_test})
+            self.cache.clear()
+            logger.info(f"Device {device_id} test_device set to {is_test}")
+            return True
+        except Exception as e:
+            logger.error(f"Error setting test_device for {device_id}: {e}")
+            return False
 
     def clear_cache(self):
         """Clear all cached data"""

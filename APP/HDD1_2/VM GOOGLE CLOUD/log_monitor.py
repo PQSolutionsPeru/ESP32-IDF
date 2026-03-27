@@ -17,6 +17,13 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 
+try:
+    import firebase_admin
+    from firebase_admin import credentials, firestore as fb_firestore
+    FIREBASE_AVAILABLE = True
+except ImportError:
+    FIREBASE_AVAILABLE = False
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
@@ -25,8 +32,27 @@ logger = logging.getLogger(__name__)
 
 LOG_BASE_DIR = Path("/home/pqsolutions/esp32_log")
 EMAIL_CONFIG_PATH = Path("/home/pqsolutionsperu/mqtt-manager/config.email.json")
+FIREBASE_CREDENTIALS = Path("/home/pqsolutionsperu/vm-service-key.json")
 MAX_LOG_AGE_HOURS = 26
 MONITOR_LOG = "/var/log/hdd_monitor_log_check.log"
+
+
+def get_test_device_ids() -> set:
+    """Return set of device IDs marked as test_device=True in Firestore."""
+    if not FIREBASE_AVAILABLE:
+        return set()
+    if not FIREBASE_CREDENTIALS.exists():
+        return set()
+    try:
+        if not firebase_admin._apps:
+            cred = credentials.Certificate(str(FIREBASE_CREDENTIALS))
+            firebase_admin.initialize_app(cred)
+        db = fb_firestore.client()
+        docs = db.collection('hdd-monitor').document('esp32').collection('registered').stream()
+        return {doc.id for doc in docs if doc.to_dict().get('test_device', False)}
+    except Exception as e:
+        logger.warning(f"Could not fetch test devices from Firestore: {e}")
+        return set()
 
 
 def log_to_file(message: str):
@@ -149,6 +175,10 @@ def check_logs():
     log_to_file("=" * 60)
     log_to_file(f"Iniciando verificacion de logs")
 
+    test_devices = get_test_device_ids()
+    if test_devices:
+        log_to_file(f"Dispositivos en modo pruebas (excluidos): {', '.join(sorted(test_devices))}")
+
     if not LOG_BASE_DIR.exists():
         msg = f"ERROR: Directorio de logs no encontrado: {LOG_BASE_DIR}"
         logger.error(msg)
@@ -167,6 +197,10 @@ def check_logs():
 
     for device_dir in device_dirs:
         device_id = device_dir.name
+
+        if device_id in test_devices:
+            log_to_file(f"  [{device_id}] OMITIDO - marcado como dispositivo de pruebas")
+            continue
         result = get_newest_log_time(device_dir)
 
         if result is None:
@@ -202,7 +236,8 @@ def check_logs():
             log_to_file(msg)
             sys.exit(1)
     else:
-        msg = f"Todos los dispositivos ({len(device_dirs)}) estan subiendo logs correctamente"
+        monitored = len(device_dirs) - len(test_devices)
+        msg = f"Todos los dispositivos monitoreados ({monitored}) estan subiendo logs correctamente"
         logger.info(msg)
         log_to_file(msg)
 

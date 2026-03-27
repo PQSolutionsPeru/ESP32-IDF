@@ -11,6 +11,7 @@
         <option value="online">Online</option>
         <option value="offline">Offline</option>
         <option value="awaiting_config">Awaiting Config</option>
+        <option value="test">Para Pruebas</option>
     </select>
     <button class="btn btn-secondary" onclick="refreshDevices()">
         <span>🔄</span>
@@ -32,12 +33,13 @@
                     <th>Status</th>
                     <th>Firmware</th>
                     <th>Last Seen</th>
+                    <th>Modo</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody id="devicesTableBody">
                 <tr>
-                    <td colspan="7" style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                    <td colspan="8" style="text-align: center; padding: 40px; color: var(--text-secondary);">
                         Loading devices...
                     </td>
                 </tr>
@@ -215,6 +217,28 @@
 .detail-value {
     color: var(--text-primary);
     font-family: monospace;
+}
+
+.badge-test {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffc107;
+}
+
+.badge-production {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: #d1e7dd;
+    color: #0a3622;
+    border: 1px solid #198754;
 }
 
 @media (max-width: 768px) {
