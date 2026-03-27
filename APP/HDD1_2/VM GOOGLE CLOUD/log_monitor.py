@@ -31,7 +31,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 LOG_BASE_DIR = Path("/home/pqsolutions/esp32_log")
-EMAIL_CONFIG_PATH = Path("/home/pqsolutionsperu/mqtt-manager/config.email.json")
+EMAIL_CONFIG_PATH = Path("/home/pqsolutions/mqtt-manager/config.email.json")
 FIREBASE_CREDENTIALS = Path("/home/pqsolutionsperu/vm-service-key.json")
 MAX_LOG_AGE_HOURS = 26
 MONITOR_LOG = "/var/log/hdd_monitor_log_check.log"
