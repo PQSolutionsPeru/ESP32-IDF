@@ -912,8 +912,7 @@ def delete_user(username):
     # Eliminar de Firestore si es un ESP32 (ID hexadecimal de 8 chars)
     if firestore_client and validate_esp32_id(username):
         try:
-            firestore_client.db.collection('hdd-monitor').document('esp32') \
-                .collection('registered').document(username).delete()
+            firestore_client.delete_device(username)
             logger.info(f"ESP32 {username} eliminado de Firestore")
         except Exception as e:
             logger.error(f"Usuario MQTT eliminado pero falló en Firestore: {e}")
