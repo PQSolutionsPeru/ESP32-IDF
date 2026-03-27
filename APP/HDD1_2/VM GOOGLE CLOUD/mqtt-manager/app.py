@@ -579,6 +579,7 @@ def get_esp32_device(device_id):
         }), 500
 
 @app.route('/api/esp32/devices/<device_id>/test-mode', methods=['POST'])
+@csrf.exempt
 @login_required
 def set_esp32_test_mode(device_id):
     """POST - Mark or unmark an ESP32 device as a test device"""
