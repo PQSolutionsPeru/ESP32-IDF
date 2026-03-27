@@ -359,6 +359,17 @@ class FirestoreClient:
             logger.error(f"Error getting device {device_id}: {e}")
             return None
 
+    def delete_device(self, device_id: str) -> bool:
+        """Delete an ESP32 device document from Firestore."""
+        try:
+            self.db.collection('hdd-monitor').document('esp32').collection('registered').document(device_id).delete()
+            self.cache.clear()
+            logger.info(f"Device {device_id} deleted from Firestore")
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting device {device_id}: {e}")
+            return False
+
     def set_test_device(self, device_id: str, is_test: bool) -> bool:
         """
         Mark or unmark an ESP32 device as a test device.

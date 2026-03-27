@@ -90,8 +90,11 @@ function renderDevicesTable(devices) {
                 <td>${lastSeen}</td>
                 <td>${modoToggle}</td>
                 <td onclick="event.stopPropagation()">
-                    <button class="btn-icon" onclick="showDeviceDetails('${device.id}')" title="View Details">
+                    <button class="btn-icon" onclick="showDeviceDetails('${device.id}')" title="Ver detalles">
                         👁️
+                    </button>
+                    <button class="btn-icon" onclick="deleteDevice('${device.id}')" title="Eliminar dispositivo" style="color:#dc3545;">
+                        🗑️
                     </button>
                 </td>
             </tr>
@@ -239,6 +242,11 @@ function renderDeviceModal(device) {
                 ? `<button class="badge-test badge-toggle" onclick="toggleTestMode('${device.id}', true)" title="Clic para marcar como Produccion">🧪 Pruebas — clic para cambiar a Produccion</button>`
                 : `<button class="badge-production badge-toggle" onclick="toggleTestMode('${device.id}', false)" title="Clic para marcar como Pruebas">✅ Produccion — clic para cambiar a Pruebas</button>`}
         </div>
+        <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-color);">
+            <button class="btn btn-danger" onclick="deleteDevice('${device.id}')" style="background:#dc3545;color:white;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-size:0.9rem;">
+                🗑️ Eliminar dispositivo
+            </button>
+        </div>
     `;
 
     modal.style.display = 'flex';
@@ -332,9 +340,37 @@ async function toggleTestMode(deviceId, currentIsTest) {
     }
 }
 
+/**
+ * Delete a device from Firestore
+ */
+async function deleteDevice(deviceId) {
+    if (!confirm(`¿Eliminar ${deviceId} permanentemente de Firestore?\n\nEsta acción no se puede deshacer.`)) return;
+
+    try {
+        const response = await fetch(`/api/esp32/devices/${deviceId}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            showToast(`${deviceId} eliminado correctamente`, 'success');
+            closeDeviceModal();
+            allDevices = allDevices.filter(d => d.id !== deviceId);
+            renderDevicesTable(allDevices);
+        } else {
+            showToast(`Error: ${data.error}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting device:', error);
+        showToast('Error al eliminar dispositivo', 'error');
+    }
+}
+
 // Make functions available globally
 window.filterDevices = filterDevices;
 window.showDeviceDetails = showDeviceDetails;
 window.closeDeviceModal = closeDeviceModal;
 window.refreshDevices = refreshDevices;
 window.toggleTestMode = toggleTestMode;
+window.deleteDevice = deleteDevice;
