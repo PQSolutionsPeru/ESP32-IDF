@@ -370,6 +370,64 @@ class FirestoreClient:
             logger.error(f"Error deleting device {device_id}: {e}")
             return False
 
+    def delete_device_with_panels(self, device_id: str) -> Dict[str, Any]:
+        """
+        Delete an ESP32 device and cascade-delete all associated panels and their relays.
+        Mirrors the mobile app deletePanel() behaviour:
+          1. Find every panel that has esp32_id == device_id (across all clients)
+          2. Batch-delete all relay documents inside each panel
+          3. Delete each panel document
+          4. Delete the ESP32 registration
+
+        Returns:
+            dict with 'deleted_panels' list and 'success' bool
+        """
+        deleted_panels = []
+        try:
+            clients_ref = (self.db.collection('hdd-monitor')
+                           .document('accounts')
+                           .collection('clients'))
+
+            for client_doc in clients_ref.stream():
+                panels_ref = clients_ref.document(client_doc.id).collection('panels')
+                matching = panels_ref.where('esp32_id', '==', device_id).stream()
+
+                for panel_doc in matching:
+                    relays_ref = panels_ref.document(panel_doc.id).collection('relays')
+                    relay_docs = list(relays_ref.stream())
+
+                    batch = self.db.batch()
+                    for relay in relay_docs:
+                        batch.delete(relay.reference)
+                    batch.delete(panel_doc.reference)
+                    batch.commit()
+
+                    deleted_panels.append({
+                        'client_id': client_doc.id,
+                        'panel_id': panel_doc.id,
+                        'panel_name': panel_doc.get('name') or panel_doc.id
+                    })
+                    logger.info(f"Deleted panel {panel_doc.id} (client {client_doc.id}) "
+                                f"with {len(relay_docs)} relays")
+
+            # Delete the ESP32 registration itself
+            (self.db.collection('hdd-monitor')
+             .document('esp32')
+             .collection('registered')
+             .document(device_id)
+             .delete())
+
+            FirestoreClient.get_all_esp32_devices.cache_clear()
+            FirestoreClient.get_client_panels.cache_clear()
+            FirestoreClient.get_dashboard_metrics.cache_clear()
+
+            logger.info(f"Device {device_id} deleted with {len(deleted_panels)} associated panel(s)")
+            return {'success': True, 'deleted_panels': deleted_panels}
+
+        except Exception as e:
+            logger.error(f"Error deleting device {device_id} with panels: {e}")
+            return {'success': False, 'deleted_panels': deleted_panels, 'error': str(e)}
+
     def set_test_device(self, device_id: str, is_test: bool) -> bool:
         """
         Mark or unmark an ESP32 device as a test device.

@@ -344,7 +344,12 @@ async function toggleTestMode(deviceId, currentIsTest) {
  * Delete a device from Firestore
  */
 async function deleteDevice(deviceId) {
-    if (!confirm(`¿Eliminar ${deviceId} permanentemente de Firestore?\n\nEsta acción no se puede deshacer.`)) return;
+    const device = allDevices.find(d => d.id === deviceId);
+    const panelInfo = device?.assigned_panel && device.assigned_panel !== 'None'
+        ? `\n\nTambién se eliminará el panel asignado: ${device.assigned_panel}`
+        : '\n\nSi tiene un panel asignado, también será eliminado junto con sus relays.';
+
+    if (!confirm(`¿Eliminar ${deviceId} permanentemente de Firestore?${panelInfo}\n\nEsta acción no se puede deshacer.`)) return;
 
     try {
         const response = await fetch(`/api/esp32/devices/${deviceId}`, {
@@ -354,7 +359,11 @@ async function deleteDevice(deviceId) {
 
         const data = await response.json();
         if (data.success) {
-            showToast(`${deviceId} eliminado correctamente`, 'success');
+            const panels = data.deleted_panels || [];
+            const panelMsg = panels.length > 0
+                ? ` y ${panels.length} panel(es): ${panels.map(p => p.panel_name).join(', ')}`
+                : '';
+            showToast(`${deviceId} eliminado correctamente${panelMsg}`, 'success');
             closeDeviceModal();
             allDevices = allDevices.filter(d => d.id !== deviceId);
             renderDevicesTable(allDevices);

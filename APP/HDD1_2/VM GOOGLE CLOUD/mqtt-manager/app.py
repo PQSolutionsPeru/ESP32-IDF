@@ -582,15 +582,19 @@ def get_esp32_device(device_id):
 @csrf.exempt
 @login_required
 def delete_esp32_device(device_id):
-    """DELETE - Remove an ESP32 device from Firestore"""
+    """DELETE - Remove an ESP32 device and its associated panels/relays from Firestore"""
     if not firestore_client:
         return jsonify({'success': False, 'error': 'Firestore client not initialized'}), 503
     try:
-        ok = firestore_client.delete_device(device_id)
-        if ok:
-            return jsonify({'success': True, 'device_id': device_id})
+        result = firestore_client.delete_device_with_panels(device_id)
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'device_id': device_id,
+                'deleted_panels': result['deleted_panels']
+            })
         else:
-            return jsonify({'success': False, 'error': 'Failed to delete device'}), 500
+            return jsonify({'success': False, 'error': result.get('error', 'Failed to delete device')}), 500
     except Exception as e:
         logger.error(f"Error deleting ESP32 device {device_id}: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
