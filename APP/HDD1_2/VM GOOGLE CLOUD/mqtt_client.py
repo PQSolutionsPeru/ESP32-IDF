@@ -44,6 +44,8 @@ class MQTTClient:
         self.message_handler = message_handler
         self.connected = False
         self.db = db
+        self.connection_time = None  # Timestamp de conexión para ignorar retain viejos
+        self.ignore_retain_period = 30  # Segundos
         self._setup_mqtt_client()
 
     def _setup_mqtt_client(self):
@@ -59,19 +61,24 @@ class MQTTClient:
         """Configura el cliente MQTT"""
         try:
             self.client.username_pw_set(MQTT_CONFIG['USER'], MQTT_CONFIG['PASSWORD'])
-            
-            context = ssl.create_default_context()
-            context.load_verify_locations(MQTT_CONFIG['TLS_CA_CERTS'])
-            context.check_hostname = False
-            
-            self.client.tls_set_context(context)
-            self.client.tls_insecure_set(False)
-            
+
+            # Solo configurar TLS si está especificado en la configuración
+            if 'TLS_CA_CERTS' in MQTT_CONFIG and MQTT_CONFIG.get('TLS_CA_CERTS'):
+                context = ssl.create_default_context()
+                context.load_verify_locations(MQTT_CONFIG['TLS_CA_CERTS'])
+                context.check_hostname = False
+
+                self.client.tls_set_context(context)
+                self.client.tls_insecure_set(False)
+                logging.info("TLS configurado para conexión MQTT")
+            else:
+                logging.info("Conexión MQTT sin TLS (localhost)")
+
             self.client.on_connect = self._on_connect
             self.client.on_message = self._on_message
             self.client.on_disconnect = self._on_disconnect
             self.client.on_subscribe = self._on_subscribe
-            
+
             will_payload = json.dumps({
                 "status": "OFFLINE",
                 "client_id": self.client_id,
@@ -83,9 +90,9 @@ class MQTTClient:
                 qos=2,
                 retain=True
             )
-            
+
             logging.info(f"Cliente MQTT configurado con ID: {self.client_id}")
-            
+
         except Exception as e:
             logging.error(f"Error configurando cliente MQTT: {str(e)}", exc_info=True)
             raise
@@ -133,6 +140,7 @@ class MQTTClient:
         """Callback de conexión MQTT"""
         if rc == 0:
             self.connected = True
+            self.connection_time = time.time()  # Marcar tiempo de conexión
             logging.info("Conectado al broker MQTT!")
             
             online_payload = json.dumps({
@@ -377,9 +385,14 @@ class MQTTClient:
     def _on_message(self, client, userdata, msg):
         """Procesa mensajes MQTT recibidos"""
         try:
-            if msg.retain:
-                logging.info(f"Ignorando mensaje retain en {msg.topic}")
-                return
+            # Ignorar retain solo durante los primeros 30s después de conectar (evita duplicados al reiniciar servidor)
+            if msg.retain and self.connection_time:
+                elapsed = time.time() - self.connection_time
+                if elapsed < self.ignore_retain_period:
+                    logging.info(f"Ignorando mensaje retain antiguo en {msg.topic} (elapsed: {elapsed:.1f}s)")
+                    return
+                else:
+                    logging.info(f"Procesando mensaje retain (nuevo evento) en {msg.topic}")
 
             payload = json.loads(msg.payload.decode())
             logging.info(f"Mensaje recibido en tópico: {msg.topic}")

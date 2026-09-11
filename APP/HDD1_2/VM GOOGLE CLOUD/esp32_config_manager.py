@@ -306,13 +306,13 @@ class ESP32ConfigManager:
             
             self.client.username_pw_set(MQTT_CONFIG['USER'], MQTT_CONFIG['PASSWORD'])
             
-            context = ssl.create_default_context()
-            context.load_verify_locations(MQTT_CONFIG['TLS_CA_CERTS'])
-            context.check_hostname = False
-            context.set_ciphers('ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384')
-            
-            self.client.tls_set_context(context)
-            self.client.tls_insecure_set(False)
+            # TLS deshabilitado para conexión local a broker Mosquitto
+            # context = ssl.create_default_context()
+            # context.load_verify_locations(MQTT_CONFIG['TLS_CA_CERTS'])
+            # context.check_hostname = False
+            # context.set_ciphers('ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384')
+            # self.client.tls_set_context(context)
+            # self.client.tls_insecure_set(False)
             
             self.client.on_connect = self._on_connect
             self.client.on_message = self._on_message

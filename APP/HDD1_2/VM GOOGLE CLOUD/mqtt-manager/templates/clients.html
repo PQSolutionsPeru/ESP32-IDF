@@ -457,5 +457,71 @@ window.toggleClient = toggleClient;
 window.showPanelRelays = showPanelRelays;
 window.closeRelayModal = closeRelayModal;
 window.refreshClients = refreshClients;
+
+// ============================================================================
+// REAL-TIME EVENT HANDLERS (called by realtime.js)
+// ============================================================================
+
+/**
+ * Handle panel update via WebSocket
+ */
+window.onPanelUpdated = function(panel) {
+    console.log('[Clients] Panel updated:', panel.id);
+    
+    // Find which client this panel belongs to
+    const clientId = panel.client_id;
+    if (clientId) {
+        // Reload panels for this client if they're currently open
+        const panelsContainer = document.getElementById(`panels-${clientId}`);
+        if (panelsContainer && panelsContainer.classList.contains('open')) {
+            console.log('[Clients] Reloading panels for client:', clientId);
+            loadPanels(clientId);
+        }
+    }
+};
+
+/**
+ * Handle relay status change via WebSocket
+ */
+window.onRelayStatusChanged = function(relay) {
+    console.log('[Clients] Relay status changed:', relay.relay_id, 'Status:', relay.status);
+    
+    // Find which panel this relay belongs to
+    const clientId = relay.client_id;
+    const panelId = relay.panel_id;
+    
+    if (clientId) {
+        // Reload panels to show updated status
+        const panelsContainer = document.getElementById(`panels-${clientId}`);
+        if (panelsContainer && panelsContainer.classList.contains('open')) {
+            console.log('[Clients] Reloading panels after relay change');
+            loadPanels(clientId);
+        }
+    }
+    
+    // If relay modal is open for this panel, refresh it
+    const modal = document.getElementById('relayModal');
+    if (modal && modal.style.display === 'flex') {
+        // Optionally refresh the modal, but may be disruptive
+        // showPanelRelays(clientId, panelId, 'Panel Name');
+    }
+};
+
+/**
+ * Handle panel needs refresh signal
+ */
+window.onPanelNeedsRefresh = function(data) {
+    console.log('[Clients] Panel needs refresh:', data.panel_id);
+    
+    const clientId = data.client_id;
+    if (clientId) {
+        const panelsContainer = document.getElementById(`panels-${clientId}`);
+        if (panelsContainer && panelsContainer.classList.contains('open')) {
+            console.log('[Clients] Reloading panels');
+            loadPanels(clientId);
+        }
+    }
+};
+
 </script>
 {% endblock %}

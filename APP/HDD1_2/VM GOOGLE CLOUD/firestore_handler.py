@@ -443,12 +443,6 @@ class FirestoreHandler:
                                 config_key = f"{client_id}_{panel_id}_{relay_id}"
                                 current_time = time.time()
                                 
-                                if config_key in self._last_config_sent:
-                                    time_diff = current_time - self._last_config_sent[config_key]
-                                    if time_diff < 10:
-                                        logging.debug(f"Configuración enviada recientemente para {relay_id}, saltando")
-                                        self._relay_configs[doc_path] = new_data
-                                        continue
                                 
                                 config_changed = False
                                 

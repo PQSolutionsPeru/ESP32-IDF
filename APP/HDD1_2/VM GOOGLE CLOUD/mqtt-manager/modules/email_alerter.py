@@ -106,6 +106,36 @@ class EmailAlerter:
             logger.error(f"Failed to send email alert: {e}", exc_info=True)
             return False
 
+    def send_test_email(self) -> bool:
+        """Send a test email to verify configuration"""
+        try:
+            msg = MIMEMultipart()
+            msg['From'] = self.config.from_email
+            msg['To'] = ', '.join(self.config.to_emails)
+            msg['Subject'] = "✅ ESP32 Health System - Test Email"
+
+            body = """
+            <html>
+            <body style="font-family: Arial, sans-serif;">
+                <h2>ESP32 Health Monitoring System</h2>
+                <p>This is a test email to verify your email configuration is working correctly.</p>
+                <p><strong>Status:</strong> ✅ Configuration is valid and emails can be sent.</p>
+                <p style="color: #6c757d; font-size: 12px; margin-top: 30px;">
+                    Sent at {}</p>
+            </body>
+            </html>
+            """.format(datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'))
+
+            msg.attach(MIMEText(body, 'html'))
+            self._send_email(msg)
+
+            logger.info("Test email sent successfully")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to send test email: {e}")
+            return False
+
     def send_summary_email(self, unhealthy_devices: List[ESP32HealthStatus]) -> bool:
         """
         Send summary email for multiple unhealthy devices

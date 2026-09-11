@@ -165,35 +165,6 @@
 </div>
 
 <script>
-let lastUpdateTime = null;
-
-function formatTimestamp(isoString) {
-    if (!isoString) return 'Never';
-    const date = new Date(isoString);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffSec = Math.floor(diffMs / 1000);
-    const diffMin = Math.floor(diffSec / 60);
-    const diffHour = Math.floor(diffMin / 60);
-
-    if (diffSec < 60) return `${diffSec} seconds ago`;
-    if (diffMin < 60) return `${diffMin} minutes ago`;
-    if (diffHour < 24) return `${diffHour} hours ago`;
-    return date.toLocaleString();
-}
-
-function formatUptime(uptimeMs) {
-    const seconds = Math.floor(uptimeMs / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-
-    if (days > 0) return `${days}d ${hours % 24}h`;
-    if (hours > 0) return `${hours}h ${minutes % 60}m`;
-    if (minutes > 0) return `${minutes}m`;
-    return `${seconds}s`;
-}
-
 async function loadDevices() {
     const indicator = document.getElementById('refresh-indicator');
     indicator.style.display = 'block';
@@ -206,7 +177,6 @@ async function loadDevices() {
             throw new Error(data.error || 'Failed to load devices');
         }
 
-        // Update statistics
         const stats = {
             total: data.devices.length,
             healthy: data.devices.filter(d => d.is_healthy).length,
@@ -219,26 +189,21 @@ async function loadDevices() {
         document.getElementById('stat-unhealthy').textContent = stats.unhealthy;
         document.getElementById('stat-alerts').textContent = stats.alerts;
 
-        // Render devices
         const container = document.getElementById('devices-container');
 
         if (data.devices.length === 0) {
-            container.innerHTML = `
-                <div class="col-12">
-                    <div class="alert alert-warning">
-                        <i class="fas fa-exclamation-triangle"></i> No devices found.
-                        Waiting for ESP32 devices to connect...
-                    </div>
-                </div>
-            `;
+            container.innerHTML = '<div class="col-12"><div class="alert alert-warning"><i class="fas fa-exclamation-triangle"></i> No devices found. Waiting for ESP32 devices to connect...</div></div>';
             return;
         }
 
         container.innerHTML = data.devices.map(device => {
-            const statusClass = device.is_healthy ? 'healthy' :
-                              (device.critical_alerts_24h > 0 ? 'critical' : 'warning');
+            const statusClass = device.is_healthy ? 'healthy' : (device.critical_alerts_24h > 0 ? 'critical' : 'warning');
             const statusBadge = device.is_healthy ? 'ok' : 'critical';
             const statusText = device.is_healthy ? 'HEALTHY' : 'ALERT';
+            const formatTime = (iso) => { if (!iso) return 'Never'; const d = new Date(iso); const diff = (new Date() - d) / 1000; if (diff < 60) return Math.floor(diff) + 's ago'; if (diff < 3600) return
+Math.floor(diff/60) + 'm ago'; if (diff < 86400) return Math.floor(diff/3600) + 'h ago'; return d.toLocaleString(); };
+            const formatUptime = (ms) => { const s = Math.floor(ms/1000); const m = Math.floor(s/60); const h = Math.floor(m/60); const d = Math.floor(h/24); if (d > 0) return d+'d '+h%24+'h'; if (h > 0)
+return h+'h '+m%60+'m'; if (m > 0) return m+'m'; return s+'s'; };
 
             return `
                 <div class="col-md-6 col-lg-4">
@@ -247,22 +212,16 @@ async function loadDevices() {
                             <h4>${device.esp32_id}</h4>
                             <span class="status-badge ${statusBadge}">${statusText}</span>
                         </div>
-
                         <div class="metric-row">
                             <div class="metric">
                                 <div class="metric-label">Last Seen</div>
-                                <div class="metric-value" style="font-size: 14px;">
-                                    ${formatTimestamp(device.last_heartbeat)}
-                                </div>
+                                <div class="metric-value" style="font-size: 14px;">${formatTime(device.last_heartbeat)}</div>
                             </div>
                             <div class="metric">
                                 <div class="metric-label">Uptime</div>
-                                <div class="metric-value" style="font-size: 14px;">
-                                    ${formatUptime(device.uptime_ms)}
-                                </div>
+                                <div class="metric-value" style="font-size: 14px;">${formatUptime(device.uptime_ms)}</div>
                             </div>
                         </div>
-
                         <div class="metric-row">
                             <div class="metric">
                                 <div class="metric-label">Total Alerts</div>
@@ -277,48 +236,23 @@ async function loadDevices() {
                                 <div class="metric-value">${device.consecutive_failures}</div>
                             </div>
                         </div>
-
-                        ${device.last_alert ? `
-                            <div class="alert-history">
-                                <h6 class="mb-2"><i class="fas fa-exclamation-circle"></i> Last Alert</h6>
-                                <div class="alert-item">
-                                    <strong>${device.last_alert.issue_type}</strong><br>
-                                    ${device.last_alert.description}<br>
-                                    <span class="timestamp">${formatTimestamp(device.last_alert.timestamp)}</span>
-                                </div>
-                            </div>
-                        ` : ''}
+                        ${device.last_alert ? `<div class="alert-history"><h6 class="mb-2"><i class="fas fa-exclamation-circle"></i> Last Alert</h6><div
+class="alert-item"><strong>${device.last_alert.issue_type}</strong><br>${device.last_alert.description}<br><span class="timestamp">${formatTime(device.last_alert.timestamp)}</span></div></div>` : ''}
                     </div>
                 </div>
             `;
         }).join('');
 
-        lastUpdateTime = new Date();
-
     } catch (error) {
         console.error('Error loading devices:', error);
-        const container = document.getElementById('devices-container');
-        container.innerHTML = `
-            <div class="col-12">
-                <div class="alert alert-danger">
-                    <i class="fas fa-exclamation-triangle"></i> Error loading devices: ${error.message}
-                </div>
-            </div>
-        `;
+        document.getElementById('devices-container').innerHTML = '<div class="col-12"><div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> Error loading devices: ' + error.message +
+'</div></div>';
     } finally {
         indicator.style.display = 'none';
     }
 }
 
-// Auto-refresh every 5 seconds
 loadDevices();
 setInterval(loadDevices, 5000);
-
-// Update timestamps every second
-setInterval(() => {
-    document.querySelectorAll('.timestamp').forEach(el => {
-        // Timestamps are updated on next data refresh
-    });
-}, 1000);
 </script>
 {% endblock %}
